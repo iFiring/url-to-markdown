@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>Mermaid 页</title></head>
+<body>
+<main><h1>流程图</h1><div id="host"></div></main>
+<script>
+  const pre = document.createElement('pre');
+  pre.className = 'mermaid';
+  pre.textContent = 'graph TD; A-->B';
+  document.getElementById('host').appendChild(pre);
+  setTimeout(() => { // 模拟 mermaid 渲染替换为 svg
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('width', '300'); svg.setAttribute('height', '200');
+    pre.innerHTML = ''; pre.appendChild(svg);
+  }, 100);
+</script>
+</body>
+</html>
