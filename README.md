@@ -30,7 +30,7 @@ working/                 # 工作目录
     node_workflow/       # Node 脚本工作流
       assets/
         draft/           # 复杂元素和截图
-        comolex/         # 经过 LLM 转化的特殊文件（SVG/MD/...）
+        complex/         # 经过 LLM 转化的特殊文件（SVG/MD/...）
         images/          # 下载的正文图片
       sketch.md          # 经过脚本 `clear_trans_html` 初步清洗和转换的 Markdown 文件
       result.md          # 经过 LLM 优化过的 Markdown 文件
@@ -185,3 +185,4 @@ url-to-markdown/
 | clear_trans_html 双工作流 | Node 与 Python 并行清洗转换 HTML → Markdown | 已完成 |
 | `render_markdown.mjs` | 浏览器双 Tab 渲染，人工选择最终 Markdown | 已完成 |
 | SKILL.md | 操作手册（步骤 0-5、status 分支决策表、错误处理） | 已完成 |
+| 真实 URL 冒烟 | 手动清单见 test/smoke/SMOKE.md | 未完成 |
