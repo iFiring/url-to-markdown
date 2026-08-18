@@ -185,4 +185,4 @@ url-to-markdown/
 | clear_trans_html 双工作流 | Node 与 Python 并行清洗转换 HTML → Markdown | 已完成 |
 | `render_markdown.mjs` | 浏览器双 Tab 渲染，人工选择最终 Markdown | 已完成 |
 | SKILL.md | 操作手册（步骤 0-5、status 分支决策表、错误处理） | 已完成 |
-| 真实 URL 冒烟 | 手动清单见 test/smoke/SMOKE.md | 未完成 |
+| 真实 URL 冒烟 | 手动清单见 test/smoke/SMOKE.md | 场景 1 已完成（MDN 文章页端到端通过）；场景 2（登录墙）/3（特殊元素）待人工 |
