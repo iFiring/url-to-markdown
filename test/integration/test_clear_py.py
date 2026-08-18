@@ -62,6 +62,18 @@ def test_code_block(fixture_server, tmp_working):
     assert "line-numbers-rows" not in md
 
 
+def test_long_column(fixture_server, tmp_working):
+    r = run(tmp_working, f"{fixture_server}/long-column.html")
+    assert r.returncode == 0, r.stderr
+    w = wf(tmp_working, f"{fixture_server}/long-column.html")
+    manifest = json.loads((w / "assets" / "manifest.json").read_text(encoding="utf-8"))
+    # 主列文本量 > 启发式上限 → 不得分派 svg_convert（items 应为空或无该类型）
+    assert not [i for i in manifest["items"] if i["type"] == "svg_convert"], manifest["items"]
+    md = (w / "sketch.md").read_text(encoding="utf-8")
+    assert "LONGCOL_BODY" in md          # 正文未整体抽走
+    assert "{{COMPLEX_DIV_" not in md    # 无残留占位符（Readability 未丢弃）
+
+
 def test_mermaid(fixture_server, tmp_working):
     r = run(tmp_working, f"{fixture_server}/mermaid.html")
     assert r.returncode == 0, r.stderr

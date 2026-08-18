@@ -4,6 +4,7 @@ function __u2mClassify(cfg) {
   const MIN_W = cfg.minW || 200, MIN_H = cfg.minH || 150;  // 启发式最小可见尺寸
   const DENSITY = cfg.textDensity || 0.005;      // 文本密度阈值（字符/px²）
   const MIN_NON_TEXT = cfg.minNonText || 3;      // 非文本子元素最少数量
+  const MAX_HEURISTIC_TEXT = cfg.maxHeuristicText || 500;  // 启发式文本量上限（长页主列整体低密度但正文多，须豁免）
   const MIN_IFRAME_TEXT = cfg.minIframeText || 200;        // 同源内容型 iframe 文本量
   const SELECTORS = ['canvas', 'video', 'iframe', 'svg',
     '.MathJax', '.MathJax_Display', '.katex', '.katex-display',
@@ -31,7 +32,7 @@ function __u2mClassify(cfg) {
     const r = el.getBoundingClientRect();
     if (r.width >= MIN_W && r.height >= MIN_H) {
       const text = el.textContent || '';
-      if (text.length / (r.width * r.height) < DENSITY) {
+      if (text.length < MAX_HEURISTIC_TEXT && text.length / (r.width * r.height) < DENSITY) {
         const nonText = el.querySelectorAll('img,svg,canvas,video,iframe,table,figure').length;
         if (nonText >= MIN_NON_TEXT) return 'svg_convert';
       }

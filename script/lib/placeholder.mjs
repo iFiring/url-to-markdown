@@ -120,7 +120,8 @@ export async function processSpecialElements(frame, ctx) {
           const abs = path.join(ctx.dirs.draft, `${id}.html`);
           const draftHtml = await callOnElement(h, inline);
           await fs.writeFile(abs, draftHtml, 'utf8');
-          await replaceWithText(frame, h, `{{${id}}}`);
+          // <p> 包裹：裸文本节点占位符会被 Readability 当噪声丢弃（冒烟发现）
+          await replaceWithHtml(frame, h, `<p>{{${id}}}</p>`);
           ctx.entries.push({ id, type, draft: `assets/draft/${id}.html`, status: 'pending' });
         } else if (type === 'latex') {
           const tex = await callOnElement(h, latex);
@@ -131,7 +132,8 @@ export async function processSpecialElements(frame, ctx) {
             const abs = path.join(ctx.dirs.draft, `${id}.html`);
             const draftHtml = await h.evaluate((el) => el.outerHTML);
             await fs.writeFile(abs, draftHtml, 'utf8');
-            await replaceWithText(frame, h, `{{${id}}}`);
+            // <p> 包裹：裸文本节点占位符会被 Readability 当噪声丢弃（冒烟发现）
+            await replaceWithHtml(frame, h, `<p>{{${id}}}</p>`);
             ctx.entries.push({ id, type, draft: `assets/draft/${id}.html`, status: 'pending' });
           }
         }

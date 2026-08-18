@@ -92,6 +92,18 @@ test('complex-elements: 全分派端到端', async () => {
   assert.ok(pending.every((i) => i.type === 'svg_convert'));
 });
 
+test('long-column: 长页主列不被误判 svg_convert，正文完整保留', async () => {
+  const r = await run('long-column.html');
+  assert.equal(r.code, 0, r.stderr);
+  const manifest = JSON.parse(fs.readFileSync(path.join(wf('long-column.html'), 'assets/manifest.json'), 'utf8'));
+  // 主列文本量 > 启发式上限 → 不得分派 svg_convert（items 应为空或无该类型）
+  assert.equal(manifest.items.filter((i) => i.type === 'svg_convert').length, 0,
+    `不应有 svg_convert: ${JSON.stringify(manifest.items)}`);
+  const md = sketch('long-column.html');
+  assert.match(md, /LONGCOL_BODY/); // 正文未整体抽走
+  assert.ok(!md.includes('{{COMPLEX_DIV_')); // 无残留占位符（Readability 未丢弃）
+});
+
 test('mermaid: 源码 → mermaid 围栏', async () => {
   const r = await run('mermaid.html');
   assert.equal(r.code, 0, r.stderr);

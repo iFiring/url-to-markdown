@@ -57,6 +57,8 @@ test('complex-elements: 四类分派 + latex 直出 + 图片下载 + manifest', 
     assert.ok(fs.existsSync(`${dirs.images}/IMG_1.png`));
     // 启发式命中：#viz 无选择器特征，靠 尺寸+文本密度+非文本子元素数 判为 svg_convert
     assert.equal(ctx.entries.filter((e) => e.type === 'svg_convert').length, 2);
+    // svg_convert 占位符 <p> 包裹：裸文本节点会被 Readability 当噪声丢弃（冒烟发现）
+    assert.match(await s.page.evaluate(() => document.body.innerHTML), /<p>\{\{COMPLEX_DIV_\d+\}\}<\/p>/);
 
     await writeManifest(dirs.manifest, ctx.entries);
     const manifest = JSON.parse(fs.readFileSync(dirs.manifest, 'utf8'));

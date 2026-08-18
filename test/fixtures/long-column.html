@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Long column article</title></head>
+<body>
+<div class="page-layout__main" style="width:800px">
+<h1>Promise - long column article</h1>
+<p>The Promise object represents the eventual completion or failure of an asynchronous operation. LONGCOL_BODY_A here marks the main prose.</p>
+<p>A Promise is a proxy for a value not necessarily known when the promise is created, letting you associate handlers with the eventual outcome.</p>
+<p>Here we create a promise that resolves after a delay, then chain a transformation on the resolved value before logging the final result. LONGCOL_BODY_B.</p>
+<p>Promise combinators such as all, allSettled, any, and race let you coordinate multiple concurrent tasks and aggregate their settled outcomes.</p>
+<p>Error propagation flows down the chain until a rejection handler is found, which makes fallback strategies straightforward to express in code.</p>
+<p>An async function always returns a promise, and await pauses execution until the awaited promise settles, preserving a linear control flow.</p>
+<p>Microtask scheduling guarantees that continuation callbacks run after the current synchronous work completes but before any timer callbacks. LONGCOL_BODY_C.</p>
+<figure><pre><code class="language-js">const p = new Promise((resolve) => {
+  setTimeout(() => resolve(42), 100);
+});</code></pre></figure>
+<figure><pre><code class="language-js">p.then((v) =&gt; v + 1).then((v) =&gt; console.log(v));</code></pre></figure>
+<table>
+  <tr><th>State</th><th>Meaning</th></tr>
+  <tr><td>pending</td><td>initial state, not yet settled</td></tr>
+  <tr><td>fulfilled</td><td>operation completed successfully</td></tr>
+</table>
+</div>
+</body>
+</html>

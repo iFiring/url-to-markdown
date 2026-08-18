@@ -104,7 +104,8 @@ def process_special_elements(page, ctx) -> int:
                 elif etype == "svg_convert":
                     draft = _call_on_element(h, inline)
                     (Path(dirs["draft"]) / f"{cid}.html").write_text(draft, encoding="utf-8")
-                    _replace_with_text(page, h, "{{" + cid + "}}")
+                    # <p> 包裹：裸文本节点占位符会被 Readability 当噪声丢弃（冒烟发现）
+                    _replace_with_html(page, h, "<p>{{" + cid + "}}</p>")
                     ctx["entries"].append({"id": cid, "type": etype, "draft": f"assets/draft/{cid}.html", "status": "pending"})
                 elif etype == "latex":
                     tex = _call_on_element(h, latex)
@@ -114,7 +115,8 @@ def process_special_elements(page, ctx) -> int:
                     else:
                         draft = h.evaluate("(el) => el.outerHTML")
                         (Path(dirs["draft"]) / f"{cid}.html").write_text(draft, encoding="utf-8")
-                        _replace_with_text(page, h, "{{" + cid + "}}")
+                        # <p> 包裹：裸文本节点占位符会被 Readability 当噪声丢弃（冒烟发现）
+                        _replace_with_html(page, h, "<p>{{" + cid + "}}</p>")
                         ctx["entries"].append({"id": cid, "type": etype, "draft": f"assets/draft/{cid}.html", "status": "pending"})
                 processed += 1
             except Exception as e:  # noqa: BLE001
