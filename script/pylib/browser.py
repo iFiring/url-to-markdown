@@ -1,6 +1,7 @@
 # script/pylib/browser.py
 """与 lib/browser.mjs 对应：storageState 纯函数 + open_page 会话。"""
 import json
+import os
 import shutil
 import time
 from pathlib import Path
@@ -47,6 +48,20 @@ def write_storage_state(file_path: Path, state: dict) -> None:
     p.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def proxy_launch_options(env: dict | None = None) -> dict:
+    """U2M_PROXY → chromium launch 代理选项（与 lib/browser.mjs 的 proxyLaunchOptions 镜像）。
+
+    ''（未设置）→ 继承系统代理；'direct' → --no-proxy-server 绕过系统代理；
+    URL → 显式代理，页面与 APIRequestContext 图片下载统一走它。
+    """
+    v = ((env or os.environ).get("U2M_PROXY") or "").strip()
+    if not v:
+        return {}
+    if v.lower() == "direct":
+        return {"args": ["--no-proxy-server"]}
+    return {"proxy": {"server": v}}
+
+
 def goto_with_retry(page, url: str, log=print) -> None:
     last = None
     for attempt in (1, 2):
@@ -77,7 +92,7 @@ def open_page(url, *, headless=True, viewport=None, init_scripts=(), storage_sta
     pw = sync_playwright().start()
     browser = None  # launch 本身抛错时 except 分支才不会 UnboundLocalError 掩盖真实错误
     try:
-        browser = pw.chromium.launch(headless=headless)
+        browser = pw.chromium.launch(headless=headless, **proxy_launch_options())
         ctx_kwargs = dict(viewport=viewport, bypass_csp=True)  # 与 lib/browser.mjs 对齐：绕过页面 CSP（eval/addScriptTag 注入）
         if storage_state_path and Path(storage_state_path).exists():
             ctx_kwargs["storage_state"] = str(storage_state_path)
