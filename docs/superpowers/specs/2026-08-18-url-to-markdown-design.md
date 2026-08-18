@@ -150,9 +150,10 @@ CLI：`clear_trans_html.mjs <url>` → `working/<url-dir>/node_workflow/`；`cle
      - `latex`：提取公式渲染 DOM → `draft/COMPLEX_DIV_n.html`；DOM 替换为 `{{COMPLEX_DIV_n}}`，status=pending
      - `passthrough_svg`：清理脚本/事件属性后直接导出 → `complex/COMPLEX_DIV_n.svg`；DOM 直接替换为最终图片引用，不留占位符，status=done
      - `screenshot`：`element.screenshot()` → `complex/COMPLEX_DIV_n.png`（video 附加原链接文本）；DOM 直接替换为最终引用，status=done
+     - `mermaid`：打开页面前经 `addInitScript` 注入 hook（MutationObserver 监听 `.mermaid`/`pre.mermaid` 容器插入，抢在渲染前快照 textContent），取到源码则将 DOM 替换为 `<pre><code class="language-mermaid">源码</code></pre>`——由转换库自然生成 ` ```mermaid ` 围栏块（status=done，不经 LLM）；未取到（SSR 预渲染/非标准容器）则渲染后的 SVG 走 `passthrough_svg` 兜底
    - audio：不占位，清理阶段直接移除
-4. 清理：Node `@mozilla/readability` / Python `readability-lxml`；额外移除 `video/audio/button`；保留主体 + CSS
-5. 转换：Node `turndown` + `@joplin/turndown-plugin-gfm` / Python `markdownify` → `sketch.md`
+4. 清理：Node `@mozilla/readability` / Python `readability-lxml`；额外移除 `video/audio/button` 及复制按钮变体（`[role="button"]`、`.copy`、`.copy-btn`）；代码块净化——剥离 `<pre>` 内行号结构（`.line-numbers-rows`、`[data-line-number]`、行号列首 `td`/`li` 模式）；保留主体 + CSS
+5. 转换：Node `turndown` + `@joplin/turndown-plugin-gfm` / Python `markdownify` → `sketch.md`；markdownify 产物按 `<code class="language-*">` 后处理补齐围栏语言标注，保证双工作流代码块形态一致
 6. 输出：`{"status":"ok","sketch":"<路径>","images":<n>,"complex":<n>,"warnings":[...]}`
 
 **特殊元素判定与类型映射**（`lib/placeholder.mjs` / `pylib/placeholder.py` 共享规则）：
@@ -164,6 +165,7 @@ CLI：`clear_trans_html.mjs <url>` → `working/<url-dir>/node_workflow/`；`cle
 | 跨域内容型 `iframe` | `screenshot` | 子文档不可读 |
 | 同源内容型 `iframe` | 递归进入处理 | 内容可读，走正常转换 |
 | 大尺寸内嵌 `svg`（>24×24 非图标） | `passthrough_svg` | 已是矢量，直接导出 |
+| Mermaid 容器（`.mermaid`/`pre.mermaid`，渲染前 hook 到源码） | `mermaid` | 源码即 Markdown 标准 ` ```mermaid ` 语法，文本优先；hook 失败回落 `passthrough_svg` |
 | 公式容器（`.MathJax`/`.katex`） | `latex` | Markdown 原生 `$$...$$` 优于 SVG 图片 |
 | 图表容器（`.chart`/`.echarts`/`.highcharts`/`[data-chart]`）、`[role="img"]` | `svg_convert` | 有 DOM 结构，LLM 可重建矢量图 |
 | 启发式：可见 ≥200×150px + 文本密度 <0.005 字符/px² + 非文本子元素 ≥3 | `svg_convert` | 兜住未命中选择器的复杂 div（初始值，placeholder 模块常量可调） |
@@ -201,6 +203,8 @@ test/
     lazy-load.html           # IntersectionObserver 懒加载图片
     iframe-content.html      # 主文档近乎空、正文在 iframe
     complex-elements.html    # canvas/大 svg/图表容器/公式
+    code-block.html          # 代码块：行号+复制按钮+语言标注三坑齐备
+    mermaid.html             # .mermaid 容器（模拟渲染替换为 svg）
     nav-noise.html           # nav/footer/aside/广告位噪声
   helpers/                   # 夹具 HTTP 服务器（随机端口）
   unit/                      # node --test + pytest
@@ -248,3 +252,4 @@ test/
 - 特殊元素判定为启发式，可能漏判/误判——LLM 步骤 3 可人工纠偏（漏判的元素已作为普通 DOM 转成文本）
 - `svg_convert` 类由 LLM 依据渲染后 DOM 重建 SVG，样式细节可能失真；未做图表库原始数据挖掘（如 ECharts 实例数据），记为后续增强
 - `screenshot` 类为像素图，清晰度受截图时 viewport 的 DPI/缩放影响
+- `mermaid` 源码提取依赖渲染前拦截；SSR 预渲染或非标准容器的站点回落为 SVG 图片导出
