@@ -31,7 +31,7 @@ script/
     env.mjs                  # URL→工作目录名、路径解析
     browser.mjs              # Playwright 上下文 + storageState 注入 + 媒体拦截
     detector.mjs             # 登录态六策略计分检测（移植 .temp/is_login_page.py）
-    placeholder.mjs          # 占位符协议与复杂元素判定
+    placeholder.mjs          # 特殊元素类型判定/分派、占位符协议、manifest 生成
   pylib/                     # Python 对应模块
     env.py / browser.py / placeholder.py
 ```
@@ -65,8 +65,14 @@ working/
   <url-dir>/                   # URL 特殊字符→下划线
     node_workflow/
       assets/
-        draft/COMPLEX_DIV_1.html   # 复杂元素 HTML+内联CSS（脚本产物，待 LLM 转 SVG）
-        complex/COMPLEX_DIV_1.svg  # LLM 转化产物（步骤3）
+        manifest.json              # 特殊元素处置清单（脚本生成：id/类型/产物路径/状态）
+        draft/                     # 待 LLM 处理的提取物
+          COMPLEX_DIV_1.html       #   svg_convert 类：HTML+内联CSS
+          COMPLEX_DIV_4.html       #   latex 类：公式渲染 DOM
+        complex/                   # 特殊元素最终产物
+          COMPLEX_DIV_1.svg        #   svg_convert：LLM 生成
+          COMPLEX_DIV_2.svg        #   passthrough_svg：脚本直接导出的原 SVG
+          COMPLEX_DIV_3.png        #   screenshot：脚本元素截图（canvas/video/跨域 iframe）
         images/IMG_1.png           # 下载的正文图片
       sketch.md                    # 脚本初清洗转换产物（含占位符）
       result.md                    # LLM 优化后的产物（步骤4）
@@ -93,7 +99,8 @@ login_url.mjs <url>          → {status: logged_in | login_done | timeout | abo
 clear_trans_html.mjs <url> ──┐ 并行、互不依赖、独立退出码
 clear_trans_html.py  <url> ──┘ → 各自 workflow/sketch.md + assets/
    │
-【步骤3 · LLM】draft/*.html → complex/*.svg，将 sketch.md 中 {{COMPLEX_DIV_n}} 替换为 SVG 引用
+【步骤3 · LLM】读 assets/manifest.json 的 pending 项按类型分派：svg_convert 读 draft HTML 生成语义等价 SVG 存 complex/；latex 反读公式写 $$...$$；替换 sketch.md 中 {{COMPLEX_DIV_n}}
+（passthrough_svg / screenshot 类已由脚本在 sketch.md 中直接替换完毕，不经 LLM）
 【步骤4 · LLM】语义去噪 + 将 {{IMG_n}} 替换为 ![IMG_n](assets/images/IMG_n.<ext>) → 各 workflow/result.md
    │
 render_markdown.mjs <url-dir> → 双 Tab 渲染两份 result.md，人工选择
@@ -136,27 +143,42 @@ CLI：`clear_trans_html.mjs <url>` → `working/<url-dir>/node_workflow/`；`cle
    - 懒加载：渐进滚动到底再回顶；启动用超高 viewport（3000px）；**劫持 `IntersectionObserver`**——注入脚本使 callback 立即以 `isIntersecting=true` 触发
    - 虚拟 DOM：不移除任何元素，等待 DOM 稳定（节点数连续 1s 不变）
    - iframe 正文：主文档文本极少而某 iframe 文本量大 → 进入该 iframe 处理其 DOM
-3. **占位符提取（转换前置）**：
+3. **特殊元素分派与占位符提取（转换前置）**：
    - 图片：并发下载（限 4）到 `assets/images/IMG_n.<ext>`（扩展名按响应 content-type；失败保留原 URL + stderr 警告）；DOM 替换为文本 `{{IMG_n}}`
-   - 复杂元素：提取 outerHTML + 计算样式内联（遍历 computedStyle 写入 style 属性）→ `assets/draft/COMPLEX_DIV_n.html`；DOM 替换为 `{{COMPLEX_DIV_n}}`
+   - 特殊元素按类型分派（判定→类型映射见下），登记 `assets/manifest.json`（id/type/draft 或 final 路径/status）：
+     - `svg_convert`：提取 outerHTML + 计算样式内联（遍历 computedStyle 写入 style 属性）→ `draft/COMPLEX_DIV_n.html`；DOM 替换为 `{{COMPLEX_DIV_n}}`，status=pending
+     - `latex`：提取公式渲染 DOM → `draft/COMPLEX_DIV_n.html`；DOM 替换为 `{{COMPLEX_DIV_n}}`，status=pending
+     - `passthrough_svg`：清理脚本/事件属性后直接导出 → `complex/COMPLEX_DIV_n.svg`；DOM 直接替换为最终图片引用，不留占位符，status=done
+     - `screenshot`：`element.screenshot()` → `complex/COMPLEX_DIV_n.png`（video 附加原链接文本）；DOM 直接替换为最终引用，status=done
+   - audio：不占位，清理阶段直接移除
 4. 清理：Node `@mozilla/readability` / Python `readability-lxml`；额外移除 `video/audio/button`；保留主体 + CSS
 5. 转换：Node `turndown` + `@joplin/turndown-plugin-gfm` / Python `markdownify` → `sketch.md`
 6. 输出：`{"status":"ok","sketch":"<路径>","images":<n>,"complex":<n>,"warnings":[...]}`
 
-**复杂元素判定**（`lib/placeholder.mjs` / `pylib/placeholder.py` 共享规则）：
+**特殊元素判定与类型映射**（`lib/placeholder.mjs` / `pylib/placeholder.py` 共享规则）：
 
-- 命中即复杂：`canvas`、大尺寸内嵌 `svg`（>24×24 非图标）、`video`、内容型 `iframe`、`[role="img"]`、公式容器（`.MathJax`/`.katex`）、图表容器（`.chart`/`.echarts`/`.highcharts`/`[data-chart]`）
-- 启发式：可见尺寸 ≥ 200×150px + 文本密度 < 0.005 字符/px² + 非文本子元素 ≥3（初始值，作为 placeholder 模块常量可调）
+| 判定 | 处置类型 | 理由 |
+|---|---|---|
+| `canvas` | `screenshot` | 位图，outerHTML 无内容可提取 |
+| `video` | `screenshot`（封面帧+原链接） | SVG 无法表达视频 |
+| 跨域内容型 `iframe` | `screenshot` | 子文档不可读 |
+| 同源内容型 `iframe` | 递归进入处理 | 内容可读，走正常转换 |
+| 大尺寸内嵌 `svg`（>24×24 非图标） | `passthrough_svg` | 已是矢量，直接导出 |
+| 公式容器（`.MathJax`/`.katex`） | `latex` | Markdown 原生 `$$...$$` 优于 SVG 图片 |
+| 图表容器（`.chart`/`.echarts`/`.highcharts`/`[data-chart]`）、`[role="img"]` | `svg_convert` | 有 DOM 结构，LLM 可重建矢量图 |
+| 启发式：可见 ≥200×150px + 文本密度 <0.005 字符/px² + 非文本子元素 ≥3 | `svg_convert` | 兜住未命中选择器的复杂 div（初始值，placeholder 模块常量可调） |
+| `audio` | 清理移除 | Markdown 无有意义表达 |
+
 - 父子都命中只取最外层
 
-**占位符语义**：README 的 `{{COMPLEX_DIV_1,2,3}}` 解读为编号占位符族——每个元素独立占位（`{{COMPLEX_DIV_1}}`、`{{COMPLEX_DIV_2}}`…），图片同理 `{{IMG_1}}`。不存在一符多引用语法。
+**占位符语义**：README 的 `{{COMPLEX_DIV_1,2,3}}` 解读为编号占位符族——每个元素独立占位（`{{COMPLEX_DIV_1}}`、`{{COMPLEX_DIV_2}}`…），图片同理 `{{IMG_1}}`。不存在一符多引用语法。sketch.md 中留存的 `{{COMPLEX_DIV_n}}` 仅来自 `svg_convert`/`latex` 类（pending）；`passthrough_svg`/`screenshot` 类由脚本在生成 sketch.md 时直接替换为最终引用。
 
 ### 6.4 `render_markdown.mjs`
 
 CLI：`render_markdown.mjs <url-dir> [--port 0] [--timeout 120000]`
 
 1. 读两份 `result.md`（缺失降级读 `sketch.md`，页面标注"⚠️ 初稿"）
-2. viewer 页面：两个 Tab（Node 版 / Python 版），`markdown-it` 本地渲染（无 CDN）；result.md 中的图片引用直接渲染；降级显示 sketch.md 时其中的 `{{IMG_n}}` 占位符由 viewer 扫描 `assets/images/IMG_n.*` 解析扩展名后还原为本地图片显示
+2. viewer 页面：两个 Tab（Node 版 / Python 版），`markdown-it` 本地渲染（无 CDN）；result.md 中的图片引用直接渲染；降级显示 sketch.md 时其中的 `{{IMG_n}}` 占位符由 viewer 扫描 `assets/images/IMG_n.*` 解析扩展名后还原为本地图片显示，未处置的 `{{COMPLEX_DIV_n}}` 显示为占位标记
 3. 每 Tab 一个"✅ 选这个"按钮 → 提交后复制所选到 `<url-dir>/result.md` → `{"status":"selected","source":"node_workflow|python_workflow","path":"..."}` 退出 0
 4. 两阶段超时对齐 `wait-click.mjs`：`open_failed`（open-timeout 内无请求）/ `timeout`（点击窗口超时）均退出 1
 
@@ -194,7 +216,7 @@ test/
 ## 9. SKILL.md 设计
 
 - 中文；frontmatter 沿用 README：`name: url-to-markdown`、`description: "将 URL（网页）的主体内容转换成 Markdown；在需要将 URL 转 Markdown 时使用。"`
-- 结构：Overview → 何时使用/不用 → 步骤 0-5 操作手册（每步：命令、产物路径、status 分支决策表）→ 步骤 3 SVG 转化指导（读 `draft/COMPLEX_DIV_n.html` → 语义等价 SVG 存 `complex/` → 将 sketch.md 中 `{{COMPLEX_DIV_n}}` 替换为 `![COMPLEX_DIV_n](assets/complex/COMPLEX_DIV_n.svg)`）→ 步骤 4 清洗提示词（README 原文）+ `{{IMG_n}}` 替换为 `![IMG_n](assets/images/IMG_n.<ext>)`（扩展名按 assets/images/ 下实际文件）→ 常见错误处理表
+- 结构：Overview → 何时使用/不用 → 步骤 0-5 操作手册（每步：命令、产物路径、status 分支决策表）→ 步骤 3 特殊元素处置指导（读 `assets/manifest.json` 的 pending 项按类型分派：`svg_convert` 读 draft HTML 生成语义等价 SVG 存 `complex/` 并将 sketch.md 中 `{{COMPLEX_DIV_n}}` 替换为 `![COMPLEX_DIV_n](assets/complex/COMPLEX_DIV_n.svg)`；`latex` 从渲染 DOM 反读 LaTeX 写 `$$...$$` 内联替换）→ 步骤 4 清洗提示词（README 原文）+ `{{IMG_n}}` 替换为 `![IMG_n](assets/images/IMG_n.<ext>)`（扩展名按 assets/images/ 下实际文件）→ 常见错误处理表
 - 按 writing-skills 的 TDD：完成后做 baseline 测试——子代理不带 SKILL.md 执行"把这个 URL 转成 Markdown"记录失败模式；带 SKILL.md 复测验证
 
 ## 10. 开发阶段（连续执行，随阶段更新 README 进度表）
@@ -223,4 +245,6 @@ test/
 
 - storage_state 不含 IndexedDB / Service Worker——登录态存于二者的站点无法保持登录
 - Screencast 为 JPEG 流级别操控（非 DOM 级），极端复杂交互（如拖拽滑块验证码）可能不顺
-- 复杂元素判定为启发式，可能漏判/误判——LLM 步骤 3 可人工纠偏（漏判的元素已作为普通 DOM 转成文本）
+- 特殊元素判定为启发式，可能漏判/误判——LLM 步骤 3 可人工纠偏（漏判的元素已作为普通 DOM 转成文本）
+- `svg_convert` 类由 LLM 依据渲染后 DOM 重建 SVG，样式细节可能失真；未做图表库原始数据挖掘（如 ECharts 实例数据），记为后续增强
+- `screenshot` 类为像素图，清晰度受截图时 viewport 的 DPI/缩放影响
