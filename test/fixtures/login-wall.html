@@ -10,7 +10,7 @@
 <script>
   const u = new URL(location.href);
   if (u.searchParams.get('auto') === '1') {
-    setTimeout(() => { document.cookie = 'sessionid=abc; path=/'; location.href = '/logged-in.html'; }, 400);
+    setTimeout(() => { document.cookie = 'sessionid=abc; path=/'; location.href = '/logged-in.html'; }, 1500);
   }
   document.getElementById('f').addEventListener('submit', (e) => {
     e.preventDefault();
