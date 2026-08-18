@@ -76,7 +76,7 @@ working/
 
 ### 关键规则
 
-- **URL → 目录名**：完整 URL（含协议与查询串）中所有非 `[A-Za-z0-9.-]` 字符替换为 `_`；超过 120 字符则截断到 120 并追加内容 8 位 hash 后缀
+- **URL → 目录名**：完整 URL（含协议与查询串）中所有非 `[A-Za-z0-9.-]` 字符替换为 `_`；超过 120 字符则截断到 120 并追加 `sha256(URL)` 前 8 个 hex 字符后缀防冲突
 - **登录态存储**：`working/cookies/storage_state.json` 单一全局文件（Playwright `storage_state` 格式）。理由：SSO 跨域登录时一个上下文会累积多个域的 cookie，按域分文件会丢；全量注入时 Playwright 只发送匹配域的 cookie，多带无害
   - 写入：仅 `login_url.mjs` 写（登录完成后合并回写）；`clear_trans_html.*` 只读——并行无写冲突
   - 合并：cookie 按 `(name, domain, path)` 去重、新覆盖旧；localStorage 按 `origin + name` 去重覆盖
@@ -93,8 +93,8 @@ login_url.mjs <url>          → {status: logged_in | login_done | timeout | abo
 clear_trans_html.mjs <url> ──┐ 并行、互不依赖、独立退出码
 clear_trans_html.py  <url> ──┘ → 各自 workflow/sketch.md + assets/
    │
-【步骤3 · LLM】draft/*.html → complex/*.svg，替换 sketch.md 占位符
-【步骤4 · LLM】语义去噪 → 各 workflow/result.md
+【步骤3 · LLM】draft/*.html → complex/*.svg，将 sketch.md 中 {{COMPLEX_DIV_n}} 替换为 SVG 引用
+【步骤4 · LLM】语义去噪 + 将 {{IMG_n}} 替换为 ![IMG_n](assets/images/IMG_n.<ext>) → 各 workflow/result.md
    │
 render_markdown.mjs <url-dir> → 双 Tab 渲染两份 result.md，人工选择
    → {status: selected, source: ..., path: working/<url-dir>/result.md}
@@ -146,7 +146,7 @@ CLI：`clear_trans_html.mjs <url>` → `working/<url-dir>/node_workflow/`；`cle
 **复杂元素判定**（`lib/placeholder.mjs` / `pylib/placeholder.py` 共享规则）：
 
 - 命中即复杂：`canvas`、大尺寸内嵌 `svg`（>24×24 非图标）、`video`、内容型 `iframe`、`[role="img"]`、公式容器（`.MathJax`/`.katex`）、图表容器（`.chart`/`.echarts`/`.highcharts`/`[data-chart]`）
-- 启发式：可见面积大 + 文本密度（字符数/面积）极低 + 非文本子元素 ≥3
+- 启发式：可见尺寸 ≥ 200×150px + 文本密度 < 0.005 字符/px² + 非文本子元素 ≥3（初始值，作为 placeholder 模块常量可调）
 - 父子都命中只取最外层
 
 **占位符语义**：README 的 `{{COMPLEX_DIV_1,2,3}}` 解读为编号占位符族——每个元素独立占位（`{{COMPLEX_DIV_1}}`、`{{COMPLEX_DIV_2}}`…），图片同理 `{{IMG_1}}`。不存在一符多引用语法。
@@ -156,7 +156,7 @@ CLI：`clear_trans_html.mjs <url>` → `working/<url-dir>/node_workflow/`；`cle
 CLI：`render_markdown.mjs <url-dir> [--port 0] [--timeout 120000]`
 
 1. 读两份 `result.md`（缺失降级读 `sketch.md`，页面标注"⚠️ 初稿"）
-2. viewer 页面：两个 Tab（Node 版 / Python 版），`markdown-it` 本地渲染（无 CDN），`{{IMG_n}}` 还原为本地图片显示
+2. viewer 页面：两个 Tab（Node 版 / Python 版），`markdown-it` 本地渲染（无 CDN）；result.md 中的图片引用直接渲染；降级显示 sketch.md 时其中的 `{{IMG_n}}` 占位符由 viewer 扫描 `assets/images/IMG_n.*` 解析扩展名后还原为本地图片显示
 3. 每 Tab 一个"✅ 选这个"按钮 → 提交后复制所选到 `<url-dir>/result.md` → `{"status":"selected","source":"node_workflow|python_workflow","path":"..."}` 退出 0
 4. 两阶段超时对齐 `wait-click.mjs`：`open_failed`（open-timeout 内无请求）/ `timeout`（点击窗口超时）均退出 1
 
@@ -194,7 +194,7 @@ test/
 ## 9. SKILL.md 设计
 
 - 中文；frontmatter 沿用 README：`name: url-to-markdown`、`description: "将 URL（网页）的主体内容转换成 Markdown；在需要将 URL 转 Markdown 时使用。"`
-- 结构：Overview → 何时使用/不用 → 步骤 0-5 操作手册（每步：命令、产物路径、status 分支决策表）→ 步骤 3 SVG 转化指导（读 `draft/COMPLEX_DIV_n.html` → 语义等价 SVG 存 `complex/` → 将 sketch.md 中 `{{COMPLEX_DIV_n}}` 替换为 `![COMPLEX_DIV_n](assets/complex/COMPLEX_DIV_n.svg)`）→ 步骤 4 清洗提示词（README 原文）→ 常见错误处理表
+- 结构：Overview → 何时使用/不用 → 步骤 0-5 操作手册（每步：命令、产物路径、status 分支决策表）→ 步骤 3 SVG 转化指导（读 `draft/COMPLEX_DIV_n.html` → 语义等价 SVG 存 `complex/` → 将 sketch.md 中 `{{COMPLEX_DIV_n}}` 替换为 `![COMPLEX_DIV_n](assets/complex/COMPLEX_DIV_n.svg)`）→ 步骤 4 清洗提示词（README 原文）+ `{{IMG_n}}` 替换为 `![IMG_n](assets/images/IMG_n.<ext>)`（扩展名按 assets/images/ 下实际文件）→ 常见错误处理表
 - 按 writing-skills 的 TDD：完成后做 baseline 测试——子代理不带 SKILL.md 执行"把这个 URL 转成 Markdown"记录失败模式；带 SKILL.md 复测验证
 
 ## 10. 开发阶段（连续执行，随阶段更新 README 进度表）
