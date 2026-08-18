@@ -179,6 +179,9 @@ url-to-markdown/
 
 | 阶段 | 内容 | 进度（未完成/已完成） |
 |------|---------|------|
-| 项目结构 | 项目总体结构，包括文件夹，package 文件等等 | ... |
-| 初始化脚本 `init.sh` | ... | ... |
-| 登录脚本 `login_url.mjs` | ... | ... |
+| 项目结构 | 项目总体结构，包括文件夹，package 文件等等 | 已完成 |
+| 初始化脚本 `init.sh` | 环境检测与依赖安装 | 已完成 |
+| 登录脚本 `login_url.mjs` | 打开 URL，判断/完成登录态 | 已完成 |
+| clear_trans_html 双工作流 | Node 与 Python 并行清洗转换 HTML → Markdown | 已完成 |
+| `render_markdown.mjs` | 浏览器双 Tab 渲染，人工选择最终 Markdown | 已完成 |
+| SKILL.md | 操作手册（步骤 0-5、status 分支决策表、错误处理） | 已完成 |
