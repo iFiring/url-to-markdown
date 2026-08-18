@@ -50,3 +50,7 @@ node_modules/
 
 # AI
 .claude/
+
+# Runtime working directory (preserve skeleton)
+working/*
+!working/.gitkeep
