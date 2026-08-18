@@ -20,6 +20,14 @@
 - 发现并已修复：长页面（21256px 主列）稀释文本密度 → 启发式误吞整个正文列 → 占位符被 Readability 丢弃 → 双稿只剩页眉（commit ac07e90：启发式加 500 字符上限 + 占位符 `<p>` 包裹；修复后重跑正文完整）
 - 遗留观察（不阻断）：manifest 中 15 个 svg_convert pending 对应被剔除的侧栏元素，其占位符随噪声一起消失——条目悬挂无引用，后续可加"丢弃"状态；readability-lxml 会拍平标题层级（3 个标题 vs Node 21 个），双稿择优吸收
 
+### 场景 1 补充记录（2026-08-19，mmh1.top，代理故障排查）
+
+- URL：https://mmh1.top/article/prompt-cache.html（免登录中文翻译页）
+- 首跑报 `net::ERR_TUNNEL_CONNECTION_FAILED`——根因是**本机系统代理**（macOS HTTP/HTTPS 代理 127.0.0.1:1082）：chromium 静默继承系统代理，代理当时的瞬时状态拒绝了对目标站的 CONNECT 隧道；稍后重试直连/走代理均 200，非站点问题。已加 `U2M_PROXY` 逃生通道（fix/u2m-proxy 分支）
+- 重跑通过：Node 稿 22KB 全文完整（7 节/表格/代码块）；Python 稿仅 1.9KB——readability-lxml 选中错误容器只截到 §5.2 片段（双稿择优吸收；**记 backlog 观察**：该站正文容器结构对 readability-lxml 不友好）
+- 1 个 passthrough_svg 实为装饰性背景（aria-hidden 网格线），其引用被 Readability 剔除——无害；manifest 悬挂 done 条目属已知遗留观察
+- 步骤 3 无 pending；步骤 4 完成；步骤 5 首跑 120s 内无人点击 → timeout（用户重跑即可）
+
 ## 2. 真实登录墙页
 
 1. `node script/login_url.mjs <登录页URL>` → viewer 弹出

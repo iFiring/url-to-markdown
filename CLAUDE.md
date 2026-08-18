@@ -51,7 +51,7 @@ npx playwright install chromium                  # 双运行时共用的浏览�
 
 **工作目录。** 每个 URL 对应 `working/<净化URL>/<node_workflow|python_workflow>/`；净化保留 `[A-Za-z0-9.-]`，超 120 字符截断 + sha256 前 8 位十六进制后缀。`U2M_WORKING_ROOT` 覆盖根目录（所有测试用它隔离）。`working/cookies/storage_state.json` 是唯一全局登录态——仅 `login_url.mjs` 写入（cookie 按 name|domain|path 去重、localStorage 按 origin+name、读取时剔除过期）；转换脚本只读。
 
-**浏览器上下文（双语言）**：route-abort `resourceType === 'media'`；`bypassCSP: true`（否则严格 CSP 站点会在 addScriptTag 处杀死 Node 工作流）；转换运行 viewport 1280×3000。浏览器/viewer 一律在最终 emit **之前**关闭（emit 会退出进程，顺序错了会留孤儿 chromium）。
+**浏览器上下文（双语言）**：route-abort `resourceType === 'media'`；`bypassCSP: true`（否则严格 CSP 站点会在 addScriptTag 处杀死 Node 工作流）；转换运行 viewport 1280×3000；`U2M_PROXY` 环境变量控制代理（未设置继承系统代理 / `direct` 绕过 / URL 显式钉住——真实冒烟曾因系统代理隧道失败报 ERR_TUNNEL_CONNECTION_FAILED 而加，双语言镜像于 `proxyLaunchOptions`/`proxy_launch_options`）。浏览器/viewer 一律在最终 emit **之前**关闭（emit 会退出进程，顺序错了会留孤儿 chromium）。
 
 **登录流程**：`detector.mjs` 对六个信号计分（全 frames 密码框 / URL 特征 / 标题与正文关键词——标题关键词只匹配 `<title>`、正文关键词只匹配正文 / 认证 cookie 反查 / 重定向 / SPA 等待）；≥2 命中判定需登录。人工登录走 CDP Screencast 中继（`screencast.mjs`：无头 chromium → HTTP+WS viewer，JS/CSS 全内联）。viewer 地址以 `[login_url] viewer: http://...` 记录到 stderr，测试靠它接入。`render_markdown.mjs` 用两阶段超时（open-timeout 内无请求 → open_failed，随后进入点击窗口）——其 `/select` 端点是文档化的无人值守路径（先 GET 页面取消打开自检，再 POST）。
 

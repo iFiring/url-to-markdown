@@ -85,6 +85,7 @@ working/
 
 - **URL → 目录名**：完整 URL（含协议与查询串）中所有非 `[A-Za-z0-9.-]` 字符替换为 `_`；超过 120 字符则截断到 120 并追加 `sha256(URL)` 前 8 个 hex 字符后缀防冲突
 - **登录态存储**：`working/cookies/storage_state.json` 单一全局文件（Playwright `storage_state` 格式）。理由：SSO 跨域登录时一个上下文会累积多个域的 cookie，按域分文件会丢；全量注入时 Playwright 只发送匹配域的 cookie，多带无害
+- **浏览器代理**：`U2M_PROXY` 环境变量控制 chromium 代理——未设置则继承系统代理；`direct` 绕过系统代理（`--no-proxy-server`）；URL（http/socks5）显式钉住，页面与图片下载统一走它。系统代理隧道故障（`net::ERR_TUNNEL_CONNECTION_FAILED`）时的逃生通道
   - 写入：仅 `login_url.mjs` 写（登录完成后合并回写）；`clear_trans_html.*` 只读——并行无写冲突
   - 合并：cookie 按 `(name, domain, path)` 去重、新覆盖旧；localStorage 按 `origin + name` 去重覆盖
   - 加载时剔除 `expires < now` 的过期 cookie
