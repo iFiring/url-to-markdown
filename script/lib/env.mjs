@@ -14,9 +14,9 @@ export function workingRoot() {
     : path.join(projectRoot(), 'working');
 }
 
-/** URL→目录名：非 [A-Za-z0-9-] → _；>120 截断 + sha256(URL) 前 8 hex。Node/Python 必须一致。 */
+/** URL→目录名：非 [A-Za-z0-9.-] → _；>120 截断 + sha256(URL) 前 8 hex。Node/Python 必须一致。 */
 export function urlToDirName(url) {
-  const sanitized = url.replace(/[^A-Za-z0-9-]/g, '_');
+  const sanitized = url.replace(/[^A-Za-z0-9.-]/g, '_');
   if (sanitized.length <= 120) return sanitized;
   const hash = crypto.createHash('sha256').update(url, 'utf8').digest('hex').slice(0, 8);
   return sanitized.slice(0, 120) + hash;

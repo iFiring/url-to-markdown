@@ -15,7 +15,7 @@ def working_root() -> Path:
 
 
 def url_to_dir_name(url: str) -> str:
-    sanitized = re.sub(r"[^A-Za-z0-9-]", "_", url)
+    sanitized = re.sub(r"[^A-Za-z0-9.-]", "_", url)
     if len(sanitized) <= 120:
         return sanitized
     digest = hashlib.sha256(url.encode("utf-8")).hexdigest()[:8]

@@ -6,16 +6,16 @@ from pylib import env
 
 
 def test_url_to_dir_name_vectors():
-    assert env.url_to_dir_name("https://example.com/a?b=1") == "https___example_com_a_b_1"
-    assert env.url_to_dir_name("http://127.0.0.1:8000/x.html#frag") == "http___127_0_0_1_8000_x_html_frag"
-    assert env.url_to_dir_name("https://example.com/中文") == "https___example_com___"
+    assert env.url_to_dir_name("https://example.com/a?b=1") == "https___example.com_a_b_1"
+    assert env.url_to_dir_name("http://127.0.0.1:8000/x.html#frag") == "http___127.0.0.1_8000_x.html_frag"
+    assert env.url_to_dir_name("https://example.com/中文") == "https___example.com___"
 
 
 def test_url_to_dir_name_long():
     url = "https://example.com/" + "a" * 101
     name = env.url_to_dir_name(url)
     assert len(name) == 128
-    assert name.startswith("https___example_com_" + "a" * 100)
+    assert name.startswith("https___example.com_" + "a" * 100)
     digest = hashlib.sha256(url.encode("utf-8")).hexdigest()[:8]
     assert name[120:] == digest
 
