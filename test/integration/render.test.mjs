@@ -16,7 +16,8 @@ function prepWorking() {
     fs.mkdirSync(path.join(dir, wf, 'assets/images'), { recursive: true });
   }
   fs.writeFileSync(path.join(dir, 'node_workflow', 'result.md'),
-    '# Node 版\n\n![IMG_1](assets/images/IMG_1.png)\n\nNODE_RESULT_BODY');
+    '# Node 版\n\n![IMG_1](assets/images/IMG_1.png)\n\n![相对](./assets/images/IMG_1.png)\n\n' +
+    '![外链](https://example.com/assets/logo.png)\n\n![内联](data:image/gif;base64,R0lGOD)\n\nNODE_RESULT_BODY');
   fs.writeFileSync(path.join(dir, 'python_workflow', 'result.md'), '# Python 版\n\nPYTHON_RESULT_BODY');
   fs.copyFileSync('test/fixtures/pixel.png', path.join(dir, 'node_workflow', 'assets/images/IMG_1.png'));
   return { root, dir };
@@ -39,7 +40,13 @@ test('选择 node_workflow：复制 result.md + stdout selected + 退出 0', asy
   assert.equal(json.status, 'selected');
   assert.equal(json.source, 'node_workflow');
   assert.ok(fs.existsSync(path.join(dir, 'result.md')));
-  assert.match(fs.readFileSync(path.join(dir, 'result.md'), 'utf8'), /NODE_RESULT_BODY/);
+  // D1：复制到 <url-dir>/ 后 assets/ 相对引用改写为 <wf>/assets/（否则该层级下图片断裂）
+  const finalMd = fs.readFileSync(path.join(dir, 'result.md'), 'utf8');
+  assert.match(finalMd, /NODE_RESULT_BODY/);
+  assert.match(finalMd, /!\[IMG_1\]\(node_workflow\/assets\/images\/IMG_1\.png\)/);   // assets/ 前缀改写
+  assert.match(finalMd, /!\[相对\]\(node_workflow\/assets\/images\/IMG_1\.png\)/);    // ./assets/ 前缀同样改写
+  assert.match(finalMd, /!\[外链\]\(https:\/\/example\.com\/assets\/logo\.png\)/);    // 绝对 URL 不动
+  assert.match(finalMd, /!\[内联\]\(data:image\/gif;base64,R0lGOD\)/);                // data: URI 不动
 });
 
 test('降级 sketch.md：⚠️ 初稿标注 + {{IMG_n}} 还原（未点击 → 最终 timeout 属预期）', async () => {

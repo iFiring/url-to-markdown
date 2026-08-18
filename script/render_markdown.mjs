@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // render_markdown.mjs <url-dir> [--port 0] [--timeout 120000] [--open-timeout 5000] [--no-open]
-// 双 Tab 渲染两份 result.md（缺失降级 sketch.md 标注初稿），人工选择后复制到 <url-dir>/result.md。
+// 双 Tab 渲染两份 result.md（缺失降级 sketch.md 标注初稿），人工选择后复制到 <url-dir>/result.md，
+// 复制时把 ](assets/...) 相对引用改写为 ](<wf>/assets/...)，使其从新层级仍可解析。
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -69,6 +70,15 @@ function main() {
     // 相对图片引用 → /file/<wf>/...
     html = html.replace(/(<img[^>]+src=")(?!https?:|\/\/|data:|#|\/file\/)([^"]+)"/g, `$1/file/${src.wf}/$2"`);
     return html;
+  }
+
+  /**
+   * 选中文件复制到 <url-dir>/result.md 后，assets/ 的相对基准从 <wf>/ 变为 <url-dir>/，
+   * 需改写 `](assets/...` / `](./assets/...` 为 `](<wf>/assets/...`。
+   * 只动 assets/ 前缀的相对引用：绝对 URL、data:、#、/、../ 等其余形态一律不动。
+   */
+  function rewriteAssetRefs(text, wf) {
+    return text.replace(/\]\((\.\/)?assets\//g, `](${wf}/assets/`);
   }
 
   const RENDERED = Object.fromEntries(SOURCES.map((s) => [s.wf, renderSource(s)]));
@@ -203,7 +213,8 @@ ${panes}
         res.end(JSON.stringify({ ok: true }));
         const src = SOURCES.find((s) => s.wf === source);
         const dest = path.join(dir, 'result.md');
-        fs.copyFileSync(src.file, dest);
+        // 读→改写→写全程同步，先于下方 150ms 延迟的 finish，保证 stdout 报告 selected 时文件已就绪
+        fs.writeFileSync(dest, rewriteAssetRefs(fs.readFileSync(src.file, 'utf8'), src.wf));
         setTimeout(() => finish({ status: 'selected', source, path: dest, elapsedMs: Date.now() - t0 }, 0), 150);
       });
       return;
