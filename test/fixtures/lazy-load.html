@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>懒加载页</title></head>
+<body>
+<main>
+<h1>懒加载页</h1>
+<p>LAZY_PARA 图片由 IntersectionObserver 触发加载。</p>
+<img id="lazy" data-src="/pixel.png" width="50" height="50" alt="懒图">
+</main>
+<script>
+  new IntersectionObserver((entries) => {
+    entries.forEach((e) => { if (e.isIntersecting) e.target.src = e.target.dataset.src; });
+  }).observe(document.getElementById('lazy'));
+</script>
+</body>
+</html>
