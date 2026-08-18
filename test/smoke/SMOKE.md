@@ -20,6 +20,7 @@
 - 发现并已修复：长页面（21256px 主列）稀释文本密度 → 启发式误吞整个正文列 → 占位符被 Readability 丢弃 → 双稿只剩页眉（commit ac07e90：启发式加 500 字符上限 + 占位符 `<p>` 包裹；修复后重跑正文完整）
 - 遗留观察（不阻断）：manifest 中 15 个 svg_convert pending 对应被剔除的侧栏元素，其占位符随噪声一起消失——条目悬挂无引用，后续可加"丢弃"状态；readability-lxml 会拍平标题层级（3 个标题 vs Node 21 个），双稿择优吸收
 
+## 2. 真实登录墙页
 
 1. `node script/login_url.mjs <登录页URL>` → viewer 弹出
 2. 在 viewer 中完成真实登录 → 点「✅ 登录完成」→ 期望 `login_done`
