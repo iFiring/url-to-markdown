@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>登录 - 示例站</title></head>
+<body>
+<form id="f">
+  <input name="account" placeholder="用户名">
+  <input type="password" name="pwd">
+  <button type="submit">登录</button>
+</form>
+<script>
+  const u = new URL(location.href);
+  if (u.searchParams.get('auto') === '1') {
+    setTimeout(() => { document.cookie = 'sessionid=abc; path=/'; location.href = '/logged-in.html'; }, 400);
+  }
+  document.getElementById('f').addEventListener('submit', (e) => {
+    e.preventDefault();
+    document.cookie = 'sessionid=abc; path=/';
+    location.href = '/logged-in.html';
+  });
+</script>
+</body>
+</html>
