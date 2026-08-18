@@ -75,9 +75,10 @@ class PageSession:
 def open_page(url, *, headless=True, viewport=None, init_scripts=(), storage_state_path=None, log=print) -> PageSession:
     viewport = viewport or {"width": 1280, "height": 3000}
     pw = sync_playwright().start()
+    browser = None  # launch 本身抛错时 except 分支才不会 UnboundLocalError 掩盖真实错误
     try:
         browser = pw.chromium.launch(headless=headless)
-        ctx_kwargs = dict(viewport=viewport)
+        ctx_kwargs = dict(viewport=viewport, bypass_csp=True)  # 与 lib/browser.mjs 对齐：绕过页面 CSP（eval/addScriptTag 注入）
         if storage_state_path and Path(storage_state_path).exists():
             ctx_kwargs["storage_state"] = str(storage_state_path)
         context = browser.new_context(**ctx_kwargs)
@@ -89,7 +90,8 @@ def open_page(url, *, headless=True, viewport=None, init_scripts=(), storage_sta
         return PageSession(pw, browser, context, page)
     except Exception:
         try:
-            browser.close()
+            if browser:
+                browser.close()
         finally:
             pw.stop()
         raise

@@ -69,6 +69,15 @@ def test_mermaid(fixture_server, tmp_working):
     assert "```mermaid" in md
 
 
+def test_csp_article(fixture_server, tmp_working):
+    r = run(tmp_working, f"{fixture_server}/csp-article.html")
+    assert r.returncode == 0, r.stderr
+    payload = json.loads(r.stdout.strip())
+    assert payload["status"] == "ok"
+    md = (wf(tmp_working, f"{fixture_server}/csp-article.html") / "sketch.md").read_text(encoding="utf-8")
+    assert "CSP_PARA" in md
+
+
 def test_usage_error(tmp_working):
     r = subprocess.run([sys.executable, str(SCRIPT)], capture_output=True, text=True, timeout=30,
                        env={**os.environ, "U2M_WORKING_ROOT": str(tmp_working)})

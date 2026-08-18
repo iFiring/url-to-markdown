@@ -99,6 +99,15 @@ test('mermaid: 源码 → mermaid 围栏', async () => {
   assert.match(md, /```mermaid\ngraph TD; A-->B\n```/);
 });
 
+test('csp-article: 严格 CSP 页面（bypassCSP）→ ok + 正文保留', async () => {
+  const r = await run('csp-article.html');
+  assert.equal(r.code, 0, r.stderr);
+  const json = JSON.parse(r.stdout);
+  assert.equal(json.status, 'ok');
+  const md = sketch('csp-article.html');
+  assert.match(md, /CSP_PARA/);
+});
+
 test('参数错误: usage_error 退出 2', async () => {
   const r = await runScript(process.execPath, [path.resolve('script/clear_trans_html.mjs')], { env: { U2M_WORKING_ROOT: root } });
   assert.equal(r.code, 2);

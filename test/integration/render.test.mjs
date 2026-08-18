@@ -94,3 +94,45 @@ test('打开失败：open-timeout 内无请求 → open_failed 退出 1', async 
   assert.equal(r.code, 1);
   assert.equal(JSON.parse(r.stdout).status, 'open_failed');
 });
+
+test('select 产物缺失的 workflow：HTTP 400，脚本存活且后续有效 select 正常完成', async () => {
+  const { root, dir } = prepWorking();
+  fs.rmSync(path.join(dir, 'python_workflow', 'result.md')); // 仅 node_workflow 有产物
+  const r = await runScript(process.execPath,
+    [script, dir, '--no-open', '--timeout', '8000', '--open-timeout', '5000'],
+    { env: { U2M_WORKING_ROOT: root }, timeoutMs: 30000, onStderr: (line) => {
+      const m = /\[render\] 页面: (http:\/\/\S+)/.exec(line);
+      if (!m) return;
+      fetch(`${m[1]}/select`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source: 'python_workflow' }) })
+        .then((res) => {
+          assert.equal(res.status, 400); // 不可用 source → 400，而非 200 后崩溃
+          return fetch(`${m[1]}/select`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source: 'node_workflow' }) });
+        })
+        .catch(() => {});
+    } });
+  assert.equal(r.code, 0, r.stderr);
+  const json = JSON.parse(r.stdout);
+  assert.equal(json.status, 'selected');
+  assert.equal(json.source, 'node_workflow');
+});
+
+test('file 指向目录：404 而非 EISDIR 崩溃，服务器继续正常服务', async () => {
+  const { root, dir } = prepWorking();
+  const r = await runScript(process.execPath,
+    [script, dir, '--no-open', '--timeout', '3000', '--open-timeout', '5000'],
+    { env: { U2M_WORKING_ROOT: root }, timeoutMs: 30000, onStderr: (line) => {
+      const m = /\[render\] 页面: (http:\/\/\S+)/.exec(line);
+      if (!m) return;
+      fetch(`${m[1]}/file/node_workflow/assets`) // 目录路径 → 404
+        .then((res) => {
+          assert.equal(res.status, 404);
+          return fetch(`${m[1]}/file/node_workflow/assets/images/IMG_1.png`); // 服务器未崩，仍能出文件
+        })
+        .then((res) => { assert.equal(res.status, 200); })
+        .catch(() => {});
+    } });
+  // 不点击 → 预期走完点击窗口超时而非崩溃，且 stdout 恰一行 JSON
+  assert.equal(r.code, 1, r.stderr);
+  assert.equal(JSON.parse(r.stdout).status, 'timeout');
+  assert.equal(r.stdout.split('\n').filter((l) => l.trim() !== '').length, 1);
+});

@@ -80,3 +80,11 @@ test('超时：无人交互 → timeout，退出 1', async () => {
   assert.equal(JSON.parse(r.stdout).status, 'timeout');
   await fx.close();
 });
+
+test('缺 URL 参数：usage_error 退出 2，stdout 有且仅一行 JSON（emit 后不得继续执行）', async () => {
+  const r = await runScript(process.execPath, [script, '--timeout', '5000'], { timeoutMs: 15000 });
+  assert.equal(r.code, 2);
+  const lines = r.stdout.split('\n').filter((l) => l.trim() !== '');
+  assert.equal(lines.length, 1, `stdout 应恰一行，实际: ${JSON.stringify(r.stdout)}`);
+  assert.equal(JSON.parse(lines[0]).status, 'usage_error');
+});

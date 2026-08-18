@@ -76,7 +76,7 @@ export async function openPage(url, {
 } = {}) {
   const browser = await chromium.launch({ headless });
   try {
-    const ctxOpts = { viewport };
+    const ctxOpts = { viewport, bypassCSP: true }; // 严格 CSP 页面：addScriptTag/页面内 eval 注入不受页面策略拦截
     if (ssPath && fsSync.existsSync(ssPath)) ctxOpts.storageState = ssPath;
     const context = await browser.newContext(ctxOpts);
     await context.route('**/*', (route) =>

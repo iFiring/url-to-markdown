@@ -188,7 +188,8 @@ ${panes}
       let rel = null;
       try { rel = decodeURIComponent(fileMatch[2]); } catch { /* 非法百分号编码 → 404 */ }
       const full = rel === null ? null : safeFile(fileMatch[1], rel);
-      if (full && fs.existsSync(full)) {
+      // 目录同样通过 existsSync，readFileSync 随即 EISDIR 崩溃且 stdout 零行——限定普通文件
+      if (full && fs.existsSync(full) && fs.statSync(full).isFile()) {
         const ext = path.extname(full);
         const mime = { '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.gif': 'image/gif', '.webp': 'image/webp' }[ext] ?? 'application/octet-stream';
         res.writeHead(200, { 'Content-Type': mime });
@@ -204,9 +205,11 @@ ${panes}
       req.on('end', () => {
         let source = null;
         try { source = JSON.parse(body).source; } catch { /* 400 */ }
-        if (!WORKFLOWS.includes(source)) {
+        // 必须校验 SOURCES（产物实际存在的 workflow）：仅查 WORKFLOWS 时 src 为 undefined，
+        // src.file 读取崩溃且 stdout 零行。SOURCES ⊆ WORKFLOWS，此校验涵盖成员检查。
+        if (!SOURCES.some((s) => s.wf === source)) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: false, error: 'invalid source' }));
+          res.end(JSON.stringify({ ok: false, error: 'source not available' }));
           return;
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });

@@ -16,7 +16,8 @@ function parseArgs(argv) {
       const key = a.slice(2);
       if (key === 'no-open') { out[key] = true; continue; } // 布尔标志无值
       const val = argv[++i];
-      if (val === undefined || val.startsWith('--')) usage(`参数 --${key} 缺少值`);
+      // emit 延迟 process.exit：返回 null 让 main 立即停，防止继续执行打出第二行 JSON
+      if (val === undefined || val.startsWith('--')) { usage(`参数 --${key} 缺少值`); return null; }
       out[key] = val;
     } else out._.push(a);
   }
@@ -31,8 +32,9 @@ async function saveMerged(page, filePath) {
 
 async function main() {
   const args = parseArgs(process.argv);
+  if (!args) return; // usage_error 已 emit，契约要求后续不再执行
   const url = args._[0];
-  if (!url) usage('用法: login_url.mjs <url> [--timeout ms] [--port n] [--no-open]');
+  if (!url) return usage('用法: login_url.mjs <url> [--timeout ms] [--port n] [--no-open]');
   const timeoutMs = Number(args.timeout ?? 300000);
   const port = Number(args.port ?? 0);
   const ssPath = storageStatePath();
