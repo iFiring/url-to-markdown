@@ -30,9 +30,22 @@ async function main() {
   let s;
   try {
     s = await openPage(url, { viewport: { width: 1280, height: 3000 }, initScripts: [pageInit], storageStatePath: storageStatePath(), log });
-    // Task 2 将在此注入 page-detect.js 检测；本骨架恒判 scrollable
-    await s.close().catch(() => {});
-    emit({ status: 'scrollable', page_type: 'scrollable' }, 0);
+    const pageDetect = await readSharedScript('page-detect.js');
+    const timeoutMs = Number(args.timeout ?? 120000);
+    let timer;
+    const detect = await Promise.race([
+      s.page.evaluate(`(${pageDetect})()`),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('detect timeout')), timeoutMs);
+        timer.unref?.();
+      }),
+    ]);
+    clearTimeout(timer);
+    const result = detect.isVirtualList
+      ? { status: 'virtual_list', page_type: 'virtual_list', reason: '页面为虚拟列表，仅渲染可见窗口，无法全文转化为 Markdown' }
+      : { status: 'scrollable', page_type: 'scrollable' };
+    await s.close().catch(() => {}); // 先关浏览器再 emit（emit 内 process.exit）
+    emit(result, 0);
   } catch (e) {
     await s?.close().catch(() => {});
     emitError(e.message, 1);
