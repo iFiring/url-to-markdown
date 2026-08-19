@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>虚拟列表页</title></head>
+<body>
+<div id="list"></div>
+<div id="spacer" style="height:0"></div>
+<script>
+  // 模拟 react-window/react-virtualized：DOM 只保留可见窗口，滚出视口的项被回收
+  const TOTAL = 200, ITEM_H = 60, WINDOW = 12;
+  const list = document.getElementById('list');
+  document.getElementById('spacer').style.height = (TOTAL * ITEM_H) + 'px';
+  function renderItem(i) {
+    const d = document.createElement('div');
+    d.style.height = ITEM_H + 'px';
+    // 索引零填充、每项唯一内容，确保顶部签名不会出现在底部窗口的 innerText 中
+    d.textContent = 'VLIST 第' + String(i).padStart(4, '0') + ' 项 唯一内容块 ' + (i * 1009 % 9973);
+    return d;
+  }
+  function render() {
+    const start = Math.max(0, Math.floor(window.scrollY / ITEM_H) - 2);
+    list.textContent = '';
+    for (let k = 0; k < WINDOW; k++) {
+      const idx = start + k;
+      if (idx >= TOTAL) break;
+      list.appendChild(renderItem(idx));
+    }
+  }
+  window.addEventListener('scroll', render);
+  render();
+</script>
+</body>
+</html>
