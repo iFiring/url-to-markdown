@@ -12,7 +12,6 @@ test('init.sh: 环境就绪时输出 ok JSON 退出 0', { timeout: 300000 }, asy
   const json = JSON.parse(lines[0]);
   assert.equal(json.status, 'ok');
   assert.ok(json.node);
-  assert.ok(json.python);
   assert.ok(['pnpm', 'yarn', 'npm'].includes(json.pm));
   assert.equal(json.chromium, true);
 });

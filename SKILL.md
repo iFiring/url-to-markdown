@@ -58,30 +58,22 @@ node <skill-root>/script/detect_page.mjs <url> [--timeout 120000]
 | `virtual_list` | 告知用户"该页面为虚拟列表，仅渲染部分内容，无法全文转化为 Markdown"，**终止** |
 | `error` | 把 `reason` 反馈给用户并终止 |
 
-### 步骤 2 · 双工作流清洗转换（可并行）
+### 步骤 2 · 清洗转换
 
 ```bash
 node <skill-root>/script/clear_trans_html.mjs <url>
 ```
 
-```bash
-cd <skill-root> && .venv/bin/python script/clear_trans_html.py <url>
-# 若 .venv 不存在（例如环境用 uv 托管）：uv run python script/clear_trans_html.py <url>
-```
-
-两条命令互不依赖，可并行执行、独立退出码。
-
 | stdout status | 动作 |
 |---|---|
-| `ok` | 记录 `sketch` 路径；两个都成功 → 步骤 3 |
-| `error`（单个） | 不影响另一条；按实际成功的数量继续（只有一个成功则后续"单选"） |
-| 两条都 `error` | 把 reason 反馈给用户并终止 |
+| `ok` | 记录 `sketch` 路径，进入步骤 3 |
+| `error` | 把 `reason` 反馈给用户并终止 |
 
-产物：`<skill-root>/working/<url-dir>/<node_workflow|python_workflow>/sketch.md` 与 `assets/`。
+产物：`<skill-root>/working/<url-dir>/node_workflow/sketch.md` 与 `assets/`。
 
 ### 步骤 3 · 你负责转换特殊 DOM 元素
 
-读 `working/<url-dir>/node_workflow/assets/manifest.json` 与 `python_workflow/assets/manifest.json` 中 `status: "pending"` 的条目，按 `type` 分派（两个 workflow 各处理各的）：
+读 `working/<url-dir>/node_workflow/assets/manifest.json` 中 `status: "pending"` 的条目，按 `type` 分派：
 
 | type | 处置 |
 |---|---|
@@ -92,11 +84,11 @@ cd <skill-root> && .venv/bin/python script/clear_trans_html.py <url>
 
 ### 步骤 4 · 你负责语义去噪
 
-对每份处理完的 sketch.md 使用以下提示词清洗，写入**该 workflow 自己目录内**的 `working/<url-dir>/<node_workflow|python_workflow>/result.md`。注意两层同名文件：步骤 4 在每个 workflow 目录内各写一份 `result.md`；步骤 5 会把选中的那一份复制到上一级 `working/<url-dir>/result.md` 作为最终交付物。
+对 sketch.md 使用以下提示词清洗，写入 `working/<url-dir>/node_workflow/result.md`。
 
-> 你是一个网页内容清洗专家。以下是两份网页转换的 Markdown 初稿。请去除其中的广告、推荐阅读、版权声明等无关内容，只保留核心正文。同时，请检查并修复其中的 Markdown 表格格式，确保其符合标准。去除多余的换行，空格。直接输出清洗后的 Markdown。**注意**：不要添加/修改/删除主体文本内容和原义。
+> 你是一个网页内容清洗专家。以下是网页转换的 Markdown 初稿。请去除其中的广告、推荐阅读、版权声明等无关内容，只保留核心正文。同时，请检查并修复其中的 Markdown 表格格式，确保其符合标准。去除多余的换行，空格。直接输出清洗后的 Markdown。**注意**：不要添加/修改/删除主体文本内容和原义。
 
-清洗时把 `{{IMG_n}}` 替换为 `![IMG_n](assets/images/IMG_n.<ext>)`——扩展名以该 workflow `assets/images/` 下实际文件为准。若只有一个 workflow 产出，则"两份"按一份处理。
+清洗时把 `{{IMG_n}}` 替换为 `![IMG_n](assets/images/IMG_n.<ext>)`——扩展名以 `node_workflow` `assets/images/` 下实际文件为准。
 
 ### 步骤 5 · 人工选择 Markdown
 
@@ -128,6 +120,5 @@ curl -X POST http://127.0.0.1:<port>/select -H 'Content-Type: application/json' 
 | `login_url` 判定已登录但页面仍是登录墙 | 手动删除 `working/cookies/storage_state.json` 后重跑步骤 1 |
 | 图片下载失败（warnings 中有"保留原 URL"） | 正常降级：Markdown 保留原图链接，不需处理 |
 | sketch.md 中残留 `{{COMPLEX_DIV_n}}` 且 manifest 无对应项 | 该元素被当普通 DOM 转成了文本，人工检查是否需要补图 |
-| 双工作流其一失败 | 用另一份继续步骤 3-5（单选模式） |
 | 页面加载报 `net::ERR_TUNNEL_CONNECTION_FAILED` / `ERR_PROXY_CONNECTION_FAILED` | 本机系统代理不可用或拒绝目标站：设 `U2M_PROXY=direct` 绕过系统代理，或 `U2M_PROXY=http://<host>:<port>` 显式指定可用代理后重跑 |
 | `detect_page` 报 `virtual_list` 但用户确信是普通长页 | 该站可能主动裁剪离屏 DOM（与虚拟列表同构，产出亦只是部分窗口），属已知边界；建议改用其他抓取方式 |

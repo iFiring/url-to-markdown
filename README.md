@@ -11,14 +11,13 @@ description: "将 URL（网页）的主体内容转换成 Markdown；在需要�
 ## 环境要求
 
 - Node >= 20
-- Python3 >= 3.11
 - Linux / MacOS
 
 ## 技术栈
 
 - `Playwright`
-- `@mozilla/readability`; `readability-lxml`
-- `turndown`; `markdownify`
+- `@mozilla/readability`
+- `turndown` + `@joplin/turndown-plugin-gfm`
 
 ## 项目结构
 
@@ -26,7 +25,6 @@ description: "将 URL（网页）的主体内容转换成 Markdown；在需要�
 working/                 # 工作目录
   cookies/               # 所有访问过 URL 的 cookie 公共存储目录
   [_U_R_L_]/             # 将特殊字符替换成下划线的 URL
-    python_workflow/     # Python 脚本工作流
     node_workflow/       # Node 脚本工作流
       assets/
         draft/           # 复杂元素和截图
@@ -41,8 +39,6 @@ test/                    # 单元测试
 README.md                # 项目说明
 package.json
 pnpm-lock.yaml
-uv.lock
-pyproject.toml
 ```
 
 ### Skill 文件夹结构
@@ -55,8 +51,6 @@ url-to-markdown/
   README.md
   package.json
   pnpm-lock.yaml
-  uv.lock
-  pyproject.toml
 ```
 
 ## 核心流程
@@ -76,9 +70,7 @@ url-to-markdown/
 
 ### 2.打开 URL，清理 HTML，转化成 Markdown
 
-用脚本 `clear_trans_html.mjs` 和 `clear_trans_html.py` 打开页面，清理 DOM 元素，转化成 Markdown。
-
-- 两个脚本可并行运行，生成两个独立产物，在后续择优选择
+用脚本 `clear_trans_html.mjs` 打开页面，清理 DOM 元素，转化成 Markdown。
 
 #### 清理
 
@@ -94,18 +86,18 @@ url-to-markdown/
 
 特殊的 DOM 元素，你负责转化成 SVG，替换 Markdown 中的标记
 
-- 从目录 `working/[_U_R_L_]/XXX_workflow/assets/draft/` 获取所有待转换元素（HTML）
+- 从目录 `working/[_U_R_L_]/node_workflow/assets/draft/` 获取所有待转换元素（HTML）
 - 非文本的 DOM 元素，转换成 SVG
 
 ### 4.你负责对 Markdown 语义去噪
 
-审阅两份 Markdown，你负责检查质量并优化内容
+审阅 Markdown 初稿，你负责检查质量并优化内容
 
-- 提示词: "你是一个网页内容清洗专家。以下是两份网页转换的 Markdown 初稿。请去除其中的广告、推荐阅读、版权声明等无关内容，只保留核心正文。同时，请检查并修复其中的 Markdown 表格格式，确保其符合标准。去除多余的换行，空格。直接输出清洗后的 Markdown。**注意**：不要添加/修改/删除主体文本内容和原义。"
+- 提示词: "你是一个网页内容清洗专家。以下是网页转换的 Markdown 初稿。请去除其中的广告、推荐阅读、版权声明等无关内容，只保留核心正文。同时，请检查并修复其中的 Markdown 表格格式，确保其符合标准。去除多余的换行，空格。直接输出清洗后的 Markdown。**注意**：不要添加/修改/删除主体文本内容和原义。"
 
 ### 5.人工选择 Markdown 文件
 
-用脚本 `render_markdown.mjs` 渲染生成的两份 Markdown 文件，通过 Tab 切换，人工确认选择哪个。
+用脚本 `render_markdown.mjs` 渲染生成的 Markdown 文件，人工确认后作为最终交付物。
 
 - 使用本地的 Markdown 渲染
 - 给用户选择和提交按钮，脚本返回用户选择的结果并退出
@@ -120,10 +112,9 @@ url-to-markdown/
 
 环境初始化：判断环境和依赖安装，正常则成功退出，异常则报错退出。
 
-- 判断 Node 和 Python3 的正确版本，是否安装了依赖和 chromium，没问题则成功退出；没有 Node 或 Python3，报错退出
-- Node 版本不对，尝试使用 nvm 安装正确版本；Python3 版本不对，尝试使用 brew/uv 安装正确版本；无法安装则报错退出
+- 判断 Node 的正确版本，是否安装了依赖和 chromium，没问题则成功退出；没有 Node，报错退出
+- Node 版本不对，尝试使用 nvm 安装正确版本；无法安装则报错退出
 - Node 包管理器使用优先级 "pnpm > yarn > npm"；降级使用，不要自行安装
-- Python3 包管理器使用优先级 "uv > native"；降级使用，不要自行安装
 - 配置 `pnpm.onlyBuiltDependencies` 允许 pnpm 安装 `chromium`
 - 初始化 chromium：配置 `pnpm.onlyBuiltDependencies` 允许 pnpm 自动安装 `chromium`；不存在则手动执行 `npx playwright install chromium`，已存在则不需要执行
 
@@ -144,7 +135,7 @@ url-to-markdown/
 - 登录状态判断：`.temp/login.mjs`
 - 登录状态判断：`.temp/is_login_page.py`
 
-### `clear_trans_html.mjs` + `clear_trans_html.py`
+### `clear_trans_html.mjs`
 
 渲染 URL，清理 DOM 元素，转化成 Markdown。
 
@@ -155,19 +146,19 @@ url-to-markdown/
 
 #### 清理
 
-- 清理库，Node 使用 `@mozilla/readability` ; Python 使用 `readability-lxml`
+- 清理库，Node 使用 `@mozilla/readability`
 - 清理视频和音频元素；清理按钮元素
 
 #### 转换
 
-- 转换库，Node 使用 `turndown` + `@joplin/turndown-plugin-gfm`， Python 使用 `markdownify`
-- 纯图片：下载正文所有 `<img>` 标签的图片，存储在工作目录 `working/[_U_R_L_]/XXX_workflow/assets/images/IMG_1`，在 Markdown 中引用占位符 `{{IMG_1}}`
-- 复杂非纯文本 `<div>`：先给 DOM 元素截图，截取 DOM 元素（HTML + 有效 CSS 内联样式），存储在工作目录 `working/[_U_R_L_]/XXX_workflow/assets/draft/COMPLEX_DIV_1`，在 Markdown 中引用占位符 `{{COMPLEX_DIV_1,2,3}}`；
+- 转换库，Node 使用 `turndown` + `@joplin/turndown-plugin-gfm`
+- 纯图片：下载正文所有 `<img>` 标签的图片，存储在工作目录 `working/[_U_R_L_]/node_workflow/assets/images/IMG_1`，在 Markdown 中引用占位符 `{{IMG_1}}`
+- 复杂非纯文本 `<div>`：先给 DOM 元素截图，截取 DOM 元素（HTML + 有效 CSS 内联样式），存储在工作目录 `working/[_U_R_L_]/node_workflow/assets/draft/COMPLEX_DIV_1`，在 Markdown 中引用占位符 `{{COMPLEX_DIV_1,2,3}}`；
 - 在处理特殊元素后，再使用转换库转换文档
 
 ### `render_markdown.mjs`
 
-在浏览器窗口同时渲染两份 Markdown，由用户选择用哪个，提交后返回选中的 Markdown 路径
+在浏览器窗口渲染 Markdown，由用户确认，提交后返回 Markdown 路径
 
 #### 参考
 
@@ -182,7 +173,8 @@ url-to-markdown/
 | 项目结构 | 项目总体结构，包括文件夹，package 文件等等 | 已完成 |
 | 初始化脚本 `init.sh` | 环境检测与依赖安装 | 已完成 |
 | 登录脚本 `login_url.mjs` | 打开 URL，判断/完成登录态 | 已完成 |
-| clear_trans_html 双工作流 | Node 与 Python 并行清洗转换 HTML → Markdown | 已完成 |
-| `render_markdown.mjs` | 浏览器双 Tab 渲染，人工选择最终 Markdown | 已完成 |
+| clear_trans_html | Node 清洗转换 HTML → Markdown | 已完成 |
+| `render_markdown.mjs` | 浏览器渲染，人工确认最终 Markdown | 已完成 |
 | SKILL.md | 操作手册（步骤 0-5、status 分支决策表、错误处理） | 已完成 |
 | 真实 URL 冒烟 | 手动清单见 test/smoke/SMOKE.md | 场景 1 已完成（MDN 文章页端到端通过）；场景 2（登录墙）/3（特殊元素）待人工 |
+| 移除 Python 运行时 | 双稿择优退役，收敛 Node 单运行时 | 已完成 |

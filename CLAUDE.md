@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 本仓库是什么
 
-一个 Claude Code Skill 的源码：给定 URL，把网页主体内容转换成干净的 Markdown。`SKILL.md` 是技能的操作手册（步骤 0-5）；`script/` 下的 CLI 由遵循该手册的 agent 调用。仓库天然是双语言的——Node 工作流与 Python 工作流跑同一条管线，产出两份平行初稿供人工择优。
+一个 Claude Code Skill 的源码：给定 URL，把网页主体内容转换成干净的 Markdown。`SKILL.md` 是技能的操作手册（步骤 0-5）；`script/` 下的 CLI 由遵循该手册的 agent 调用。
 
 ## 常用命令
 
@@ -12,19 +12,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 bash script/init.sh                              # 环境自检与修复（幂等；stdout 输出一行 JSON）
 pnpm test                                        # Node 单测（node --test test/unit/*.test.mjs）
 pnpm run test:integration                        # Node 集成（真 chromium + 本地夹具服务器）
-pnpm test:all                                    # 两者都跑
-uv run pytest test/unit test/integration         # Python 测试（裸 `uv run pytest` 只跑 UNIT——testpaths 所限）
+pnpm test:all                                    # Node 单测 + 集成
 
 # 单文件 / 单用例
 node --test test/unit/contract.test.mjs
 node --test test/integration/render.test.mjs
-uv run pytest test/integration/test_clear_py.py::test_mermaid
-
-uv sync                                          # Python 依赖装入 .venv（uv 管理，package=false——纯脚本项目）
-npx playwright install chromium                  # 双运行时共用的浏览器缓存
+npx playwright install chromium                  # 浏览器缓存
 ```
 
-环境要求：node ≥20（nvm）、python ≥3.11、pnpm > yarn > npm、uv。未配置 linter。测试以子进程方式启动真实 CLI、对接随机端口的夹具服务器；集成测试需要已安装 chromium。
+环境要求：node ≥20（nvm）、pnpm > yarn > npm。未配置 linter。测试以子进程方式启动真实 CLI、对接随机端口的夹具服务器；集成测试需要已安装 chromium。
 
 ## 输出契约即产品
 
@@ -34,14 +30,10 @@ npx playwright install chromium                  # 双运行时共用的浏览�
 
 ## 架构
 
-**共享页面脚本是分类的唯一事实源。** `script/lib/page-*.js` 是普通非模块文件，各含一个具名 `function __u2mXxx(...)`。双运行度都把它们当**文本**读入并注入页面（Node：`readSharedScript` + evaluate；Python：`read_shared_script` + `page.evaluate`）。分类规则、清理、iframe 合并、样式内联、LaTeX 提取、虚拟列表检测（`page-detect.js` / `__u2mDetectVirtualList`）只存在于这些文件——严禁把该逻辑分叉进 `.py` 或 `.mjs`。
+**共享页面脚本是分类的唯一事实源。** `script/lib/page-*.js` 是普通非模块文件，各含一个具名 `function __u2mXxx(...)`。Node 工作流把它当**文本**读入并注入页面（`readSharedScript` + evaluate）。分类规则、清理、iframe 合并、样式内联、LaTeX 提取、虚拟列表检测（`page-detect.js` / `__u2mDetectVirtualList`）只存在于这些文件——严禁把该逻辑分叉进 `.mjs` 编排层。
 
 **Playwright 1.62 evaluate 语义**（经源码验证；最初计划写反了，已在代码中修正）：
 - 字符串表达式只有完整表达式形式可用：`page.evaluate(`(${src})()`)`。**解析后得到函数值**的字符串永远不会被调用。
-- 需要元素实参的共享脚本走适配器：`callOnElement`（placeholder.mjs）/ `_call_on_element`（placeholder.py）——先 eval `'(' + src + ')'` 再把元素句柄作为实参调用。改任一侧都要同步镜像另一侧。
-- Python 同步 Playwright 受 greenlet 线程绑定：禁止从其他 OS 线程访问 page/context（Python 图片下载串行即因此——不要重新引入 ThreadPoolExecutor）。
-
-**双工作流镜像。** `script/lib/*.mjs` ↔ `script/pylib/*.py` 必须行为一致：`urlToDirName`/`url_to_dir_name` 对同一 URL 产出字节级一致的目录名（两语言单测用同一组向量）；manifest 结构与分派行为一致；complex-elements 夹具断言两运行时 manifest 相同。改分类 → 只改 `page-*.js`；改编排 → 双侧镜像同改。
 
 **管线顺序（spec 规定）**：打开页面（initScripts 注入 page-init.js——IO 劫持 + mermaid 源码快照）→ 渐进滚动 → DOM 稳定等待 → 同源 iframe 合并 → mermaid 源码直出 → 特殊元素分派 → 图片下载 → 页面清理 → Readability（Node 在页面内 addScriptTag；Python 进程内 readability-lxml）→ Markdown 转换 → sketch.md + manifest.json。
 
@@ -49,9 +41,9 @@ npx playwright install chromium                  # 双运行时共用的浏览�
 
 **启发式护栏（真实 URL 冒烟教训）**：svg_convert 启发式仅在元素总文本 < 500 字符时触发（page-classify.js 的 `maxHeuristicText`，可由 cfg 覆盖）——超长真实页面会把文本密度稀释到比值阈值以下，不加此上限会吞掉整个正文列。选择器命中（`.chart`/`.echarts` 等）不受该上限约束。
 
-**工作目录。** 每个 URL 对应 `working/<净化URL>/<node_workflow|python_workflow>/`；净化保留 `[A-Za-z0-9.-]`，超 120 字符截断 + sha256 前 8 位十六进制后缀。`U2M_WORKING_ROOT` 覆盖根目录（所有测试用它隔离）。`working/cookies/storage_state.json` 是唯一全局登录态——仅 `login_url.mjs` 写入（cookie 按 name|domain|path 去重、localStorage 按 origin+name、读取时剔除过期）；转换脚本只读。
+**工作目录。** 每个 URL 对应 `working/<净化URL>/node_workflow/`；净化保留 `[A-Za-z0-9.-]`，超 120 字符截断 + sha256 前 8 位十六进制后缀。`U2M_WORKING_ROOT` 覆盖根目录（所有测试用它隔离）。`working/cookies/storage_state.json` 是唯一全局登录态——仅 `login_url.mjs` 写入（cookie 按 name|domain|path 去重、localStorage 按 origin+name、读取时剔除过期）；转换脚本只读。
 
-**浏览器上下文（双语言）**：route-abort `resourceType === 'media'`；`bypassCSP: true`（否则严格 CSP 站点会在 addScriptTag 处杀死 Node 工作流）；转换运行 viewport 1280×3000；`U2M_PROXY` 环境变量控制代理（未设置继承系统代理 / `direct` 绕过 / URL 显式钉住——真实冒烟曾因系统代理隧道失败报 ERR_TUNNEL_CONNECTION_FAILED 而加，双语言镜像于 `proxyLaunchOptions`/`proxy_launch_options`）。浏览器/viewer 一律在最终 emit **之前**关闭（emit 会退出进程，顺序错了会留孤儿 chromium）。
+**浏览器上下文**：route-abort `resourceType === 'media'`；`bypassCSP: true`（否则严格 CSP 站点会在 addScriptTag 处杀死 Node 工作流）；转换运行 viewport 1280×3000；`U2M_PROXY` 环境变量控制代理（未设置继承系统代理 / `direct` 绕过 / URL 显式钉住——真实冒烟曾因系统代理隧道失败报 ERR_TUNNEL_CONNECTION_FAILED 而加，实现于 `script/lib/browser.mjs` 的 `proxyLaunchOptions`）。浏览器/viewer 一律在最终 emit **之前**关闭（emit 会退出进程，顺序错了会留孤儿 chromium）。
 
 **登录流程**：`detector.mjs` 对六个信号计分（全 frames 密码框 / URL 特征 / 标题与正文关键词——标题关键词只匹配 `<title>`、正文关键词只匹配正文 / 认证 cookie 反查 / 重定向 / SPA 等待）；≥2 命中判定需登录。人工登录走 CDP Screencast 中继（`screencast.mjs`：无头 chromium → HTTP+WS viewer，JS/CSS 全内联）。viewer 地址以 `[login_url] viewer: http://...` 记录到 stderr，测试靠它接入。`render_markdown.mjs` 用两阶段超时（open-timeout 内无请求 → open_failed，随后进入点击窗口）——其 `/select` 端点是文档化的无人值守路径（先 GET 页面取消打开自检，再 POST）。
 
@@ -59,10 +51,8 @@ npx playwright install chromium                  # 双运行时共用的浏览�
 
 ## 测试须知
 
-- 夹具在 `test/fixtures/`；`test/helpers/fixture-server.mjs` 与 conftest 的 `fixture_server` 在随机端口提供服��。`runScript`（test/helpers/run-script.mjs）以子进程启动 CLI，支持 `onStderr(line)` 按行回调——viewer 类测试靠它触达 WS/HTTP 接口。
+- 夹具在 `test/fixtures/`；`test/helpers/fixture-server.mjs` 在随机端口提供服务。`runScript`（test/helpers/run-script.mjs）以子进程启动 CLI，支持 `onStderr(line)` 按行回调——viewer 类测试靠它触达 WS/HTTP 接口。
 - `test/fixtures/login-wall.html` 的 `?auto=1` 自登录延迟刻意设为 1500ms：400ms 的重定向会落在 goto 的 networkidle 窗口内，使 login_done 路径不可达。慢 CI 上可向 ~1200ms 方向下调以加宽余量。
-- Python 子进程测试必须继承 `os.environ`（playwright 需要 HOME 定位浏览器缓存），只覆盖 `U2M_WORKING_ROOT`。
-- Python 侧已被设计吸收的怪癖：readability-lxml 拍平标题层级、短页面保留更多导航噪声（双稿择优是吸收器）；`min_text_length=10` 保住 @mozilla/readability 会保留的短表格/代码块；markdownify 围栏语言来自 `code_language_callback`。
 - `test/smoke/SMOKE.md` 是真实 URL 手动冒烟清单（场景 1 已记录通过）。
 
 ## 文档地图
