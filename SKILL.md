@@ -39,9 +39,23 @@ node <skill-root>/script/login_url.mjs <url> [--timeout 300000]
 
 | stdout status | 动作 |
 |---|---|
-| `logged_in` | 进入步骤 2 |
-| `login_done` | 进入步骤 2 |
+| `logged_in` | 进入步骤 1.5 |
+| `login_done` | 进入步骤 1.5 |
 | `timeout` / `aborted` | 询问用户是否重试登录；重试则再次运行本命令 |
+| `error` | 把 `reason` 反馈给用户并终止 |
+
+### 步骤 1.5 · 检测页面特性
+
+```bash
+node <skill-root>/script/detect_page.mjs <url> [--timeout 120000]
+```
+
+检测页面是否为虚拟列表（仅渲染可见窗口、滚动回收顶项，无法全文转化）。复用步骤 1 写好的登录态。
+
+| stdout status | 动作 |
+|---|---|
+| `scrollable` | 进入步骤 2 |
+| `virtual_list` | 告知用户"该页面为虚拟列表，仅渲染部分内容，无法全文转化为 Markdown"，**终止** |
 | `error` | 把 `reason` 反馈给用户并终止 |
 
 ### 步骤 2 · 双工作流清洗转换（可并行）
@@ -116,3 +130,4 @@ curl -X POST http://127.0.0.1:<port>/select -H 'Content-Type: application/json' 
 | sketch.md 中残留 `{{COMPLEX_DIV_n}}` 且 manifest 无对应项 | 该元素被当普通 DOM 转成了文本，人工检查是否需要补图 |
 | 双工作流其一失败 | 用另一份继续步骤 3-5（单选模式） |
 | 页面加载报 `net::ERR_TUNNEL_CONNECTION_FAILED` / `ERR_PROXY_CONNECTION_FAILED` | 本机系统代理不可用或拒绝目标站：设 `U2M_PROXY=direct` 绕过系统代理，或 `U2M_PROXY=http://<host>:<port>` 显式指定可用代理后重跑 |
+| `detect_page` 报 `virtual_list` 但用户确信是普通长页 | 该站可能主动裁剪离屏 DOM（与虚拟列表同构，产出亦只是部分窗口），属已知边界；建议改用其他抓取方式 |
