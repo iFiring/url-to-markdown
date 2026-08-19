@@ -14,7 +14,7 @@
 
 ## 2 · 目标
 
-- 登录后一次性抓取**全保真 HTML 快照**，后续分类、清洗、渲染分派都在此快照上工作——消除"各步骤重开页 + id 匹配"的脆弱不变量。
+- 登录后一次性抓取**全保真自包含 HTML 快照**（充分滚动后的完整 DOM + 内联 CSS + 元素 inline style，剥尽 `<script>`），后续分类、清洗、渲染分派都在此快照上工作——消除"各步骤重开页 + id 匹配"的脆弱不变量。
 - 给 LLM 的输入是快照的**派生精简版**：长文本→占位符、仅信号样式内联、候选块打稳定 id，结构与样式信号保留而内容抹除——把 LLM 的理解成本压到最低（文章内容不需要了解）。
 - 由 LLM 找出"列表流"父容器（多个章节/段落块的父组件）并逐块给出修改方案，替换硬编码启发式，消除大规模误判。
 - 代码块按结构识别、文本不占位；语言由本地脚本判定（`data-lang`/class 优先，否则启发式检测）；代码块展示原文 + 语言围栏。
@@ -24,7 +24,7 @@
 
 ## 3 · 关键决策（经头脑风暴确认）
 
-1. **下载一次，后续全在快照上工作**：登录 + 滚动 + DOM 稳定后，捕获全保真 `snapshot.html`（仅剥 `<script>`，保留 `<style>`/`<link>`/图片/全部属性，注入 `<base href=origin>`）；渲染类分派（截图/SVG/图片下载）此后都加载此快照，不再重开原 URL。
+1. **下载一次，后续全在快照上工作**：登录 + 充分滚动 + DOM 稳定后，捕获全保真**自包含** `snapshot.html`（外部 `<link>` CSS 抓取文本内联成 `<style>`、剥尽 `<script>`/`<noscript>`/`<template>`/`on*`、保留 `<style>`/元素 inline style/图片/`<video>`、注入 `<base href=origin>`）；渲染类分派（截图/SVG/图片下载）此后都 `setContent` 加载此快照，不再重开原 URL、不依赖网络取 CSS。
 2. **双产物**：全保真 `snapshot.html`（渲染源）+ 派生 `classify_input.html`（占位符 + 信号样式 + id，仅给 LLM）。两者由同一次开页、同一 DOM 状态派生，故 `data-u2m-id` 在两份里天然一致。
 3. **块寻址 = 列表流选择器 + 稳定 id**：LLM 用一个选择器指出"列表流"父容器；prepare 给候选块注入稳定 `data-u2m-id`；逐块方案用 id 引用。兼顾"找父组件"与抗动态 class 失配。
 4. **列表流划定块流，其外为噪声**：列表流内的块按 `action` 逐块分派；列表流外的一切一律删除（新的结构去噪）。Readability 仍在其后对存活 DOM 抽主体（三层去噪不重叠，§4.2）。
@@ -50,7 +50,7 @@
 
 ```
 working/<url-dir>/
-├─ snapshot.html                 ← 全保真快照（渲染源；带 data-u2m-id + <base>，保留 <style>/<link>/图片）
+├─ snapshot.html                 ← 全保真自包含快照（渲染源；DOM + 内联 CSS + 元素 inline style，剥尽 <script>，带 data-u2m-id + <base>）
 ├─ classify/                      ← 全局共享
 │  ├─ classify_input.html        ← 派生：长文本占位 + 信号样式内联 + data-u2m-id
 │  └─ classify_plan.json         ← agent 写的判断结果
@@ -75,11 +75,12 @@ working/<url-dir>/
 **`function __u2mPrepareBody(cfg)`**（在活页 DOM 上原地变异，**仅 `capture_snapshot` 调用一次**）：
 
 1. **合并同源内容 iframe**（吸收 `__u2mMergeIframes`，同阈值；主文档文本充足则不合并）。
-2. **剥离 `<script>`**（mermaid 源码已由 pageInit 存为 `data-u2m-mermaid-src`，剥离 `<script>` 不丢）。**不剥** `<style>`/`<link rel=stylesheet>`/`<video>`/`<audio>`/图片——全保真快照需保留以供渲染（`video`/`audio` 是 `screenshot` 分派目标）。
-3. **剥叶子噪声**：`.copy`、`.copy-btn`、`button[aria-label*="copy" i]`、`template`、`noscript`（非正文渲染内容，剥之不影响保真度，却防代码块里的复制按钮泄漏为文本噪声）。
-4. **注入 `<base href="<origin URL>">`** 到 `<head>`，使相对 CSS/图片 URL 在 `setContent` 重载时仍解析回源站。
-5. **打 `data-u2m-id`**：给"决策单元"候选打 ID（文档序递增 `data-u2m-id="n"`）——`div, section, article, aside, nav, header, footer, main, figure, table, thead, tbody, tr, canvas, svg, video, iframe, picture, ul, ol, li, dl, pre, blockquote, details, [role], [data-chart], .chart, .echarts, .highcharts, .MathJax, .MathJax_Display, .katex, .katex-display`。叶子文本元素（`p, span, a, code, em, strong, h1-h6, td, th`）不打 ID——由 Readability+Turndown 当文本处理。
-6. 原地返回，不序列化。
+2. **内联外部 CSS**：遍历 `<link rel=stylesheet>`，在页面 context 内 `fetch(href).text()` 取 CSS 文本（同源 / CORS 开放的 CDN 可抓到），把抓到的文本并成一个 `<style data-u2m-inlined>` 注入 `<head>`，移除该 `<link>`。**fetch 失败（跨源无 CORS / 网络错）的 `<link>` 原样保留**——渲染时由 `<base>` + 登录 cookie + 网络兜底加载（保真优先于严格自包含）。既有 `<style>` 块保留不动。
+3. **剥尽 JS 与噪声标签**：移除 `<script>`（mermaid 源码已由 pageInit 存为 `data-u2m-mermaid-src`，剥离 `<script>` 不丢）、`<noscript>`、`<template>`，以及所有 `on*` 事件属性。**不剥** `<style>`/`<video>`/`<audio>`/图片/元素 inline style——全保真快照需保留以供渲染（`video`/`audio` 是 `screenshot` 分派目标）。
+4. **剥叶子噪声**：`.copy`、`.copy-btn`、`button[aria-label*="copy" i]`（防代码块里的复制按钮泄漏为文本噪声）。
+5. **注入 `<base href="<origin URL>">`** 到 `<head>`，使相对图片 URL、inlined CSS 里的相对 `url()`、以及兜底 `<link>` 在 `setContent` 重载时仍解析回源站。
+6. **打 `data-u2m-id`**：给"决策单元"候选打 ID（文档序递增 `data-u2m-id="n"`）——`div, section, article, aside, nav, header, footer, main, figure, table, thead, tbody, tr, canvas, svg, video, iframe, picture, ul, ol, li, dl, pre, blockquote, details, [role], [data-chart], .chart, .echarts, .highcharts, .MathJax, .MathJax_Display, .katex, .katex-display`。叶子文本元素（`p, span, a, code, em, strong, h1-h6, td, th`）不打 ID——由 Readability+Turndown 当文本处理。
+7. 原地返回，不序列化。
 
 **`function __u2mDeriveClassifyInput(cfg)`**（在已 prepare 的活页 DOM 上序列化出**精简版**，**仅给 LLM**）：
 
@@ -88,7 +89,7 @@ working/<url-dir>/
 3. **白名单样式内联**：仅内联信号性属性——`position, display, float, clear, visibility, overflow, border(-*)?, border-radius, background(-color)?, box-shadow, width, height, min/max-(width|height), transform, z-index, flex(-*)?, grid(-*)?, gap`。**不内联** `color/font/text-*`（文本样式对"文本 vs 非文本"无信号且徒增 token）。
 4. 返回 `document.body.outerHTML`（`data-u2m-id` 已由 `__u2mPrepareBody` 打好，与 `snapshot.html` 同源 → id 一致）。
 
-`capture_snapshot.mjs` 序列化全保真快照直接取 `document.documentElement.outerHTML`（prepare 已剥 `<script>`、注入 `<base>`、打好 id、合并 iframe，其余原样保留）。
+`capture_snapshot.mjs` 序列化全保真快照直接取 `document.documentElement.outerHTML`（prepare 已内联外部 CSS、剥尽 `<script>`/`<noscript>`/`<template>`/`on*`、注入 `<base>`、打好 id、合并 iframe；`<style>`/元素 inline style/`<img>`/`<video>` 原样保留）。
 
 ### 5.2 `capture_snapshot.mjs`
 
@@ -222,7 +223,7 @@ readability → turndown → sketch.md + manifest.json // 不变
 
 ### 7.4 `setContent` 资源解析
 
-`setContent(snapshot.html)` 无源 URL，相对 CSS/图片会失解析——快照里已注入 `<base href="<origin>">`，浏览器据此解析回源站；`bypassCSP:true`（已设）处理 CSP；页面 context 继承登录 cookies，受保护资源仍可取。若个别跨域资源被拒，截图降级（warning），不崩。
+`setContent(snapshot.html)` 无源 URL——**CSS 规则已内联成 `<style>`，不依赖网络**；只有 `<img>`/inlined CSS 里的相对 `url()`、以及 fetch 失败兜底保留的 `<link>` 仍需解析源站。快照里已注入 `<base href="<origin>">`，浏览器据此把相对 URL 解析回源站；`bypassCSP:true`（已设）处理 CSP；页面 context 继承登录 cookies，受保护的图片/兜底 CSS 仍可取。若个别跨域图片被拒，截图降级（warning），不崩。
 
 ### 7.5 安全网
 
@@ -232,9 +233,10 @@ plan 缺失或非法 → `emitError("缺/非法 classify_plan.json: ...", 1)`（
 
 沿用既有分层（`node --test test/unit` + `uv run pytest test/unit test/integration`，夹具服务器 + 子进程 CLI）：
 
-- **`page-prepare.js` 集成**：夹具页含 `<script>`/`<style>`/广告/`<video>`/同源 iframe → 断言 `<script>` 已剥、`<style>`/`<link>`/图片**保留**（全保真）、`<base>` 已注入、`data-u2m-id` 仅落在候选集（叶子文本无 id）、iframe 已合并。
+- **`page-prepare.js` 集成**：夹具页含 `<script>`/`<style>`/`<link rel=stylesheet>`（同源可 CORS）/广告/`<video>`/`onerror`/同源 iframe → 断言 `<script>`/`<noscript>`/`<template>`/`on*` 已剥、外部 `<link>` 的 CSS 文本已并成 `<style data-u2m-inlined>` 且 `<link>` 已移除、既有 `<style>` 保留、元素 inline style 保留、`<base>` 已注入、`data-u2m-id` 仅落在候选集（叶子文本无 id）、iframe 已合并。
+- **跨源 CSS 兜底测试**：夹具含一个无 CORS 的跨源 `<link>`（夹具服务器返回该 CSS 但带 `access-control-allow-origin` 头缺失）→ 断言 fetch 失败时该 `<link>` 原样保留、warning 记录。
 - **派生 pass 集成**：断言长文本 → `{{T*k}}`（含代码块文本占位）、信号属性已内联、`color/font-*` 未内联、id 与 `snapshot.html` 同源一致。
-- **快照保真集成**：`setContent(snapshot.html)` 加载后断言某复杂元素带颜色/图片渲染（未被剥）。
+- **快照保真集成**：`setContent(snapshot.html)` 加载后断言某复杂元素带颜色/图片渲染（CSS 已内联、`<script>` 不执行、样式不依赖网络）。
 - **`applyClassifyPlan` 集成**：给定夹具 + 手工 plan → 断言列表流子树外兄弟删除、`delete` 移除、各 action 分派产出正确 manifest + assets、`code_block` 从快照取原文 + 语言围栏且**不进 manifest/不经步骤 3**、`block_screenshot` 产 PNG + `status:done` + `data-u2m-asset` 标记、产出 img/code 被 `processImages` 跳过、listFlow 内主标题 `keep` 不被误删、id 必命中（无漂移路径）。
 - **少样本契约测试**：遍历 `script/lib/fewshot/*.json` → 断言 schema 合法、`listFlowSelector` 非空、blocks id ⊆ 对应 `.html` 的 id 集、`action` 取值合法、`title-in-listflow` 用例的主标题 id 落在 blocks 内。
 - **`capture_snapshot.mjs` CLI 契约**：emit 恰好一行 JSON；`ok`/`too_large`/`error` 三路径；`too_large` 不写 classify_input、exit 0；`elements`/`tokenEstimate`/`snapshot`/`classifyInput` 字段在。
@@ -248,6 +250,7 @@ plan 缺失或非法 → `emitError("缺/非法 classify_plan.json: ...", 1)`（
 |---|---|---|
 | 1.6 capture | classify_input 过大超 token 预算 | emit `too_large`（exit 0），不写 classify_input；SKILL.md 指示 agent 走分区模式（`mode:"region"`）或缩白名单重跑 |
 | 1.6 capture | 开页/注入/序列化失败 | emit `error`（exit 1），reason 反馈用户 |
+| 1.6 capture | 外部 CSS fetch 失败（跨源无 CORS） | warning 记录，该 `<link>` 原样保留兜底，不阻断 |
 | 1.6 capture | `setContent` 资源解析个别失败 | warning，截图降级，不崩 |
 | 1.8 classify | agent 产 plan 非法/缺字段 | clear_trans_html emit `error`（一行），stderr 指出错项；agent 据 stderr 修正重写 |
 | 1.8 classify | `listFlowSelector` 解析为 null | clear_trans_html emit `error`，stderr 指出选择器失配；agent 修正重写 |
