@@ -1,64 +1,42 @@
 #!/usr/bin/env node
-// clear_trans_html.mjs <url> —— Node 工作流：完整性→特殊元素→清理→readability→turndown→sketch.md
+// clear_trans_html.mjs <url> —— setContent(snapshot) + plan 驱动分派 → sketch.md + manifest.json
 import path from 'node:path';
 import { emit, emitError, usage, log } from './lib/contract.mjs';
 import { projectRoot, ensureUrlDirs, storageStatePath } from './lib/env.mjs';
 import { openPage } from './lib/browser.mjs';
-import { makeCtx, readSharedScript, processMermaid, processSpecialElements, processImages, writeManifest } from './lib/placeholder.mjs';
+import { makeCtx, readSharedScript, processMermaid, applyClassifyPlan, processImages, writeManifest } from './lib/placeholder.mjs';
 import TurndownService from 'turndown';
 import { gfm } from '@joplin/turndown-plugin-gfm';
 import fs from 'node:fs/promises';
 
 const READABILITY_JS = path.join(projectRoot(), 'node_modules', '@mozilla', 'readability', 'Readability.js');
 
-/** 渐进滚动到底再回顶（懒加载） */
-async function progressiveScroll(page) {
-  await page.evaluate(async () => {
-    let last = -1;
-    for (let i = 0; i < 60; i++) {
-      window.scrollTo(0, document.body.scrollHeight);
-      await new Promise((r) => setTimeout(r, 150));
-      const h = document.documentElement.scrollHeight;
-      if (h === last) break;
-      last = h;
-    }
-    window.scrollTo(0, 0);
-  });
-}
-
-/** DOM 稳定：节点数连续 stableMs 不变（虚拟 DOM 场景；不移除任何元素） */
-async function waitForDomStable(page, { stableMs = 1000, maxMs = 15000 } = {}) {
-  const t0 = Date.now();
-  let last = -1;
-  let lastChange = Date.now();
-  while (Date.now() - t0 < maxMs) {
-    const n = await page.evaluate(() => document.getElementsByTagName('*').length);
-    if (n !== last) { last = n; lastChange = Date.now(); }
-    else if (Date.now() - lastChange >= stableMs) return;
-    await page.waitForTimeout(200);
-  }
-}
-
 async function main() {
   const url = process.argv[2];
   if (!url || url.startsWith('--')) return usage('用法: clear_trans_html.mjs <url>');
   const dirs = ensureUrlDirs(url);
-
-  const pageInit = await readSharedScript('page-init.js');
-  const pageMerge = await readSharedScript('page-merge.js');
+  const snapshotPath = path.join(dirs.urlDir, 'snapshot.html');
+  const planPath = path.join(dirs.urlDir, 'classify', 'classify_plan.json');
   const pageClean = await readSharedScript('page-clean.js');
 
   let s;
   let result;
   try {
-    s = await openPage(url, { viewport: { width: 1280, height: 3000 }, initScripts: [pageInit], storageStatePath: storageStatePath(), log });
-    await progressiveScroll(s.page);
-    await waitForDomStable(s.page);
+    const snapshot = await fs.readFile(snapshotPath, 'utf8').catch(() => null);
+    if (snapshot === null) return emitError(`snapshot.html 缺失，先跑步骤 1.6 capture_snapshot: ${snapshotPath}`, 1);
+    const planText = await fs.readFile(planPath, 'utf8').catch(() => null);
+    if (planText === null) return emitError(`classify_plan.json 缺失，先跑步骤 1.8: ${planPath}`, 1);
+    let plan;
+    try { plan = JSON.parse(planText); } catch (e) { return emitError(`classify_plan.json 非法: ${e.message}`, 1); }
+
+    // about:blank + setContent：不再 openPage 原 URL、不再滚动/等稳定（快照已含全量内容）。
+    // openPage 仍提供 storageState（受保护图片）与 route-abort media。
+    s = await openPage('about:blank', { viewport: { width: 1280, height: 3000 }, storageStatePath: storageStatePath(), log });
+    await s.page.setContent(snapshot, { waitUntil: 'domcontentloaded' });
 
     const ctx = makeCtx(dirs, { context: s.context, log });
-    await s.page.evaluate(`(${pageMerge})()`);
     await processMermaid(s.page.mainFrame(), ctx);
-    await processSpecialElements(s.page.mainFrame(), ctx);
+    await applyClassifyPlan(s.page.mainFrame(), ctx, plan); // plan 非法/listFlowSelector 失配 → throw → emitError
     await processImages(s.page.mainFrame(), ctx);
 
     await s.page.evaluate(`(${pageClean})()`);

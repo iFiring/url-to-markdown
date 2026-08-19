@@ -59,93 +59,149 @@ export async function processMermaid(frame, ctx) {
   return handles.length;
 }
 
-/** 特殊元素分派主流程。返回处理数量。 */
-export async function processSpecialElements(frame, ctx) {
-  const classify = await readSharedScript('page-classify.js');
+const PLAN_ACTIONS = new Set(['keep', 'delete', 'code_block', 'screenshot', 'passthrough_svg', 'svg_convert', 'latex', 'block_screenshot']);
+
+export function validateClassifyPlan(plan) {
+  if (!plan || plan.version !== 2) throw new Error('plan.version 必须为 2');
+  if (typeof plan.listFlowSelector !== 'string' || !plan.listFlowSelector.trim()) throw new Error('plan.listFlowSelector 缺失');
+  if (!Array.isArray(plan.blocks)) throw new Error('plan.blocks 缺失');
+  for (const b of plan.blocks) {
+    if (!Number.isInteger(b.id)) throw new Error(`block.id 非法: ${JSON.stringify(b)}`);
+    if (!PLAN_ACTIONS.has(b.action)) throw new Error(`block.action 非法: ${b.action}`);
+    if (b.blockOf != null && !Number.isInteger(b.blockOf)) throw new Error(`block.blockOf 非法: ${JSON.stringify(b)}`);
+  }
+}
+
+/**
+ * 按 v2 plan 分派：删列表流子树外兄弟 → 逐块按 action 处理。
+ * 分支语义（screenshot 的 VIDEO 源链接、
+ * passthrough_svg 的消毒、svg_convert/latex 的 draft+占位符均保持一致）。
+ */
+export async function applyClassifyPlan(frame, ctx, plan) {
+  validateClassifyPlan(plan);
+  const listFlow = await frame.$(plan.listFlowSelector);
+  if (!listFlow) throw new Error(`listFlowSelector 未命中: ${plan.listFlowSelector}`);
+  // 1. 删列表流子树外的兄弟节点（结构去噪；listFlow 子树内部交给逐块 action）
+  await frame.evaluate((sel) => {
+    const lf = document.querySelector(sel);
+    if (!lf || !lf.parentElement) return;
+    for (const sib of Array.from(lf.parentElement.children)) if (sib !== lf) sib.remove();
+  }, plan.listFlowSelector);
+
   const inline = await readSharedScript('page-inline.js');
   const latex = await readSharedScript('page-latex.js');
   let processed = 0;
-
-  const classifyOnce = () => frame.evaluate(`(${classify})()`);
-  const hoistIframe = (h) => h.evaluate((el) => {
-    const host = document.createElement('div');
-    const doc = el.contentDocument;
-    if (doc && doc.body) { for (const n of Array.from(doc.body.childNodes)) host.appendChild(document.adoptNode(n)); }
-    el.replaceWith(host);
-  });
-
-  for (;;) {
-    await classifyOnce();
-    const handles = await frame.$$('[data-u2m-type]');
-    if (!handles.length) break;
-    let merged = false;
-    for (const h of handles) {
-      let type;
-      try { type = await h.getAttribute('data-u2m-type'); } catch { continue; }
-      try {
-        if (type === 'same_origin_iframe') {
-          await hoistIframe(h); // 合并后新内容下一轮分类
-          merged = true;
-          continue;
-        }
+  for (const b of plan.blocks) {
+    const h = await frame.$(`[data-u2m-id="${b.id}"]`);
+    if (!h) { ctx.warnings.push(`plan id 未命中（快照中不存在或已被外层删除）: ${b.id}`); continue; }
+    try {
+      if (b.action === 'keep') {
+        // 不动
+      } else if (b.action === 'delete') {
+        await h.evaluate((el) => el.remove());
+      } else if (b.action === 'code_block') {
+        const text = await h.evaluate((el) => el.textContent);
+        let lang = await h.evaluate((el) => {
+          const fromAttr = el.getAttribute('data-lang');
+          if (fromAttr && fromAttr.trim()) return fromAttr.trim();
+          const m = String(el.className || '').match(/(?:language-|lang-)([\w+#-]+)/);
+          if (m) return m[1];
+          const inner = el.querySelector('[class*="language-"]');
+          const m2 = inner && String(inner.className || '').match(/language-([\w+#-]+)/);
+          return m2 ? m2[1] : '';
+        });
+        if (!lang) lang = guessCodeLang(text);
+        await replaceWithHtml(frame, h, `<pre data-u2m-code><code class="language-${lang}">${escapeHtml(text)}</code></pre>`);
+        // 代码是文本而非复杂资源：不进 manifest、不经步骤 3
+      } else if (b.action === 'block_screenshot') {
+        const target = await frame.$(`[data-u2m-id="${b.blockOf ?? b.id}"]`);
+        if (!target) { ctx.warnings.push(`blockOf 未命中: ${b.blockOf ?? b.id}`); continue; }
         const id = `COMPLEX_DIV_${++ctx.counters.complex}`;
-        const rel = (ext) => `assets/complex/${id}.${ext}`;
-        if (type === 'screenshot') {
-          const abs = path.join(ctx.dirs.wf, rel('png'));
-          const tag = await h.evaluate((el) => el.tagName);
-          let linkHtml = '';
-          if (tag === 'VIDEO') {
-            const src = await h.evaluate((el) => el.getAttribute('src') || el.currentSrc || '');
-            if (src) linkHtml = `<a href="${src}">（视频源：${src}）</a>`;
-          }
-          await h.screenshot({ path: abs });
-          // data-u2m-asset 标记：分派自产的资源引用，processImages 跳过
-          await replaceWithHtml(frame, h, `<img src="${rel('png')}" alt="${id}" data-u2m-asset="1">${linkHtml}`);
-          ctx.entries.push({ id, type, final: rel('png'), status: 'done' });
-        } else if (type === 'passthrough_svg') {
-          const abs = path.join(ctx.dirs.wf, rel('svg'));
-          const svg = await h.evaluate((el) => {
-            const c = el.cloneNode(true);
-            c.querySelectorAll('script').forEach((s) => s.remove());
-            [c, ...c.querySelectorAll('*')].forEach((n) => {
-              for (const a of Array.from(n.attributes)) if (/^on/i.test(a.name)) n.removeAttribute(a.name);
-            });
-            c.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-            return c.outerHTML;
-          });
-          await fs.writeFile(abs, svg, 'utf8');
-          await replaceWithHtml(frame, h, `<img src="${rel('svg')}" alt="${id}" data-u2m-asset="1">`);
-          ctx.entries.push({ id, type, final: rel('svg'), status: 'done' });
-        } else if (type === 'svg_convert') {
-          const abs = path.join(ctx.dirs.draft, `${id}.html`);
-          const draftHtml = await callOnElement(h, inline);
-          await fs.writeFile(abs, draftHtml, 'utf8');
-          // <p> 包裹：裸文本节点占位符会被 Readability 当噪声丢弃（冒烟发现）
-          await replaceWithHtml(frame, h, `<p>{{${id}}}</p>`);
-          ctx.entries.push({ id, type, draft: `assets/draft/${id}.html`, status: 'pending' });
-        } else if (type === 'latex') {
-          const tex = await callOnElement(h, latex);
-          if (tex) {
-            await replaceWithText(frame, h, `$$${tex}$$`);
-            ctx.entries.push({ id, type, status: 'done' });
-          } else {
-            const abs = path.join(ctx.dirs.draft, `${id}.html`);
-            const draftHtml = await h.evaluate((el) => el.outerHTML);
-            await fs.writeFile(abs, draftHtml, 'utf8');
-            // <p> 包裹：裸文本节点占位符会被 Readability 当噪声丢弃（冒烟发现）
-            await replaceWithHtml(frame, h, `<p>{{${id}}}</p>`);
-            ctx.entries.push({ id, type, draft: `assets/draft/${id}.html`, status: 'pending' });
-          }
+        const rel = `assets/complex/${id}.png`;
+        await target.screenshot({ path: path.join(ctx.dirs.wf, rel) });
+        await replaceWithHtml(frame, target, `<img src="${rel}" alt="${id}" data-u2m-asset="1">`);
+        ctx.entries.push({ id, type: 'block_screenshot', final: rel, status: 'done' });
+      } else if (b.action === 'screenshot') {
+        const id = `COMPLEX_DIV_${++ctx.counters.complex}`;
+        const rel = `assets/complex/${id}.png`;
+        const tag = await h.evaluate((el) => el.tagName);
+        let linkHtml = '';
+        if (tag === 'VIDEO') {
+          const src = await h.evaluate((el) => el.getAttribute('src') || el.currentSrc || '');
+          if (src) linkHtml = `<a href="${src}">（视频源：${src}）</a>`;
         }
-        processed++;
-      } catch (e) {
-        ctx.warnings.push(`特殊元素处理失败(${type}): ${e.message}`);
-        try { await h.evaluate((el) => el.removeAttribute('data-u2m-type')); } catch { /* 已脱离 DOM */ }
+        await h.screenshot({ path: path.join(ctx.dirs.wf, rel) });
+        // data-u2m-asset 标记：分派自产的资源引用，processImages 跳过
+        await replaceWithHtml(frame, h, `<img src="${rel}" alt="${id}" data-u2m-asset="1">${linkHtml}`);
+        ctx.entries.push({ id, type: 'screenshot', final: rel, status: 'done' });
+      } else if (b.action === 'passthrough_svg') {
+        const id = `COMPLEX_DIV_${++ctx.counters.complex}`;
+        const rel = `assets/complex/${id}.svg`;
+        const svg = await h.evaluate((el) => {
+          const c = el.cloneNode(true);
+          c.querySelectorAll('script').forEach((s) => s.remove());
+          [c, ...c.querySelectorAll('*')].forEach((n) => {
+            for (const a of Array.from(n.attributes)) if (/^on/i.test(a.name)) n.removeAttribute(a.name);
+          });
+          c.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+          return c.outerHTML;
+        });
+        await fs.writeFile(path.join(ctx.dirs.wf, rel), svg, 'utf8');
+        await replaceWithHtml(frame, h, `<img src="${rel}" alt="${id}" data-u2m-asset="1">`);
+        ctx.entries.push({ id, type: 'passthrough_svg', final: rel, status: 'done' });
+      } else if (b.action === 'svg_convert') {
+        const id = `COMPLEX_DIV_${++ctx.counters.complex}`;
+        const draftHtml = await callOnElement(h, inline);
+        await fs.writeFile(path.join(ctx.dirs.draft, `${id}.html`), draftHtml, 'utf8');
+        // <p> 包裹：裸文本节点占位符会被 Readability 当噪声丢弃（冒烟发现）
+        await replaceWithHtml(frame, h, `<p>{{${id}}}</p>`);
+        ctx.entries.push({ id, type: 'svg_convert', draft: `assets/draft/${id}.html`, status: 'pending' });
+      } else if (b.action === 'latex') {
+        const id = `COMPLEX_DIV_${++ctx.counters.complex}`;
+        const tex = await callOnElement(h, latex);
+        if (tex) {
+          await replaceWithText(frame, h, `$$${tex}$$`);
+          ctx.entries.push({ id, type: 'latex', status: 'done' });
+        } else {
+          const draftHtml = await h.evaluate((el) => el.outerHTML);
+          await fs.writeFile(path.join(ctx.dirs.draft, `${id}.html`), draftHtml, 'utf8');
+          // <p> 包裹：同上
+          await replaceWithHtml(frame, h, `<p>{{${id}}}</p>`);
+          ctx.entries.push({ id, type: 'latex', draft: `assets/draft/${id}.html`, status: 'pending' });
+        }
       }
+      processed++;
+    } catch (e) {
+      ctx.warnings.push(`action ${b.action}(id=${b.id}) 失败: ${e.message}`);
+      try { await h.evaluate((el) => el.removeAttribute('data-u2m-id')); } catch { /* 已脱离 DOM */ }
     }
-    if (!merged) break;
   }
   return processed;
+}
+
+/** 本地代码语言启发式（data-lang/class 缺失时的兜底）。返回 '' 表示无法判定。 */
+export function guessCodeLang(text) {
+  const t = String(text || '');
+  const s = t.trim();
+  const shebang = s.match(/^#!\s*(?:\S+\/)?(?:env\s+)?(bash|sh|zsh|python\d?|node)\b/);
+  if (shebang) {
+    const b = shebang[1];
+    if (b.startsWith('python')) return 'python';
+    if (b === 'node') return 'javascript';
+    if (b === 'sh' || b === 'zsh') return 'bash';
+    return b;
+  }
+  if ((s[0] === '{' && s.endsWith('}')) || (s[0] === '[' && s.endsWith(']'))) {
+    try { JSON.parse(s); return 'json'; } catch { /* 非 JSON，继续判定 */ }
+  }
+  if (/\bdef\s+\w+\s*\([^)]*\)\s*:/.test(t)) return 'python';
+  if (/\bconsole\.\w+\(|\bfunction\s+\w+\s*\(|\b(const|let|var)\s+\w+\s*=/.test(t)) return 'javascript';
+  if (/^\s*<(html|body|div|span|head|p)\b/i.test(s)) return 'html';
+  return '';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 /** 正文图片：并发（4）下载 → assets/images/IMG_n.<ext>；DOM 替换为 {{IMG_n}}；失败保留原样并告警。 */

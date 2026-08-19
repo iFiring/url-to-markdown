@@ -3,7 +3,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { openPage } from '../../script/lib/browser.mjs';
-import { makeCtx, processMermaid, processSpecialElements, processImages, writeManifest, readSharedScript } from '../../script/lib/placeholder.mjs';
+import { makeCtx, processMermaid, processImages, applyClassifyPlan, writeManifest, readSharedScript } from '../../script/lib/placeholder.mjs';
 import { startFixtureServer } from '../helpers/fixture-server.mjs';
 import { writePixelPng } from '../helpers/assets.mjs';
 
@@ -19,51 +19,40 @@ const tmpDirs = () => {
 };
 
 test('共享脚本可读取且为具名函数声明', async () => {
-  for (const n of ['page-init.js', 'page-merge.js', 'page-clean.js', 'page-classify.js', 'page-inline.js', 'page-latex.js']) {
+  for (const n of ['page-init.js', 'page-prepare.js', 'page-derive.js', 'page-clean.js', 'page-inline.js', 'page-latex.js']) {
     const src = await readSharedScript(n);
     assert.ok(/^function __u2m/.test(src.trim()), `${n} 应以 function __u2m 开头`);
   }
 });
 
-test('complex-elements: 四类分派 + latex 直出 + 图片下载 + manifest', async () => {
+test('applyClassifyPlan: delete/code_block/block_screenshot 分支（setContent 迷你快照）', async () => {
   const dirs = tmpDirs();
-  const s = await openPage(`${fx.url}/complex-elements.html`, {
-    viewport: { width: 1280, height: 800 },
-    initScripts: [await readSharedScript('page-init.js')],
-  });
+  const s = await openPage('about:blank', { viewport: { width: 1280, height: 800 } });
   try {
+    await s.page.setContent(`<!doctype html><html><body>
+      <main data-u2m-id="1">
+        <div class="ad" data-u2m-id="2">AD_BLOCK</div>
+        <pre data-lang="python" data-u2m-id="3"><code>def hi(): pass</code></pre>
+        <div class="chart" data-u2m-id="4" style="width:200px;height:100px"><canvas></canvas></div>
+      </main></body></html>`, { waitUntil: 'domcontentloaded' });
     const ctx = makeCtx(dirs, { context: s.context, log: () => {} });
-    await s.page.evaluate('(' + (await readSharedScript('page-merge.js')) + ')()');
-    const mermaidN = await processMermaid(s.page.mainFrame(), ctx);
-    assert.equal(mermaidN, 0);
-    await processSpecialElements(s.page.mainFrame(), ctx);
-    const imgs = await processImages(s.page.mainFrame(), ctx);
-
-    // canvas → screenshot png；svg → passthrough svg；chart → svg_convert draft；katex → $$..$$ 直出；video → screenshot png
-    const byType = Object.fromEntries(ctx.entries.map((e) => [e.type, e]));
-    assert.ok(fs.existsSync(byType.screenshot.final.replace('assets/', `${dirs.assets}/`)), 'canvas/video 截图存在');
-    assert.ok(fs.existsSync(byType.passthrough_svg.final.replace('assets/', `${dirs.assets}/`)), 'svg 导出存在');
-    const draftFile = `${dirs.wf}/${byType.svg_convert.draft}`;
-    assert.ok(fs.existsSync(draftFile), 'chart draft 存在');
-    assert.match(fs.readFileSync(draftFile, 'utf8'), /style=/); // 计算样式已内联
-    assert.equal(byType.latex.status, 'done'); // annotation 直出，不经 LLM
-
-    const bodyText = await s.page.locator('body').innerText();
-    assert.match(bodyText, /\$\$E=mc\^2\$\$/);            // latex 已替换为 $$..$$
-    assert.match(bodyText, /\{\{COMPLEX_DIV_\d+\}\}/);     // svg_convert 留占位符
-    assert.match(bodyText, /\{\{IMG_1\}\}/);               // 图片占位符
-    assert.match(bodyText, /视频源：/);                    // video 附加原链接文本
-    assert.equal(imgs, 1);
-    assert.ok(fs.existsSync(`${dirs.images}/IMG_1.png`));
-    // 启发式命中：#viz 无选择器特征，靠 尺寸+文本密度+非文本子元素数 判为 svg_convert
-    assert.equal(ctx.entries.filter((e) => e.type === 'svg_convert').length, 2);
-    // svg_convert 占位符 <p> 包裹：裸文本节点会被 Readability 当噪声丢弃（冒烟发现）
-    assert.match(await s.page.evaluate(() => document.body.innerHTML), /<p>\{\{COMPLEX_DIV_\d+\}\}<\/p>/);
-
-    await writeManifest(dirs.manifest, ctx.entries);
-    const manifest = JSON.parse(fs.readFileSync(dirs.manifest, 'utf8'));
-    assert.equal(manifest.version, 1);
-    assert.ok(manifest.items.length >= 5);
+    const n = await applyClassifyPlan(s.page.mainFrame(), ctx, {
+      version: 2, mode: 'whole', listFlowSelector: 'main',
+      blocks: [
+        { id: 1, action: 'keep' },
+        { id: 2, action: 'delete' },
+        { id: 3, action: 'code_block' },
+        { id: 4, action: 'block_screenshot', blockOf: 4 },
+      ],
+    });
+    assert.equal(n, 4);
+    const html = await s.page.evaluate(() => document.body.innerHTML);
+    assert.doesNotMatch(html, /AD_BLOCK/);
+    assert.match(html, /<pre data-u2m-code(?:="")?><code class="language-python">def hi\(\): pass<\/code><\/pre>/);
+    assert.match(html, /<img src="assets\/complex\/COMPLEX_DIV_1\.png"[^>]*data-u2m-asset="1">/);
+    assert.deepEqual(ctx.entries.map((e) => e.type), ['block_screenshot']);
+    assert.equal(ctx.entries[0].status, 'done');
+    assert.ok(fs.existsSync(`${dirs.complex}/COMPLEX_DIV_1.png`));
   } finally { await s.close(); }
 });
 
