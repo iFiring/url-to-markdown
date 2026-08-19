@@ -66,13 +66,13 @@ working/<url-dir>/
 
 1.8 给 Readability 喂更干净的 DOM，不取代它；步骤 4 仍管文本层。
 
-## 5 · `capture_snapshot.mjs` + 共享 `page-prepare.js`
+## 5 · `capture_snapshot.mjs` + 共享 `page-prepare.js` / `page-derive.js`
 
-### 5.1 `page-prepare.js`
+### 5.1 共享脚本（两个文件，各一具名函数）
 
-普通非模块文件，双运行时当文本注入（分类/清洗逻辑唯一事实源，禁分叉进 .py/.mjs）。`capture_snapshot.mjs` 跑它一次，把结果烘进 `snapshot.html`。含两个具名导出：
+普通非模块文件，双运行时当文本注入（分类/清洗逻辑唯一事实源，禁分叉进 .py/.mjs）。`capture_snapshot.mjs` 跑它们一次，把结果烘进 `snapshot.html`。**遵循既有 `page-*.js` 约定：每文件一个 `function __u2m…`，以 `(${src})()` 字符串表达式注入调用**——故 prepare 与 derive 拆成两个文件，不共处。
 
-**`function __u2mPrepareBody(cfg)`**（在活页 DOM 上原地变异，**仅 `capture_snapshot` 调用一次**）：
+**`page-prepare.js` · `function __u2mPrepareBody(cfg)`**（在活页 DOM 上原地变异，**仅 `capture_snapshot` 调用一次**）：
 
 1. **合并同源内容 iframe**（吸收 `__u2mMergeIframes`，同阈值；主文档文本充足则不合并）。
 2. **内联外部 CSS**：遍历 `<link rel=stylesheet>`，在页面 context 内 `fetch(href).text()` 取 CSS 文本（同源 / CORS 开放的 CDN 可抓到），把抓到的文本并成一个 `<style data-u2m-inlined>` 注入 `<head>`，移除该 `<link>`。**fetch 失败（跨源无 CORS / 网络错）的 `<link>` 原样保留**——渲染时由 `<base>` + 登录 cookie + 网络兜底加载（保真优先于严格自包含）。既有 `<style>` 块保留不动。
@@ -80,25 +80,25 @@ working/<url-dir>/
 4. **剥叶子噪声**：`.copy`、`.copy-btn`、`button[aria-label*="copy" i]`（防代码块里的复制按钮泄漏为文本噪声）。
 5. **注入 `<base href="<origin URL>">`** 到 `<head>`，使相对图片 URL、inlined CSS 里的相对 `url()`、以及兜底 `<link>` 在 `setContent` 重载时仍解析回源站。
 6. **打 `data-u2m-id`**：给"决策单元"候选打 ID（文档序递增 `data-u2m-id="n"`）——`div, section, article, aside, nav, header, footer, main, figure, table, thead, tbody, tr, canvas, svg, video, iframe, picture, ul, ol, li, dl, pre, blockquote, details, [role], [data-chart], .chart, .echarts, .highcharts, .MathJax, .MathJax_Display, .katex, .katex-display`。叶子文本元素（`p, span, a, code, em, strong, h1-h6, td, th`）不打 ID——由 Readability+Turndown 当文本处理。
-7. 原地返回，不序列化。
+7. 原地返回 `true`。
 
-**`function __u2mDeriveClassifyInput(cfg)`**（在已 prepare 的活页 DOM 上序列化出**精简版**，**仅给 LLM**）：
+**`page-derive.js` · `function __u2mDeriveClassifyInput(cfg)`**（在已 prepare 的活页 DOM 上序列化出**精简版**，**仅给 LLM**；**不改变活页 DOM 的持久态**——在克隆上做，或于 `capture_snapshot` 取 snapshot 之后再跑）：
 
 1. **长文本占位**：每个 `>N` 字符（默认 `N=40`，cfg 可覆盖）的文本节点内容替换为 `{{T<k>}}`（无损；原件不复制，仍在 `snapshot.html` 里）。**包括代码块文本**——代码靠结构识别，内容不读。
 2. **剥 `<style>`/`<link rel=stylesheet>`/`<noscript>`/`<template>`**。
 3. **白名单样式内联**：仅内联信号性属性——`position, display, float, clear, visibility, overflow, border(-*)?, border-radius, background(-color)?, box-shadow, width, height, min/max-(width|height), transform, z-index, flex(-*)?, grid(-*)?, gap`。**不内联** `color/font/text-*`（文本样式对"文本 vs 非文本"无信号且徒增 token）。
 4. 返回 `document.body.outerHTML`（`data-u2m-id` 已由 `__u2mPrepareBody` 打好，与 `snapshot.html` 同源 → id 一致）。
 
-`capture_snapshot.mjs` 序列化全保真快照直接取 `document.documentElement.outerHTML`（prepare 已内联外部 CSS、剥尽 `<script>`/`<noscript>`/`<template>`/`on*`、注入 `<base>`、打好 id、合并 iframe；`<style>`/元素 inline style/`<img>`/`<video>` 原样保留）。
+**关键顺序**（`capture_snapshot` 内）：`__u2mPrepareBody` 变异活页 DOM → 取 `document.documentElement.outerHTML` 作 `snapshot.html`（全保真）→ 跑 `__u2mDeriveClassifyInput` 序列化精简版（其占位/剥 style 的变异只影响这次序列化结果，snapshot 字符串已先取走）。
 
 ### 5.2 `capture_snapshot.mjs`
 
 ```
 复用登录态 openPage(initScripts=[pageInit])        // page-init.js 不变
-→ progressiveScroll + waitForDomStable              // 与 detect_page 同序列（共享常量）
-→ evaluate(`(${pagePrepare})()`)                    // __u2mPrepareBody：合并 iframe + 剥 script + base + id
-→ snapshot = evaluate(() => document.documentElement.outerHTML)   // 全保真
-→ classifyInput = evaluate(`(${deriveClassifyInput})()`)           // 精简派生
+→ progressiveScroll + waitForDomStable              // 内联于本 CLI（见 §5.4）；值与 page-detect.js 一致
+→ evaluate(`(${pagePrepare})()`)                    // __u2mPrepareBody：合并 iframe + 内联 CSS + 剥 script + base + id
+→ snapshot = evaluate(() => document.documentElement.outerHTML)   // 全保真，先取
+→ classifyInput = evaluate(`(${pageDerive})()`)                  // 精简派生，后取
 → 写 working/<url-dir>/snapshot.html
 → 写 working/<url-dir>/classify/classify_input.html
 → 估算 token（≈ classify_input 字符数 / 4）；超预算（默认 80000，cfg 可覆盖）→ emit too_large
@@ -114,7 +114,7 @@ working/<url-dir>/
 
 ### 5.4 关键不变量（简化）
 
-`data-u2m-id` 由 `__u2mPrepareBody` 在活页 DOM 上注入一次，随后烘进 `snapshot.html`；`classify_input.html` 从同一 DOM 派生，id 同源。`clear_trans_html` 双侧 `setContent(snapshot.html)` 加载的是**同一份**快照 → id 天然一致，**不再有"各自重开页求匹配"的不变量与真实 URL 漂移边界**。scroll/stable 参数（60 轮 / 150ms / stableMs=1000 / maxMs=15000）从 `clear_trans_html.mjs`/`.py` 与 `detect_page.mjs` 抽成共享常量统一引用，禁止各自硬编码。
+`data-u2m-id` 由 `__u2mPrepareBody` 在活页 DOM 上注入一次，随后烘进 `snapshot.html`；`classify_input.html` 从同一 DOM 派生，id 同源。`clear_trans_html` 双侧 `setContent(snapshot.html)` 加载的是**同一份**快照 → id 天然一致，**不再有"各自重开页求匹配"的不变量与真实 URL 漂移边界**。滚动/稳定只在 `capture_snapshot`（Node-only）发生——`clear_trans_html` 双侧不再 `openPage`+`progressiveScroll`+`waitForDomStable`（改为 `setContent`）。`capture_snapshot` 内联的 `progressiveScroll`/`waitForDomStable` 参数（60 轮 / 150ms / stableMs=1000 / maxMs=15000 / poll 200ms）**须与 `page-detect.js` 的 cfg 默认一致**（snapshot 的滚动深度须覆盖到 detect_page 已检出的懒加载内容）；以注释标明该约束，不再抽跨运行时共享常量模块（clear_trans 已不滚动，唯一硬编码点即此 CLI）。
 
 ## 6 · `classify_plan.json` schema + agent 步骤 1.8 + 少样本集
 
@@ -235,7 +235,7 @@ plan 缺失或非法 → `emitError("缺/非法 classify_plan.json: ...", 1)`（
 
 - **`page-prepare.js` 集成**：夹具页含 `<script>`/`<style>`/`<link rel=stylesheet>`（同源可 CORS）/广告/`<video>`/`onerror`/同源 iframe → 断言 `<script>`/`<noscript>`/`<template>`/`on*` 已剥、外部 `<link>` 的 CSS 文本已并成 `<style data-u2m-inlined>` 且 `<link>` 已移除、既有 `<style>` 保留、元素 inline style 保留、`<base>` 已注入、`data-u2m-id` 仅落在候选集（叶子文本无 id）、iframe 已合并。
 - **跨源 CSS 兜底测试**：夹具含一个无 CORS 的跨源 `<link>`（夹具服务器返回该 CSS 但带 `access-control-allow-origin` 头缺失）→ 断言 fetch 失败时该 `<link>` 原样保留、warning 记录。
-- **派生 pass 集成**：断言长文本 → `{{T*k}}`（含代码块文本占位）、信号属性已内联、`color/font-*` 未内联、id 与 `snapshot.html` 同源一致。
+- **`page-derive.js` 集成**：断言长文本 → `{{T*k}}`（含代码块文本占位）、`<style>`/`<link>` 已剥、信号属性已内联、`color/font-*` 未内联、id 与 `snapshot.html` 同源一致。
 - **快照保真集成**：`setContent(snapshot.html)` 加载后断言某复杂元素带颜色/图片渲染（CSS 已内联、`<script>` 不执行、样式不依赖网络）。
 - **`applyClassifyPlan` 集成**：给定夹具 + 手工 plan → 断言列表流子树外兄弟删除、`delete` 移除、各 action 分派产出正确 manifest + assets、`code_block` 从快照取原文 + 语言围栏且**不进 manifest/不经步骤 3**、`block_screenshot` 产 PNG + `status:done` + `data-u2m-asset` 标记、产出 img/code 被 `processImages` 跳过、listFlow 内主标题 `keep` 不被误删、id 必命中（无漂移路径）。
 - **少样本契约测试**：遍历 `script/lib/fewshot/*.json` → 断言 schema 合法、`listFlowSelector` 非空、blocks id ⊆ 对应 `.html` 的 id 集、`action` 取值合法、`title-in-listflow` 用例的主标题 id 落在 blocks 内。
@@ -263,7 +263,8 @@ plan 缺失或非法 → `emitError("缺/非法 classify_plan.json: ...", 1)`（
 
 新增：
 - `script/capture_snapshot.mjs`（Node-only CLI，替代旧 `prepare_classify.mjs`）
-- `script/lib/page-prepare.js`（共享脚本，含 `__u2mPrepareBody` + `__u2mDeriveClassifyInput`，吸收 page-merge 逻辑）
+- `script/lib/page-prepare.js`（共享脚本，`__u2mPrepareBody`，吸收 page-merge 逻辑）
+- `script/lib/page-derive.js`（共享脚本，`__u2mDeriveClassifyInput`）
 - `script/lib/fewshot/`（手写少样本对，v2 schema）
 - `script/pylib/` 对应镜像（`apply_classify_plan` 于 `placeholder.py`）
 - 测试夹具与用例（§8）
