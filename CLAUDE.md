@@ -34,7 +34,7 @@ npx playwright install chromium                  # 双运行时共用的浏览�
 
 ## 架构
 
-**共享页面脚本是分类的唯一事实源。** `script/lib/page-*.js` 是普通非模块文件，各含一个具名 `function __u2mXxx(...)`。双运行度都把它们当**文本**读入并注入页面（Node：`readSharedScript` + evaluate；Python：`read_shared_script` + `page.evaluate`）。分类规则、清理、iframe 合并、样式内联、LaTeX 提取只存在于这些文件——严禁把该逻辑分叉进 `.py` 或 `.mjs`。
+**共享页面脚本是分类的唯一事实源。** `script/lib/page-*.js` 是普通非模块文件，各含一个具名 `function __u2mXxx(...)`。双运行度都把它们当**文本**读入并注入页面（Node：`readSharedScript` + evaluate；Python：`read_shared_script` + `page.evaluate`）。分类规则、清理、iframe 合并、样式内联、LaTeX 提取、虚拟列表检测（`page-detect.js` / `__u2mDetectVirtualList`）只存在于这些文件——严禁把该逻辑分叉进 `.py` 或 `.mjs`。
 
 **Playwright 1.62 evaluate 语义**（经源码验证；最初计划写反了，已在代码中修正）：
 - 字符串表达式只有完整表达式形式可用：`page.evaluate(`(${src})()`)`。**解析后得到函数值**的字符串永远不会被调用。
@@ -54,6 +54,8 @@ npx playwright install chromium                  # 双运行时共用的浏览�
 **浏览器上下文（双语言）**：route-abort `resourceType === 'media'`；`bypassCSP: true`（否则严格 CSP 站点会在 addScriptTag 处杀死 Node 工作流）；转换运行 viewport 1280×3000；`U2M_PROXY` 环境变量控制代理（未设置继承系统代理 / `direct` 绕过 / URL 显式钉住——真实冒烟曾因系统代理隧道失败报 ERR_TUNNEL_CONNECTION_FAILED 而加，双语言镜像于 `proxyLaunchOptions`/`proxy_launch_options`）。浏览器/viewer 一律在最终 emit **之前**关闭（emit 会退出进程，顺序错了会留孤儿 chromium）。
 
 **登录流程**：`detector.mjs` 对六个信号计分（全 frames 密码框 / URL 特征 / 标题与正文关键词——标题关键词只匹配 `<title>`、正文关键词只匹配正文 / 认证 cookie 反查 / 重定向 / SPA 等待）；≥2 命中判定需登录。人工登录走 CDP Screencast 中继（`screencast.mjs`：无头 chromium → HTTP+WS viewer，JS/CSS 全内联）。viewer 地址以 `[login_url] viewer: http://...` 记录到 stderr，测试靠它接入。`render_markdown.mjs` 用两阶段超时（open-timeout 内无请求 → open_failed，随后进入点击窗口）——其 `/select` 端点是文档化的无人值守路径（先 GET 页面取消打开自检，再 POST）。
+
+**虚拟列表检测门**：步骤 1.5 的 `detect_page.mjs`（Node-only，与 `login_url.mjs` 同形态）复用登录态开页、注入 pageInit、调用共享 `page-detect.js` 的 `__u2mDetectVirtualList`：顶部取正文签名 → 滚到底 → 在底部（回顶之前）检查签名是否仍在 innerText，消失即虚拟列表。命中 emit `virtual_list`（exit 0 正常中断，非 error）并终止，**不写 working 目录、不产 sketch**；否则 emit `scrollable` 进步骤 2。`clear_trans_html` 不感知此门。
 
 ## 测试须知
 
