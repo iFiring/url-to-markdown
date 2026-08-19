@@ -69,26 +69,26 @@ node <skill-root>/script/clear_trans_html.mjs <url>
 | `ok` | 记录 `sketch` 路径，进入步骤 3 |
 | `error` | 把 `reason` 反馈给用户并终止 |
 
-产物：`<skill-root>/working/<url-dir>/node_workflow/sketch.md` 与 `assets/`。
+产物：`<skill-root>/working/<url-dir>/sketch.md` 与 `assets/`。
 
 ### 步骤 3 · 你负责转换特殊 DOM 元素
 
-读 `working/<url-dir>/node_workflow/assets/manifest.json` 中 `status: "pending"` 的条目，按 `type` 分派：
+读 `working/<url-dir>/manifest.json` 中 `status: "pending"` 的条目，按 `type` 分派：
 
 | type | 处置 |
 |---|---|
-| `svg_convert` | 读 `draft` 路径的 HTML（已内联计算样式），生成**语义等价的 SVG**，存到同 workflow 的 `assets/complex/COMPLEX_DIV_n.svg`；把对应 `sketch.md` 中的 `{{COMPLEX_DIV_n}}` 替换为 `![COMPLEX_DIV_n](assets/complex/COMPLEX_DIV_n.svg)`；完成后把 manifest 该条 `status` 改为 `done` |
+| `svg_convert` | 读 `draft` 路径的 HTML（已内联计算样式），生成**语义等价的 SVG**，存到 `assets/complex/COMPLEX_DIV_n.svg`；把对应 `sketch.md` 中的 `{{COMPLEX_DIV_n}}` 替换为 `![COMPLEX_DIV_n](assets/complex/COMPLEX_DIV_n.svg)`；完成后把 manifest 该条 `status` 改为 `done` |
 | `latex` | 读 `draft` 的公式渲染 DOM，反读 LaTeX 源码，把 `sketch.md` 中 `{{COMPLEX_DIV_n}}` 内联替换为 `$$公式$$`；manifest 改 `done` |
 
 `passthrough_svg` / `screenshot` / `mermaid` / 已直出的 `latex` 均为 `status: "done"`，**不经你处理**（脚本已在 sketch.md 中替换完毕）。
 
 ### 步骤 4 · 你负责语义去噪
 
-对 sketch.md 使用以下提示词清洗，写入 `working/<url-dir>/node_workflow/result.md`。
+对 sketch.md 使用以下提示词清洗，写入 `working/<url-dir>/result.md`。
 
 > 你是一个网页内容清洗专家。以下是网页转换的 Markdown 初稿。请去除其中的广告、推荐阅读、版权声明等无关内容，只保留核心正文。同时，请检查并修复其中的 Markdown 表格格式，确保其符合标准。去除多余的换行，空格。直接输出清洗后的 Markdown。**注意**：不要添加/修改/删除主体文本内容和原义。
 
-清洗时把 `{{IMG_n}}` 替换为 `![IMG_n](assets/images/IMG_n.<ext>)`——扩展名以 `node_workflow` `assets/images/` 下实际文件为准。
+清洗时把 `{{IMG_n}}` 替换为 `![IMG_n](assets/images/IMG_n.<ext>)`——扩展名以 `assets/images/` 下实际文件为准。
 
 ### 步骤 5 · 人工选择 Markdown
 
@@ -96,14 +96,12 @@ node <skill-root>/script/clear_trans_html.mjs <url>
 node <skill-root>/script/render_markdown.mjs <url-dir> [--port 0] [--timeout 120000] [--open-timeout 5000] [--no-open]
 ```
 
-`<url-dir>` 为 `working/` 下的 URL 目录名。浏览器双 Tab 打开，提醒用户人工选择。参数默认值：`--port` 0（随机端口）、`--open-timeout` 5000ms、`--timeout` 120000ms；另步骤 1 `login_url.mjs` 的 `--timeout` 默认 300000ms。
-
-两个 Tab 分别渲染 `working/<url-dir>/<wf>/result.md`（缺失时降级该 workflow 的 sketch.md）；用户选定后脚本把该文件**复制到上一级** `working/<url-dir>/result.md`（即 stdout `path` 字段所指的最终交付物），复制时 `](assets/...)` 形式的相对资源引用会自动改写为 `](<wf>/assets/...)`，图片在新层级下仍可解析，不需手工修路径。
+`<url-dir>` 为 `working/` 下的 URL 目录名。浏览器打开预览 `working/<url-dir>/result.md`（缺失时降级 sketch.md 并标注初稿），用户确认后脚本 emit `selected`（`path` 字段即最终交付物）。参数默认值：`--port` 0（随机端口）、`--open-timeout` 5000ms、`--timeout` 120000ms；另步骤 1 `login_url.mjs` 的 `--timeout` 默认 300000ms。
 
 **无人值守/自动化场景**：加 `--no-open` 不弹浏览器；端口见 stderr `[render] 页面: http://127.0.0.1:<port> ...` 行。对页面地址的**第一个 HTTP 请求**即视为"页面已打开"，会取消打开自检（open-timeout）窗口并启动点击（timeout）窗口；随后可编程完成选择：
 
 ```bash
-curl -X POST http://127.0.0.1:<port>/select -H 'Content-Type: application/json' -d '{"source":"node_workflow"}'
+curl -X POST http://127.0.0.1:<port>/select -H 'Content-Type: application/json' -d '{}'
 ```
 
 | stdout status | 动作 |

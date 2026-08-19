@@ -41,7 +41,7 @@ npx playwright install chromium                  # 浏览器缓存
 
 **启发式护栏（真实 URL 冒烟教训）**：svg_convert 启发式仅在元素总文本 < 500 字符时触发（page-classify.js 的 `maxHeuristicText`，可由 cfg 覆盖）——超长真实页面会把文本密度稀释到比值阈值以下，不加此上限会吞掉整个正文列。选择器命中（`.chart`/`.echarts` 等）不受该上限约束。
 
-**工作目录。** 每个 URL 对应 `working/<净化URL>/node_workflow/`；净化保留 `[A-Za-z0-9.-]`，超 120 字符截断 + sha256 前 8 位十六进制后缀。`U2M_WORKING_ROOT` 覆盖根目录（所有测试用它隔离）。`working/cookies/storage_state.json` 是唯一全局登录态——仅 `login_url.mjs` 写入（cookie 按 name|domain|path 去重、localStorage 按 origin+name、读取时剔除过期）；转换脚本只读。
+**工作目录。** 每个 URL 对应 `working/<净化URL>/`，产物拍平其下（snapshot.html、classify/、sketch.md、assets/、result.md）；净化保留 `[A-Za-z0-9.-]`，超 120 字符截断 + sha256 前 8 位十六进制后缀。`U2M_WORKING_ROOT` 覆盖根目录（所有测试用它隔离）。`working/cookies/storage_state.json` 是唯一全局登录态——仅 `login_url.mjs` 写入（cookie 按 name|domain|path 去重、localStorage 按 origin+name、读取时剔除过期）；转换脚本只读。
 
 **浏览器上下文**：route-abort `resourceType === 'media'`；`bypassCSP: true`（否则严格 CSP 站点会在 addScriptTag 处杀死 Node 工作流）；转换运行 viewport 1280×3000；`U2M_PROXY` 环境变量控制代理（未设置继承系统代理 / `direct` 绕过 / URL 显式钉住——真实冒烟曾因系统代理隧道失败报 ERR_TUNNEL_CONNECTION_FAILED 而加，实现于 `script/lib/browser.mjs` 的 `proxyLaunchOptions`）。浏览器/viewer 一律在最终 emit **之前**关闭（emit 会退出进程，顺序错了会留孤儿 chromium）。
 

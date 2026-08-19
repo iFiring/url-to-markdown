@@ -25,13 +25,12 @@ description: "将 URL（网页）的主体内容转换成 Markdown；在需要�
 working/                 # 工作目录
   cookies/               # 所有访问过 URL 的 cookie 公共存储目录
   [_U_R_L_]/             # 将特殊字符替换成下划线的 URL
-    node_workflow/       # Node 脚本工作流
-      assets/
-        draft/           # 复杂元素和截图
-        complex/         # 经过 LLM 转化的特殊文件（SVG/MD/...）
-        images/          # 下载的正文图片
-      sketch.md          # 经过脚本 `clear_trans_html` 初步清洗和转换的 Markdown 文件
-      result.md          # 经过 LLM 优化过的 Markdown 文件
+    assets/
+      draft/             # 复杂元素草稿（内联样式 HTML）
+      complex/           # 特殊元素最终产物（SVG/PNG）
+      images/            # 下载的正文图片
+    sketch.md            # 经过脚本 `clear_trans_html` 初步清洗和转换的 Markdown 文件
+    result.md            # 经过 LLM 优化过的 Markdown 文件（最终交付物）
 
 SKILL.md                 # Skill 主体文件
 script/                  # 脚本
@@ -86,7 +85,7 @@ url-to-markdown/
 
 特殊的 DOM 元素，你负责转化成 SVG，替换 Markdown 中的标记
 
-- 从目录 `working/[_U_R_L_]/node_workflow/assets/draft/` 获取所有待转换元素（HTML）
+- 从目录 `working/[_U_R_L_]/assets/draft/` 获取所有待转换元素（HTML）
 - 非文本的 DOM 元素，转换成 SVG
 
 ### 4.你负责对 Markdown 语义去噪
@@ -152,8 +151,8 @@ url-to-markdown/
 #### 转换
 
 - 转换库，Node 使用 `turndown` + `@joplin/turndown-plugin-gfm`
-- 纯图片：下载正文所有 `<img>` 标签的图片，存储在工作目录 `working/[_U_R_L_]/node_workflow/assets/images/IMG_1`，在 Markdown 中引用占位符 `{{IMG_1}}`
-- 复杂非纯文本 `<div>`：先给 DOM 元素截图，截取 DOM 元素（HTML + 有效 CSS 内联样式），存储在工作目录 `working/[_U_R_L_]/node_workflow/assets/draft/COMPLEX_DIV_1`，在 Markdown 中引用占位符 `{{COMPLEX_DIV_1,2,3}}`；
+- 纯图片：下载正文所有 `<img>` 标签的图片，存储在工作目录 `working/[_U_R_L_]/assets/images/IMG_1`，在 Markdown 中引用占位符 `{{IMG_1}}`
+- 复杂非纯文本 `<div>`：先给 DOM 元素截图，截取 DOM 元素（HTML + 有效 CSS 内联样式），存储在工作目录 `working/[_U_R_L_]/assets/draft/COMPLEX_DIV_1`，在 Markdown 中引用占位符 `{{COMPLEX_DIV_1,2,3}}`；
 - 在处理特殊元素后，再使用转换库转换文档
 
 ### `render_markdown.mjs`

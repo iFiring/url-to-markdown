@@ -24,14 +24,15 @@ export function urlToDirName(url) {
 
 export function storageStatePath() { return path.join(workingRoot(), 'cookies', 'storage_state.json'); }
 
-export function workflowDir(url, name) { return path.join(workingRoot(), urlToDirName(url), name); }
+export function urlDir(url) { return path.join(workingRoot(), urlToDirName(url)); }
 
-export function ensureWorkflowDirs(url, name) {
-  const wf = workflowDir(url, name);
-  const assets = path.join(wf, 'assets');
+/** 拍平的产物目录：working/<url-dir>/ 直接放 sketch.md/assets/…（双工作流子目录随 Python 运行时移除）。 */
+export function ensureUrlDirs(url) {
+  const dir = urlDir(url);
+  const assets = path.join(dir, 'assets');
   const draft = path.join(assets, 'draft');
   const complex = path.join(assets, 'complex');
   const images = path.join(assets, 'images');
-  for (const d of [wf, assets, draft, complex, images]) fs.mkdirSync(d, { recursive: true });
-  return { wf, assets, draft, complex, images, manifest: path.join(assets, 'manifest.json') };
+  for (const d of [dir, assets, draft, complex, images]) fs.mkdirSync(d, { recursive: true });
+  return { urlDir: dir, wf: dir, assets, draft, complex, images, manifest: path.join(dir, 'manifest.json') };
 }

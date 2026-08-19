@@ -20,7 +20,7 @@ after(async () => { await fx.close(); });
 const run = (page) => runScript(process.execPath, [path.resolve('script/clear_trans_html.mjs'), `${fx.url}/${page}`],
   { env: { U2M_WORKING_ROOT: root }, timeoutMs: 90000 });
 
-const wf = (page) => path.join(root, urlToDirName(`${fx.url}/${page}`), 'node_workflow');
+const wf = (page) => path.join(root, urlToDirName(`${fx.url}/${page}`));
 const sketch = (page) => fs.readFileSync(path.join(wf(page), 'sketch.md'), 'utf8');
 
 test('static-article: 契约输出 + 占位符 + 表格 + 围栏', async () => {
@@ -83,7 +83,7 @@ test('complex-elements: 全分派端到端', async () => {
   assert.match(md, /\$\$E=mc\^2\$\$/);
   assert.match(md, /\{\{COMPLEX_DIV_\d+\}\}/); // svg_convert 占位符
   assert.match(md, /!\[COMPLEX_DIV_\d+\]\(assets\/complex\/COMPLEX_DIV_\d+\.svg\)/); // passthrough 直替
-  const manifest = JSON.parse(fs.readFileSync(path.join(wf('complex-elements.html'), 'assets/manifest.json'), 'utf8'));
+  const manifest = JSON.parse(fs.readFileSync(path.join(wf('complex-elements.html'), 'manifest.json'), 'utf8'));
   const types = manifest.items.map((i) => i.type).sort();
   // canvas、video 各一 screenshot；大 svg passthrough；.chart 与 #viz（启发式）各一 svg_convert；katex latex
   assert.deepEqual(types, ['latex', 'passthrough_svg', 'screenshot', 'screenshot', 'svg_convert', 'svg_convert']);
@@ -95,7 +95,7 @@ test('complex-elements: 全分派端到端', async () => {
 test('long-column: 长页主列不被误判 svg_convert，正文完整保留', async () => {
   const r = await run('long-column.html');
   assert.equal(r.code, 0, r.stderr);
-  const manifest = JSON.parse(fs.readFileSync(path.join(wf('long-column.html'), 'assets/manifest.json'), 'utf8'));
+  const manifest = JSON.parse(fs.readFileSync(path.join(wf('long-column.html'), 'manifest.json'), 'utf8'));
   // 主列文本量 > 启发式上限 → 不得分派 svg_convert（items 应为空或无该类型）
   assert.equal(manifest.items.filter((i) => i.type === 'svg_convert').length, 0,
     `不应有 svg_convert: ${JSON.stringify(manifest.items)}`);

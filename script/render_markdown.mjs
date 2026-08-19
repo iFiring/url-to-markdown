@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 // render_markdown.mjs <url-dir> [--port 0] [--timeout 120000] [--open-timeout 5000] [--no-open]
-// 双 Tab 渲染两份 result.md（缺失降级 sketch.md 标注初稿），人工选择后复制到 <url-dir>/result.md，
-// 复制时把 ](assets/...) 相对引用改写为 ](<wf>/assets/...)，使其从新层级仍可解析。
+// 单稿预览：渲染 <dir>/result.md（缺失降级 sketch.md 标"⚠️ 初稿"），用户确认后 emit selected。
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -40,71 +39,48 @@ function main() {
   const timeoutMs = Number(args.timeout ?? 120000);
   const openTimeoutMs = Number(args['open-timeout'] ?? 5000);
 
-  const WORKFLOWS = ['node_workflow', 'python_workflow'];
-  const SOURCES = WORKFLOWS.map((wf) => {
-    const base = path.join(dir, wf);
-    const resultMd = path.join(base, 'result.md');
-    const sketchMd = path.join(base, 'sketch.md');
-    const file = fs.existsSync(resultMd) ? resultMd : (fs.existsSync(sketchMd) ? sketchMd : null);
-    return { wf, file, draft: !fs.existsSync(resultMd) && !!file, imagesDir: path.join(base, 'assets', 'images') };
-  }).filter((s) => s.file);
-
-  if (SOURCES.length === 0) { emit({ status: 'error', reason: '两个 workflow 均无 result.md/sketch.md' }, 1); return; }
+  // 源解析：优先 result.md，缺失降级 sketch.md
+  const resultMd = path.join(dir, 'result.md');
+  const sketchMd = path.join(dir, 'sketch.md');
+  const file = fs.existsSync(resultMd) ? resultMd : (fs.existsSync(sketchMd) ? sketchMd : null);
+  if (!file) { emit({ status: 'error', reason: `result.md/sketch.md 均缺失: ${dir}` }, 1); return; }
+  const draft = !fs.existsSync(resultMd);
+  const imagesDir = path.join(dir, 'assets', 'images');
 
   const md = new MarkdownIt({ html: true });
 
   /** 初稿模式：{{IMG_n}} → 本地图片；{{COMPLEX_DIV_n}} 原样保留（占位标记） */
-  function resolveDraftPlaceholders(text, imagesDir, wf) {
+  function resolveDraftPlaceholders(text) {
     return text.replace(/\{\{IMG_(\d+)\}\}/g, (m, n) => {
       try {
         const hit = fs.readdirSync(imagesDir).find((f) => f.startsWith(`IMG_${n}.`));
-        return hit ? `![IMG_${n}](/file/${wf}/assets/images/${hit})` : m;
+        return hit ? `![IMG_${n}](/file/assets/images/${hit})` : m;
       } catch { return m; }
     });
   }
 
-  function renderSource(src) {
-    let text = fs.readFileSync(src.file, 'utf8');
-    if (src.draft) text = resolveDraftPlaceholders(text, src.imagesDir, src.wf);
+  function renderContent() {
+    let text = fs.readFileSync(file, 'utf8');
+    if (draft) text = resolveDraftPlaceholders(text);
     let html = md.render(text);
-    // 相对图片引用 → /file/<wf>/...
-    html = html.replace(/(<img[^>]+src=")(?!https?:|\/\/|data:|#|\/file\/)([^"]+)"/g, `$1/file/${src.wf}/$2"`);
+    html = html.replace(/(<img[^>]+src=")(?!https?:|\/\/|data:|#|\/file\/)([^"]+)"/g, '$1/file/$2"');
     return html;
   }
-
-  /**
-   * 选中文件复制到 <url-dir>/result.md 后，assets/ 的相对基准从 <wf>/ 变为 <url-dir>/，
-   * 需改写 `](assets/...` / `](./assets/...` 为 `](<wf>/assets/...`。
-   * 只动 assets/ 前缀的相对引用：绝对 URL、data:、#、/、../ 等其余形态一律不动。
-   */
-  function rewriteAssetRefs(text, wf) {
-    return text.replace(/\]\((\.\/)?assets\//g, `](${wf}/assets/`);
-  }
-
-  const RENDERED = Object.fromEntries(SOURCES.map((s) => [s.wf, renderSource(s)]));
+  const RENDERED = renderContent();
 
   function pageHtml(remainingMs) {
-    const tabs = SOURCES.map((s, i) => `
-      <button class="tab${i === 0 ? ' active' : ''}" data-wf="${s.wf}">${s.wf === 'node_workflow' ? 'Node 版' : 'Python 版'}${s.draft ? ' ⚠️ 初稿' : ''}</button>`).join('');
-    const panes = SOURCES.map((s, i) => `
-      <section class="pane${i === 0 ? '' : ' hidden'}" data-wf="${s.wf}">
-        <div class="content md">${RENDERED[s.wf]}</div>
-        <button class="pick" data-wf="${s.wf}">✅ 选这个</button>
-      </section>`).join('');
     return `<!doctype html>
 <html lang="zh">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>选择 Markdown</title>
+<title>确认交付</title>
 <style>
   body { font-family: -apple-system, "PingFang SC", sans-serif; margin: 0; background: #fafafa; }
   header { position: sticky; top: 0; background: #fff; border-bottom: 1px solid #ddd; padding: 8px 16px; display: flex; gap: 8px; align-items: center; z-index: 1; }
-  .tab { padding: 8px 16px; border: 1px solid #ccc; border-radius: 8px; background: #fff; cursor: pointer; }
-  .tab.active { background: #e8f0fe; border-color: #4a7dd6; }
+  header h1 { font-size: 16px; margin: 0; }
   #countdown { color: #888; margin-left: auto; font-size: 13px; }
   .pane { padding: 16px; max-width: 52em; margin: 0 auto; }
-  .hidden { display: none; }
   .content { background: #fff; border: 1px solid #e3e3e3; border-radius: 8px; padding: 24px; overflow-x: auto; }
   .content img { max-width: 100%; }
   .pick { display: block; margin: 16px auto; padding: 10px 32px; font-size: 15px; border-radius: 8px;
@@ -113,8 +89,11 @@ function main() {
 </style>
 </head>
 <body>
-<header>${tabs}<span id="countdown"></span></header>
-${panes}
+<header><h1>确认交付${draft ? ' ⚠️ 初稿' : ''}</h1><span id="countdown"></span></header>
+<section class="pane">
+  <div class="content md">${RENDERED}</div>
+  <button class="pick">✅ 确认交付</button>
+</section>
 <p id="done"></p>
 <script>
   const REMAINING_MS = ${remainingMs};
@@ -124,26 +103,21 @@ ${panes}
     document.getElementById('countdown').textContent = left > 0 ? '剩余 ' + Math.ceil(left / 1000) + ' 秒' : '';
     if (left === 0) { clearInterval(tick); document.getElementById('done').textContent = '已超时，可关闭此页'; disableAll(); }
   }, 250);
-  document.querySelectorAll('.tab').forEach((b) => b.onclick = () => {
-    document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('active', x === b));
-    document.querySelectorAll('.pane').forEach((p) => p.classList.toggle('hidden', p.dataset.wf !== b.dataset.wf));
-  });
   function disableAll() { document.querySelectorAll('.pick').forEach((b) => b.disabled = true); }
-  document.querySelectorAll('.pick').forEach((b) => b.onclick = async () => {
+  document.querySelector('.pick').onclick = async () => {
     try {
-      const res = await fetch('/select', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source: b.dataset.wf }) });
+      const res = await fetch('/select', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       document.getElementById('done').textContent = '已提交，可以关闭此页';
     } catch { document.getElementById('done').textContent = '服务已关闭（可能已超时），可关闭此页'; }
     disableAll();
-  });
+  };
 </script>
 </body>
 </html>`;
   }
 
-  // ── 两阶段超时（对齐 wait-click.mjs）──
+  // ── 两阶段超时 ──
   const t0 = Date.now();
   const url = () => `http://127.0.0.1:${server.address().port}`;
   let settled = null;
@@ -165,10 +139,9 @@ ${panes}
       clearTimeout(openTimer);
       clickTimer = setTimeout(() => finish({ status: 'timeout' }, 1), timeoutMs);
     }
-    const safeFile = (wf, rel) => {
-      const base = path.resolve(path.join(dir, wf));
-      const full = path.resolve(path.join(dir, wf, rel));
-      // 前缀必须带分隔符：否则 ../node_workflow_x/../ 可逃逸到同前缀兄弟目录
+    const safeFile = (rel) => {
+      const base = path.resolve(dir);
+      const full = path.resolve(path.join(dir, rel));
       if (full !== base && !full.startsWith(base + path.sep)) return null;
       return full;
     };
@@ -177,18 +150,17 @@ ${panes}
       res.end(pageHtml(Math.max(0, timeoutMs)));
       return;
     }
-    const mdMatch = req.url?.match(/^\/md\/(node_workflow|python_workflow)$/);
-    if (req.method === 'GET' && mdMatch && RENDERED[mdMatch[1]] !== undefined) {
+    if (req.method === 'GET' && req.url === '/md') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(RENDERED[mdMatch[1]]);
+      res.end(RENDERED);
       return;
     }
-    const fileMatch = req.url?.match(/^\/file\/(node_workflow|python_workflow)\/(.+)$/);
+    const fileMatch = req.url?.match(/^\/file\/(.+)$/);
     if (req.method === 'GET' && fileMatch) {
       let rel = null;
-      try { rel = decodeURIComponent(fileMatch[2]); } catch { /* 非法百分号编码 → 404 */ }
-      const full = rel === null ? null : safeFile(fileMatch[1], rel);
-      // 目录同样通过 existsSync，readFileSync 随即 EISDIR 崩溃且 stdout 零行——限定普通文件
+      try { rel = decodeURIComponent(fileMatch[1]); } catch { /* 非法百分号编码 → 404 */ }
+      const full = rel === null ? null : safeFile(rel);
+      // 目录同样通过 existsSync + isFile 防止 EISDIR 崩溃
       if (full && fs.existsSync(full) && fs.statSync(full).isFile()) {
         const ext = path.extname(full);
         const mime = { '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.gif': 'image/gif', '.webp': 'image/webp' }[ext] ?? 'application/octet-stream';
@@ -203,22 +175,10 @@ ${panes}
       let body = '';
       req.on('data', (c) => { body += c; if (body.length > 4096) req.destroy(); });
       req.on('end', () => {
-        let source = null;
-        try { source = JSON.parse(body).source; } catch { /* 400 */ }
-        // 必须校验 SOURCES（产物实际存在的 workflow）：仅查 WORKFLOWS 时 src 为 undefined，
-        // src.file 读取崩溃且 stdout 零行。SOURCES ⊆ WORKFLOWS，此校验涵盖成员检查。
-        if (!SOURCES.some((s) => s.wf === source)) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: false, error: 'source not available' }));
-          return;
-        }
+        // body 解析但忽略内容（兼容旧 {"source":...} 调用）
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
-        const src = SOURCES.find((s) => s.wf === source);
-        const dest = path.join(dir, 'result.md');
-        // 读→改写→写全程同步，先于下方 150ms 延迟的 finish，保证 stdout 报告 selected 时文件已就绪
-        fs.writeFileSync(dest, rewriteAssetRefs(fs.readFileSync(src.file, 'utf8'), src.wf));
-        setTimeout(() => finish({ status: 'selected', source, path: dest, elapsedMs: Date.now() - t0 }, 0), 150);
+        setTimeout(() => finish({ status: 'selected', path: file, elapsedMs: Date.now() - t0 }, 0), 150);
       });
       return;
     }
@@ -236,7 +196,7 @@ ${panes}
 
   server.listen(port, '127.0.0.1', () => {
     // 注意：URL 后必须留空格再接中文括号——消费方用 \S+ 截取 URL，紧贴会把全角括号吞进 URL
-    log(`[render] 页面: ${url()} （${SOURCES.length} 个 Tab，打开自检 ${Math.round(openTimeoutMs / 1000)}s，点击窗口 ${Math.round(timeoutMs / 1000)}s）`);
+    log(`[render] 页面: ${url()} （${draft ? '初稿预览' : 'result.md'}，打开自检 ${Math.round(openTimeoutMs / 1000)}s，点击窗口 ${Math.round(timeoutMs / 1000)}s）`);
     if (!args['no-open']) {
       const cmd = process.platform === 'win32' ? 'cmd' : process.platform === 'darwin' ? 'open' : 'xdg-open';
       const cmdArgs = process.platform === 'win32' ? ['/c', 'start', '', url()] : [url()];

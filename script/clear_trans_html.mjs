@@ -2,7 +2,7 @@
 // clear_trans_html.mjs <url> —— Node 工作流：完整性→特殊元素→清理→readability→turndown→sketch.md
 import path from 'node:path';
 import { emit, emitError, usage, log } from './lib/contract.mjs';
-import { projectRoot, ensureWorkflowDirs, storageStatePath } from './lib/env.mjs';
+import { projectRoot, ensureUrlDirs, storageStatePath } from './lib/env.mjs';
 import { openPage } from './lib/browser.mjs';
 import { makeCtx, readSharedScript, processMermaid, processSpecialElements, processImages, writeManifest } from './lib/placeholder.mjs';
 import TurndownService from 'turndown';
@@ -42,7 +42,7 @@ async function waitForDomStable(page, { stableMs = 1000, maxMs = 15000 } = {}) {
 async function main() {
   const url = process.argv[2];
   if (!url || url.startsWith('--')) return usage('用法: clear_trans_html.mjs <url>');
-  const dirs = ensureWorkflowDirs(url, 'node_workflow');
+  const dirs = ensureUrlDirs(url);
 
   const pageInit = await readSharedScript('page-init.js');
   const pageMerge = await readSharedScript('page-merge.js');

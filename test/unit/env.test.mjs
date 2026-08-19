@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { urlToDirName, workingRoot, storageStatePath, ensureWorkflowDirs } from '../../script/lib/env.mjs';
+import { urlToDirName, workingRoot, storageStatePath, ensureUrlDirs } from '../../script/lib/env.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -29,13 +29,15 @@ test('workingRoot 受 U2M_WORKING_ROOT 覆盖；storageStatePath 固定子路径
   delete process.env.U2M_WORKING_ROOT;
 });
 
-test('ensureWorkflowDirs 创建五级目录并返回 manifest 路径', () => {
+test('ensureUrlDirs 拍平创建目录并返回 manifest 路径（wf === urlDir）', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-'));
   process.env.U2M_WORKING_ROOT = root;
-  const dirs = ensureWorkflowDirs('https://example.com/a', 'node_workflow');
-  for (const k of ['wf', 'assets', 'draft', 'complex', 'images']) {
+  const dirs = ensureUrlDirs('https://example.com/a');
+  for (const k of ['urlDir', 'wf', 'assets', 'draft', 'complex', 'images']) {
     assert.ok(fs.existsSync(dirs[k]), `缺目录 ${k}`);
   }
-  assert.equal(dirs.manifest, path.join(dirs.assets, 'manifest.json'));
+  assert.equal(dirs.wf, dirs.urlDir);
+  assert.equal(dirs.urlDir, path.join(root, urlToDirName('https://example.com/a')));
+  assert.equal(dirs.manifest, path.join(dirs.urlDir, 'manifest.json'));
   delete process.env.U2M_WORKING_ROOT;
 });
