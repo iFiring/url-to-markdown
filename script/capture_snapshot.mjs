@@ -58,6 +58,12 @@ async function main() {
   if (!url || url.startsWith('--')) return usage('用法: capture_snapshot.mjs <url> [--token-budget n] [--placeholder-min-chars n]');
   const tokenBudget = Number(args['token-budget'] ?? 80000);
   const placeholderMinChars = Number(args['placeholder-min-chars'] ?? 40);
+  if (!Number.isFinite(tokenBudget)) {
+    usage(`--token-budget 须为数字，收到 ${args['token-budget']}`); return;
+  }
+  if (!Number.isFinite(placeholderMinChars)) {
+    usage(`--placeholder-min-chars 须为数字，收到 ${args['placeholder-min-chars']}`); return;
+  }
 
   const pageInit = await readSharedScript('page-init.js');
   const pagePrepare = await readSharedScript('page-prepare.js');

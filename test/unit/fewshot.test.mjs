@@ -31,7 +31,10 @@ test('fewshot: title-in-listflow 的主标题在列表流内侧（其 id 或父�
   const html = await fs.readFile(path.join(FEWSHOT, 'title-in-listflow.html'), 'utf8');
   const plan = JSON.parse(await fs.readFile(path.join(FEWSHOT, 'title-in-listflow.json'), 'utf8'));
   assert.match(html, /<h1[^>]*>标题/);
-  const h1InsideListFlow = /listFlowSelector/.test(JSON.stringify(plan)); // selector 存在
-  assert.ok(h1InsideListFlow);
-  assert.ok(plan.blocks.some((b) => b.action === 'keep'), '主标题侧应有 keep');
+  // 夹具：<article data-u2m-id="1"><h1>标题</h1><p>{{T1}}</p></article>，h1 的父 article id 必须在 blocks 内且 action=keep
+  const m = /<([a-z][a-z0-9]*)[^>]*data-u2m-id="(\d+)"[^>]*>\s*<h1/.exec(html);
+  assert.ok(m, '应能从 html 中正则提取 h1 的父元素 id');
+  const parentId = Number(m[2]);
+  const block = plan.blocks.find((b) => b.id === parentId && b.action === 'keep');
+  assert.ok(block, `h1 父元素 id=${parentId} 应在 blocks 内且 action=keep`);
 });

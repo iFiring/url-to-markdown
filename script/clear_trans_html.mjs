@@ -33,6 +33,8 @@ async function main() {
     // openPage 仍提供 storageState（受保护图片）与 route-abort media。
     s = await openPage('about:blank', { viewport: { width: 1280, height: 3000 }, storageStatePath: storageStatePath(), log });
     await s.page.setContent(snapshot, { waitUntil: 'domcontentloaded' });
+    // Readability _fixRelativeUris 按 document.baseURI 绝对化，而 baseURI 由 snapshot 内 <base href> 决定（= 抓取时最终 URL，可能与 CLI 参数不同，例如发生重定向时）
+    const baseUri = await s.page.evaluate(() => document.baseURI);
 
     const ctx = makeCtx(dirs, { context: s.context, log });
     await processMermaid(s.page.mainFrame(), ctx);
@@ -55,9 +57,9 @@ async function main() {
       ctx.warnings.push('readability 未能解析主体，回退 body 全文');
       html = await s.page.evaluate(() => document.body.innerHTML);
     }
-    // Readability _fixRelativeUris 会把分派自产的 assets/ 相对引用绝对化——按 manifest 还原
+    // Readability _fixRelativeUris 会把分派自产的 assets/ 相对引用绝对化——按 manifest 还原（base 取页面 baseURI，即 snapshot 抓取时的最终 URL，而非 CLI 参数）
     for (const e of ctx.entries) {
-      if (e.final) html = html.split(new URL(e.final, url).href).join(e.final);
+      if (e.final) html = html.split(new URL(e.final, baseUri).href).join(e.final);
     }
 
     const td = new TurndownService({ codeBlockStyle: 'fenced', headingStyle: 'atx', bulletListMarker: '-' });

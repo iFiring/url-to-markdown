@@ -110,3 +110,12 @@ test('capture: usage_error 无参退出 2', async () => {
   assert.equal(r.code, 2);
   assert.equal(JSON.parse(r.stdout).status, 'usage_error');
 });
+
+test('capture: usage_error 数值旗标非法（--token-budget abc）退出 2', async () => {
+  const url = `${fx.url}/classify-article.html`;
+  const r = await runScript(process.execPath,
+    [path.resolve('script/capture_snapshot.mjs'), url, '--token-budget', 'abc'],
+    { env: { U2M_WORKING_ROOT: root }, timeoutMs: 90000 });
+  assert.equal(r.code, 2);
+  assert.equal(JSON.parse(r.stdout).status, 'usage_error');
+});
