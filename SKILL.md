@@ -54,20 +54,58 @@ node <skill-root>/script/detect_page.mjs <url> [--timeout 120000]
 
 | stdout status | 动作 |
 |---|---|
-| `scrollable` | 进入步骤 2 |
+| `scrollable` | 进入步骤 1.6 |
 | `virtual_list` | 告知用户"该页面为虚拟列表，仅渲染部分内容，无法全文转化为 Markdown"，**终止** |
 | `error` | 把 `reason` 反馈给用户并终止 |
 
-### 步骤 2 · 清洗转换
+### 步骤 1.6 · 抓取全保真快照
+
+```bash
+node <skill-root>/script/capture_snapshot.mjs <url> [--token-budget 80000] [--placeholder-min-chars 40]
+```
+
+复用步骤 1 写好的登录态，充分滚动后抓取全保真 `snapshot.html`（DOM + 内联 CSS + 元素 inline style，剥尽 JS，含 `data-u2m-id` 与 `<base>`），并派生 `classify/classify_input.html`（长文本占位 + 信号样式，供步骤 1.8 阅读）。
+
+| stdout status | 动作 |
+|---|---|
+| `ok` | 进入步骤 1.8 |
+| `too_large` | 页面超出单次处理规模：把 `tokenEstimate` 告知用户；可加大 `--placeholder-min-chars`（如 120）重跑一次，仍超则终止并说明 |
+| `error` | 把 `reason` 反馈给用户并终止 |
+
+### 步骤 1.8 · LLM 分类（列表流 + 逐块方案）
+
+读 `working/<url-dir>/classify/classify_input.html` 与 `<skill-root>/script/lib/fewshot/` 下每对 `<name>.html` + `<name>.json`（少样本），按 v2 schema 写 `working/<url-dir>/classify/classify_plan.json`：
+
+```json
+{ "version": 2, "mode": "whole",
+  "listFlowSelector": "<列表流父容器的 CSS 选择器>",
+  "blocks": [ { "id": 12, "action": "keep" } ] }
+```
+
+- `action` 取值：`keep | delete | code_block | screenshot | passthrough_svg | svg_convert | latex | block_screenshot`；`block_screenshot` 可带 `blockOf`（整块截图的容器 id，默认 = `id`）。
+- `blocks[*].id` 是 `classify_input.html` 里的 `data-u2m-id`，只列列表流内需要处置的块。
+- mermaid 容器（带 `data-u2m-mermaid-src`）已托管，**不进 plan**。
+
+**约束**：
+1. 只做结构判断，不读文本语义、不改写文本（语义去噪是步骤 4 的事）。
+2. `listFlowSelector` 应圈住文章主体块流，且让文章主标题落在其子树内（子树外的兄弟节点会被步骤 2 删除；不要选 `body`——那会把 `<head>` 当兄弟删掉）。
+3. 代码块靠结构识别（`<pre>`/`<code>`/`.hljs`/`data-lang` 等），标 `code_block`；语言由脚本本地判定。
+4. 列表流内的特殊元素整块处置（截图/既有分派），不拆零。
+
+写完进入步骤 2。
+
+### 步骤 2 · 消费快照与 plan，产出初稿
 
 ```bash
 node <skill-root>/script/clear_trans_html.mjs <url>
 ```
 
+前置：步骤 1.6 的 `snapshot.html` 与步骤 1.8 的 `classify_plan.json`（缺失或非法时脚本 emit `error`，按其 `reason` 补跑对应步骤）。脚本加载快照、按 plan 删列表流外噪声并逐块分派，产出 Markdown 初稿。
+
 | stdout status | 动作 |
 |---|---|
 | `ok` | 记录 `sketch` 路径，进入步骤 3 |
-| `error` | 把 `reason` 反馈给用户并终止 |
+| `error` | 按 `reason` 处理：快照缺失→跑 1.6；plan 缺失/非法/选择器失配→修正后重写 plan（1.8）再重跑本步 |
 
 产物：`<skill-root>/working/<url-dir>/sketch.md` 与 `assets/`。
 

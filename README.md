@@ -134,13 +134,16 @@ url-to-markdown/
 - 登录状态判断：`.temp/login.mjs`
 - 登录状态判断：`.temp/is_login_page.py`
 
+### `capture_snapshot.mjs`
+
+复用登录态打开 URL，充分滚动并等待 DOM 稳定后，一次性抓取全保真自包含快照 `snapshot.html`（内联外部 CSS、剥尽 JS、注入 `<base>`、打 `data-u2m-id`），并派生精简版 `classify/classify_input.html`（长文本占位 + 信号样式）供 LLM 分类。后续所有步骤只在这份快照上工作，不再重开原 URL。
+
 ### `clear_trans_html.mjs`
 
-渲染 URL，清理 DOM 元素，转化成 Markdown。
+加载 `snapshot.html` 快照与 `classify_plan.json`，清理 DOM 元素，转化成 Markdown。
 
 - 如果是内嵌了 iframe 页面，则打开 iframe 页面
-- 处理懒加载：模拟鼠标滚动；超高屏幕高度；通过 `IntersectionObserver.isIntersecting=true` 强行触发加载；或者其他方式
-- 处理虚拟 DOM：元素不允许移除，确保整个页面全部加载
+- 懒加载/虚拟 DOM 处理：由 `capture_snapshot.mjs` 在抓取阶段完成（渐进滚动 + DOM 稳定）
 - 在清理和转化前有个前提，必须获取到全部正文内容，不能被懒加载或虚拟 DOM 隐藏
 
 #### 清理
@@ -177,3 +180,4 @@ url-to-markdown/
 | SKILL.md | 操作手册（步骤 0-5、status 分支决策表、错误处理） | 已完成 |
 | 真实 URL 冒烟 | 手动清单见 test/smoke/SMOKE.md | 场景 1 已完成（MDN 文章页端到端通过）；场景 2（登录墙）/3（特殊元素）待人工 |
 | 移除 Python 运行时 | 双稿择优退役，收敛 Node 单运行时 | 已完成 |
+| LLM 驱动分类与快照管线 | capture_snapshot + classify_plan + applyClassifyPlan | 已完成 |
