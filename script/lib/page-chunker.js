@@ -40,18 +40,19 @@ function __u2mChunk(cfg) {
     return false;
   }
 
-  /** 对元素及其子树计算并内联 computed style */
-  function inlineComputedStyles(el) {
-    var computed = window.getComputedStyle(el);
+  /** 从 live DOM 读取 computed style 并写入对应 clone 节点（detached 节点 getComputedStyle 返回空） */
+  function copyComputedToClone(liveEl, cloneEl) {
+    var computed = window.getComputedStyle(liveEl);
     var styleStr = '';
     for (var i = 0; i < computed.length; i++) {
       var prop = computed[i];
       styleStr += prop + ':' + computed.getPropertyValue(prop) + ';';
     }
-    el.setAttribute('style', styleStr);
-    var children = el.children;
-    for (var i = 0; i < children.length; i++) {
-      inlineComputedStyles(children[i]);
+    cloneEl.setAttribute('style', styleStr);
+    var liveChildren = liveEl.children;
+    var cloneChildren = cloneEl.children;
+    for (var i = 0; i < liveChildren.length; i++) {
+      copyComputedToClone(liveChildren[i], cloneChildren[i]);
     }
   }
 
@@ -66,7 +67,7 @@ function __u2mChunk(cfg) {
     chunks.push({
       id: id,
       type: 'phrasing',
-      dataU2mId: uid,
+      dataU2mId: parseInt(uid, 10),
       html: el.outerHTML,
       needsLLM: false,
     });
@@ -80,7 +81,7 @@ function __u2mChunk(cfg) {
     chunks.push({
       id: id,
       type: 'phrasing',
-      dataU2mId: uid,
+      dataU2mId: parseInt(uid, 10),
       html: el.outerHTML,
       needsLLM: false,
     });
@@ -104,10 +105,10 @@ function __u2mChunk(cfg) {
           html: child.outerHTML,
           needsLLM: false,
         });
-      } else if (hasNestedFlow(child)) {
-        // Multi-layer Flow 内容：计算并内联样式
+      } else if (!FLOW_TAGS.has(child.tagName) || hasNestedFlow(child)) {
+        // 未知标签（svg/canvas/video/iframe/math 等）或含嵌套 Flow → multiLayer
         var clone = child.cloneNode(true);
-        inlineComputedStyles(clone);
+        copyComputedToClone(child, clone);
         chunks.push({
           id: id,
           type: 'multiLayer',
