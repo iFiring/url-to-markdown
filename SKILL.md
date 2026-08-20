@@ -16,6 +16,8 @@ description: "将 URL（网页）的主体内容转换成 Markdown；在需要�
 
 本技能目录为 `<skill-root>`（SKILL.md 所在目录）。以下 `<url>` 均指用户给定的完整 URL。
 
+所有产物存放在 `working/<url-dir>/steps/` 目录下，`<url-dir>` 由 URL 自动净化生成。
+
 ### 步骤 0 · 初始化环境（仅首次或环境变更时）
 
 ```bash
@@ -29,132 +31,157 @@ bash <skill-root>/script/init.sh
 
 stderr 中的"警告"不阻断，可忽略。
 
-### 步骤 1 · 打开 URL，判断/完成登录
+### 步骤 1 · 快照下载
 
 ```bash
-node <skill-root>/script/login_url.mjs <url> [--timeout 300000]
+node <skill-root>/script/snapshot.mjs <url> [--timeout 300000] [--scroll-rounds 60]
 ```
 
-脚本会自动弹出本地 viewer 页面供人工登录（如需要）。
+合并登录检测、渐进滚动、虚拟列表检测、全保真快照抓取为一个步骤。脚本内部依次执行：
+1. **登录阶段**：打开 URL，六信号检测是否需要登录；如需登录则弹出 Screencast viewer 供人工操作
+2. **滚动阶段**：渐进滚动到底部再回顶，触发懒加载，等待 DOM 稳定
+3. **检测阶段**：检查是否为虚拟列表（仅渲染可见窗口的页面无法全文转化）
+4. **快照阶段**：注入页面脚本，合并同源 iframe、内联外部 CSS、剥尽 JS、标记 `data-u2m-id`，序列化全保真快照
+
+产物：`steps/1_snapshot.html`
 
 | stdout status | 动作 |
 |---|---|
-| `logged_in` | 进入步骤 1.5 |
-| `login_done` | 进入步骤 1.5 |
-| `timeout` / `aborted` | 询问用户是否重试登录；重试则再次运行本命令 |
-| `error` | 把 `reason` 反馈给用户并终止 |
+| `ok` | 进入步骤 2。`elements` 字段为标记元素数量 |
+| `error`（reason=`virtual_list`） | 告知用户"该页面为虚拟列表，仅渲染部分内容，无法全文转化为 Markdown"，**终止** |
+| `error`（reason=`login_timeout`/`login_aborted`） | 询问用户是否重试登录；重试则再次运行本命令 |
+| `error`（其他） | 把 `reason` 反馈给用户并终止 |
 
-### 步骤 1.5 · 检测页面特性
+### 步骤 2 · 结构清洗
 
 ```bash
-node <skill-root>/script/detect_page.mjs <url> [--timeout 120000]
+node <skill-root>/script/clean_snapshot.mjs <url-dir>
 ```
 
-检测页面是否为虚拟列表（仅渲染可见窗口、滚动回收顶项，无法全文转化）。复用步骤 1 写好的登录态。
+`<url-dir>` 为 `working/` 下的 URL 目录名（相对或绝对路径均可）。
+
+打开 `steps/1_snapshot.html`，执行结构清洗：
+- 删除所有 `style` 属性、`<style>` 标签、`<link rel="stylesheet">` 标签、`<base>` 标签
+- 清空 SVG 内容（仅保留空 `<svg></svg>` 壳）
+- 长文本（`textContent.length > 16`）替换为 `{{LONG_TEXT_k|N_CHARS}}` 占位符
+
+产物：`steps/2_clean_snapshot.html`
 
 | stdout status | 动作 |
 |---|---|
-| `scrollable` | 进入步骤 1.6 |
-| `virtual_list` | 告知用户"该页面为虚拟列表，仅渲染部分内容，无法全文转化为 Markdown"，**终止** |
-| `error` | 把 `reason` 反馈给用户并终止 |
+| `ok` | 进入步骤 3。`longTextCount` 字段为占位符数量 |
+| `error` | 按 `reason` 处理：快照缺失→先跑步骤 1；其他→反馈给用户 |
 
-### 步骤 1.6 · 抓取全保真快照
+### 步骤 3 · 关键 ID 识别（LLM 步骤）
 
-```bash
-node <skill-root>/script/capture_snapshot.mjs <url> [--token-budget 80000] [--placeholder-min-chars 40]
-```
+读取 `steps/2_clean_snapshot.html`。
 
-复用步骤 1 写好的登录态，充分滚动后抓取全保真 `snapshot.html`（DOM + 内联 CSS + 元素 inline style，剥尽 JS，含 `data-u2m-id` 与 `<base>`），并派生 `classify/classify_input.html`（长文本占位 + 信号样式，供步骤 1.8 阅读）。
+你的任务：仅根据 DOM 结构（元素层级、标签类型、嵌套深度）和 `{{LONG_TEXT_k|N_CHARS}}` 占位符分布，找到以下三类关键元素的 `data-u2m-id`：
 
-| stdout status | 动作 |
-|---|---|
-| `ok` | 进入步骤 1.8 |
-| `too_large` | 页面超出单次处理规模：把 `tokenEstimate` 告知用户；可加大 `--placeholder-min-chars`（如 120）重跑一次，仍超则终止并说明 |
-| `error` | 把 `reason` 反馈给用户并终止 |
-
-### 步骤 1.8 · LLM 分类（列表流 + 逐块方案）
-
-读 `working/<url-dir>/classify/classify_input.html` 与 `<skill-root>/script/lib/fewshot/` 下每对 `<name>.html` + `<name>.json`（少样本），按 v2 schema 写 `working/<url-dir>/classify/classify_plan.json`：
-
-```json
-{ "version": 2, "mode": "whole",
-  "listFlowSelector": "<列表流父容器的 CSS 选择器>",
-  "blocks": [ { "id": 12, "action": "keep" } ] }
-```
-
-- `action` 取值：`keep | delete | code_block | screenshot | passthrough_svg | svg_convert | latex | block_screenshot`；`block_screenshot` 可带 `blockOf`（整块截图的容器 id，默认 = `id`）。
-- `blocks[*].id` 是 `classify_input.html` 里的 `data-u2m-id`，只列列表流内需要处置的块。
-- mermaid 容器（带 `data-u2m-mermaid-src`）已托管，**不进 plan**。
+1. **标题分块**（`titleIds`）：文章主标题对应的元素 ID。通常是层级最高的 `<h1>`-`<h3>` 或结构上处于列表流顶部的标题性容器
+2. **说明分块**（`descriptionIds`）：描述性元数据对应的元素 ID，如作者、日期、摘要、副标题等。可为空数组
+3. **列表流**（`listFlowIds`）：文章主体区域的父容器 ID。列表流是包含多个子块（段落、图片、代码块等）的最外层容器，可能有多个
 
 **约束**：
-1. 只做结构判断，不读文本语义、不改写文本（语义去噪是步骤 4 的事）。
-2. `listFlowSelector` 应圈住文章主体块流，且让文章主标题落在其子树内（子树外的兄弟节点会被步骤 2 删除；不要选 `body`——那会把 `<head>` 当兄弟删掉）。
-3. 代码块靠结构识别（`<pre>`/`<code>`/`.hljs`/`data-lang` 等），标 `code_block`；语言由脚本本地判定。
-4. 列表流内的特殊元素整块处置（截图/既有分派），不拆零。
+- 不读语义内容——文本已被 `{{LONG_TEXT_k|N_CHARS}}` 占位，你只能看到结构
+- `listFlowIds` 是列表流**最外层父元素**的 `data-u2m-id`，不是子元素的
+- 不选 `<body>` 或 `<html>`——它们的 ID 无意义
+- 如果找不到明确的标题或说明元素，对应数组可为空
+- 列表流至少选一个——它是后续分块的根容器
 
-写完进入步骤 2。
+将结果写入 `steps/3_key_ids.json`：
 
-### 步骤 2 · 消费快照与 plan，产出初稿
-
-```bash
-node <skill-root>/script/clear_trans_html.mjs <url>
+```json
+{
+  "titleIds": [42],
+  "descriptionIds": [43, 44],
+  "listFlowIds": [10, 88]
+}
 ```
 
-前置：步骤 1.6 的 `snapshot.html` 与步骤 1.8 的 `classify_plan.json`（缺失或非法时脚本 emit `error`，按其 `reason` 补跑对应步骤）。脚本加载快照、按 plan 删列表流外噪声并逐块分派，产出 Markdown 初稿。
+### 步骤 4 · 分块
+
+```bash
+node <skill-root>/script/chunker.mjs <url-dir>
+```
+
+读取 `steps/3_key_ids.json` 和 `steps/1_snapshot.html`，在浏览器中按列表流遍历子元素，将内容分为三类块：
+
+| type | 条件 | needsLLM |
+|---|---|---|
+| `phrasing` | 纯行内元素（`<a>`/`<span>`/`<em>` 等 HTML Phrasing content 标签） | `false` |
+| `flow` | 单层块级元素（`<p>`/`<div>`/`<h1>`-`<h6>`/`<ul>`/`<ol>` 等，且子元素不含嵌套 Flow） | `false` |
+| `multiLayer` | 未知标签（`<svg>`/`<canvas>`/`<video>`/`<iframe>`/`<math>` 等）或含嵌套 Flow 的块级元素 | `true` |
+
+`multiLayer` 块会附带 `styledHtml`（带完整 computed style 内联的 HTML 副本），供步骤 5 的 LLM 转化使用。
+
+产物：`steps/4_chunk_list.json`
 
 | stdout status | 动作 |
 |---|---|
-| `ok` | 记录 `sketch` 路径，进入步骤 3 |
-| `error` | 按 `reason` 处理：快照缺失→跑 1.6；plan 缺失/非法/选择器失配→修正后重写 plan（1.8）再重跑本步 |
+| `ok` | 进入步骤 5。`totalChunks` 为总块数，`llmChunks` 为需 LLM 处理的块数 |
+| `error` | 按 `reason` 处理：快照缺失→跑步骤 1；key_ids 缺失→跑步骤 3；其他→反馈给用户 |
 
-产物：`<skill-root>/working/<url-dir>/sketch.md` 与 `assets/`。
+### 步骤 5 · 多层块转化（LLM 步骤）
 
-### 步骤 3 · 你负责转换特殊 DOM 元素
+读取 `steps/4_chunk_list.json`，筛选 `needsLLM: true` 的块（即 `type: "multiLayer"` 的块）。
 
-读 `working/<url-dir>/manifest.json` 中 `status: "pending"` 的条目，按 `type` 分派：
+你的任务：对每个 `multiLayer` 块，基于其 `styledHtml`（带完整内联样式的 HTML）进行转化。每个块有两种转化路径：
 
-| type | 处置 |
-|---|---|
-| `svg_convert` | 读 `draft` 路径的 HTML（已内联计算样式），生成**语义等价的 SVG**，存到 `assets/complex/COMPLEX_DIV_n.svg`；把对应 `sketch.md` 中的 `{{COMPLEX_DIV_n}}` 替换为 `![COMPLEX_DIV_n](assets/complex/COMPLEX_DIV_n.svg)`；完成后把 manifest 该条 `status` 改为 `done` |
-| `latex` | 读 `draft` 的公式渲染 DOM，反读 LaTeX 源码，把 `sketch.md` 中 `{{COMPLEX_DIV_n}}` 内联替换为 `$$公式$$`；manifest 改 `done` |
+**路径 A：转化为 Phrasing 内容（优先）**
 
-`passthrough_svg` / `screenshot` / `block_screenshot` / `mermaid` / 已直出的 `latex` 均为 `status: "done"`，**不经你处理**（脚本已在 sketch.md 中替换完毕）。
+将复杂嵌套结构扁平化为简洁的行内文本描述。保留语义信息，丢失布局细节。适用于：
+- 卡片式布局（标题+描述的卡片 → 用文字描述卡片内容）
+- 嵌套列表/表格的变体（→ 用简洁文本概括）
+- 装饰性布局容器（→ 提取其中的有意义文本）
 
-### 步骤 4 · 你负责语义去噪
+**路径 B：转化为 SVG 图片（兜底）**
 
-对 sketch.md 使用以下提示词清洗，写入 `working/<url-dir>/result.md`。
+对于无法用文本充分表达的内容，生成语义等价的自包含 SVG。适用于：
+- 图表、数据可视化（柱状图、折线图、饼图等）
+- 复杂几何布局（信息图、流程图、组织结构图）
+- 纯视觉内容（图标组合、装饰性图形）
 
-> 你是一个网页内容清洗专家。以下是网页转换的 Markdown 初稿。请去除其中的广告、推荐阅读、版权声明等无关内容，只保留核心正文。同时，请检查并修复其中的 Markdown 表格格式，确保其符合标准。去除多余的换行，空格。直接输出清洗后的 Markdown。**注意**：不要添加/修改/删除主体文本内容和原义。
+**约束**：
+- **优先转化为 Phrasing**——只有图表/可视化/纯布局类内容才转 SVG
+- SVG 转化要求：生成自包含 SVG（含 `xmlns`、`viewBox`），不依赖外部资源（字体用系统字体栈，图片用占位矩形代替）
+- 每个块的转化**独立进行**，不跨块引用
+- 不修改或补充原文中不存在的信息
+- `phrasing` 和 `flow` 类型的块（`needsLLM: false`）不需要处理，直接跳过
 
-清洗时把 `{{IMG_n}}` 替换为 `![IMG_n](assets/images/IMG_n.<ext>)`——扩展名以 `assets/images/` 下实际文件为准。
+将结果写入 `steps/5_llm_chunk_list.json`：
 
-### 步骤 5 · 人工选择 Markdown
-
-```bash
-node <skill-root>/script/render_markdown.mjs <url-dir> [--port 0] [--timeout 120000] [--open-timeout 5000] [--no-open]
+```json
+{
+  "chunks": [
+    {
+      "id": 3,
+      "originalType": "multiLayer",
+      "resultType": "phrasing",
+      "content": "扁平化后的文本描述..."
+    },
+    {
+      "id": 7,
+      "originalType": "multiLayer",
+      "resultType": "svg",
+      "content": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\">...</svg>"
+    }
+  ]
+}
 ```
 
-`<url-dir>` 为 `working/` 下的 URL 目录名。浏览器打开预览 `working/<url-dir>/result.md`（缺失时降级 sketch.md 并标注初稿），用户确认后脚本 emit `selected`（`path` 字段即最终交付物）。参数默认值：`--port` 0（随机端口）、`--open-timeout` 5000ms、`--timeout` 120000ms；另步骤 1 `login_url.mjs` 的 `--timeout` 默认 300000ms。
-
-**无人值守/自动化场景**：加 `--no-open` 不弹浏览器；端口见 stderr `[render] 页面: http://127.0.0.1:<port> ...` 行。对页面地址的**第一个 HTTP 请求**即视为"页面已打开"，会取消打开自检（open-timeout）窗口并启动点击（timeout）窗口；随后可编程完成选择：
-
-```bash
-curl -X POST http://127.0.0.1:<port>/select -H 'Content-Type: application/json' -d '{}'
-```
-
-| stdout status | 动作 |
-|---|---|
-| `selected` | 完成。最终文件在 `path` 字段（`working/<url-dir>/result.md`），报告给用户 |
-| `timeout` / `open_failed` | 告知用户可重跑本命令 |
-| `error` | 把 `reason` 反馈给用户 |
+- `id`：对应 `4_chunk_list.json` 中块的 `id`
+- `originalType`：固定为 `"multiLayer"`
+- `resultType`：`"phrasing"` 或 `"svg"`
+- `content`：转化后的内容（纯文本或完整 SVG 源码）
 
 ## 常见错误处理
 
 | 现象 | 处置 |
 |---|---|
 | `init.sh` 报 `未找到 pnpm/yarn/npm` | 请用户安装任一包管理器后重试步骤 0 |
-| `login_url` 判定已登录但页面仍是登录墙 | 手动删除 `working/cookies/storage_state.json` 后重跑步骤 1 |
-| 图片下载失败（warnings 中有"保留原 URL"） | 正常降级：Markdown 保留原图链接，不需处理 |
-| sketch.md 中残留 `{{COMPLEX_DIV_n}}` 且 manifest 无对应项 | 该元素被当普通 DOM 转成了文本，人工检查是否需要补图 |
+| `snapshot` 判定已登录但页面仍是登录墙 | 手动删除 `working/cookies/storage_state.json` 后重跑步骤 1 |
+| `snapshot` 报 `virtual_list` 但用户确信是普通长页 | 该站可能主动裁剪离屏 DOM（与虚拟列表同构，产出亦只是部分窗口），属已知边界；建议改用其他抓取方式 |
 | 页面加载报 `net::ERR_TUNNEL_CONNECTION_FAILED` / `ERR_PROXY_CONNECTION_FAILED` | 本机系统代理不可用或拒绝目标站：设 `U2M_PROXY=direct` 绕过系统代理，或 `U2M_PROXY=http://<host>:<port>` 显式指定可用代理后重跑 |
-| `detect_page` 报 `virtual_list` 但用户确信是普通长页 | 该站可能主动裁剪离屏 DOM（与虚拟列表同构，产出亦只是部分窗口），属已知边界；建议改用其他抓取方式 |
+| `clean_snapshot` 报找不到快照 | 先运行步骤 1 生成 `1_snapshot.html` |
+| `chunker` 报找不到 key_ids | 先运行步骤 3 生成 `3_key_ids.json` |

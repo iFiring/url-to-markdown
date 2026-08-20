@@ -19,8 +19,21 @@ after(async () => { await fx.close(); });
 
 const urlOf = (page) => `${fx.url}/${page}`;
 const dirOf = (page) => path.join(root, urlToDirName(urlOf(page)));
-const capture = (page) => runScript(process.execPath, [path.resolve('script/capture_snapshot.mjs'), urlOf(page)],
-  { env: { U2M_WORKING_ROOT: root }, timeoutMs: 90000 });
+const capture = async (page) => {
+  // 使用新的 snapshot.mjs 生成快照
+  const r = await runScript(process.execPath, [path.resolve('script/snapshot.mjs'), urlOf(page)],
+    { env: { U2M_WORKING_ROOT: root }, timeoutMs: 90000 });
+  if (r.code !== 0) throw new Error(`snapshot.mjs failed: ${r.stderr}`);
+  // snapshot.mjs 输出到 steps/1_snapshot.html，但 clear_trans_html.mjs 期望 snapshot.html
+  // 复制到旧位置以兼容
+  const dir = dirOf(page);
+  const newSnap = path.join(dir, 'steps', '1_snapshot.html');
+  const oldSnap = path.join(dir, 'snapshot.html');
+  if (fs.existsSync(newSnap)) fs.copyFileSync(newSnap, oldSnap);
+  // 创建 classify 目录（测试会写入 classify_plan.json）
+  fs.mkdirSync(path.join(dir, 'classify'), { recursive: true });
+  return r;
+};
 const run = (page) => runScript(process.execPath, [path.resolve('script/clear_trans_html.mjs'), urlOf(page)],
   { env: { U2M_WORKING_ROOT: root }, timeoutMs: 90000 });
 const sketch = (page) => fs.readFileSync(path.join(dirOf(page), 'sketch.md'), 'utf8');
