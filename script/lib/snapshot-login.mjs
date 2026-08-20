@@ -2,7 +2,7 @@
 // 步骤 1 登录阶段：goto URL → 六信号检测 → Screencast viewer（如需登录）
 import { needsLogin as detectLogin } from './detector.mjs';
 import { startScreencastViewer } from './screencast.mjs';
-import { readStorageState, writeStorageState, mergeStorageState } from './browser.mjs';
+import { readStorageState, writeStorageState, mergeStorageState, gotoWithRetry } from './browser.mjs';
 
 /**
  * 登录检测 + Screencast 人工登录。
@@ -14,6 +14,9 @@ import { readStorageState, writeStorageState, mergeStorageState } from './browse
  */
 export async function snapshotLogin(page, url, opts = {}) {
   const { timeout = 300000, storageStatePath: ssPath, log = () => {} } = opts;
+
+  // 导航到目标 URL
+  await gotoWithRetry(page, url, log);
 
   // 检测是否需要登录
   const result = await detectLogin(page, page.context(), url);
