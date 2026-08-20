@@ -14,7 +14,7 @@ export function workingRoot() {
     : path.join(projectRoot(), 'working');
 }
 
-/** URL→目录名：非 [A-Za-z0-9.-] → _；>120 截断 + sha256(URL) 前 8 hex。Node/Python 必须一致。 */
+/** URL→目录名：非 [A-Za-z0-9.-] → _；>120 截断 + sha256(URL) 前 8 hex。 */
 export function urlToDirName(url) {
   const sanitized = url.replace(/[^A-Za-z0-9.-]/g, '_');
   if (sanitized.length <= 120) return sanitized;
@@ -26,7 +26,7 @@ export function storageStatePath() { return path.join(workingRoot(), 'cookies', 
 
 export function urlDir(url) { return path.join(workingRoot(), urlToDirName(url)); }
 
-/** 拍平的产物目录：working/<url-dir>/ 直接放 sketch.md/assets/…（双工作流子目录随 Python 运行时移除）。 */
+/** 拍平的产物目录：working/<url-dir>/ 直接放 sketch.md/assets/…。 */
 export function ensureUrlDirs(url) {
   const dir = urlDir(url);
   const assets = path.join(dir, 'assets');

@@ -1,3 +1,5 @@
+> ⚠️ **过时警告**：本文档描述的双运行时架构（Node + Python）已于 commit 50888c3 移除 Python 运行时。当前权威设计以 `docs/superpowers/specs/2026-08-19-llm-driven-classification-design.md` 和 `docs/superpowers/specs/2026-08-20-skill-pipeline-optimization-design.md` 为准。
+
 # url-to-markdown 设计文档
 
 - 日期：2026-08-18
