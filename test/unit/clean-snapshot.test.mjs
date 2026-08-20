@@ -63,6 +63,12 @@ test('clean_snapshot.mjs: 对 article-1 快照执行清洗', async () => {
   assert.ok(cleaned.includes('LONG_TEXT'), '应含长文本占位符');
   assert.ok(!cleaned.match(/<svg[^>]+[a-z-]+=/i), 'SVG 不应有属性');
 
+  // head 里的 meta/link（charset/viewport/preconnect/og:* 等）对步骤 3 的结构识别
+  // 是纯噪声，全部删除；title 保留作识别线索
+  assert.ok(!cleaned.includes('<meta'), '不应含 <meta> 标签');
+  assert.ok(!cleaned.includes('<link'), '不应含 <link> 标签');
+  assert.ok(cleaned.includes('<title>'), '应保留 <title>');
+
   // 清理
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });

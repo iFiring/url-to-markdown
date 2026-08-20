@@ -18,19 +18,26 @@ function __u2mCleanSnapshot(cfg) {
     styles[i].parentNode.removeChild(styles[i]);
   }
 
-  // 3. 删除所有 <link rel="stylesheet"> 标签
-  var links = document.querySelectorAll('link[rel="stylesheet"]');
+  // 3. 删除所有 <link> 标签（stylesheet/preconnect/icon 等，对结构识别是纯噪声）
+  var links = document.querySelectorAll('link');
   for (var i = links.length - 1; i >= 0; i--) {
     links[i].parentNode.removeChild(links[i]);
   }
 
-  // 4. 删除 <base> 标签
+  // 4. 删除所有 <meta> 标签（charset/viewport/og:* 等，对结构识别是纯噪声）；
+  //    <title> 保留，作步骤 3 的识别线索
+  var metas = document.querySelectorAll('meta');
+  for (var i = metas.length - 1; i >= 0; i--) {
+    metas[i].parentNode.removeChild(metas[i]);
+  }
+
+  // 5. 删除 <base> 标签
   var bases = document.querySelectorAll('base');
   for (var i = bases.length - 1; i >= 0; i--) {
     bases[i].parentNode.removeChild(bases[i]);
   }
 
-  // 5. 清空 SVG：删除所有属性和子元素，仅保留空 <svg></svg>
+  // 6. 清空 SVG：删除所有属性和子元素，仅保留空 <svg></svg>
   var svgs = document.querySelectorAll('svg');
   for (var i = 0; i < svgs.length; i++) {
     var svg = svgs[i];
@@ -44,7 +51,7 @@ function __u2mCleanSnapshot(cfg) {
     }
   }
 
-  // 6. 长文本占位：textContent.length > MIN_CHARS → {{LONG_TEXT_k|N_CHARS}}
+  // 7. 长文本占位：textContent.length > MIN_CHARS → {{LONG_TEXT_k|N_CHARS}}
   //    纯空白文本节点（源码缩进/换行）不含语义内容，不占位——否则会在
   //    父子元素之间凭空捏造"长文本"，误导步骤 3 的结构识别
   var k = 0;
