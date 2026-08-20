@@ -113,7 +113,7 @@ node <skill-root>/script/chunker.mjs <url-dir>
 | `flow` | 单层块级元素（`<p>`/`<div>`/`<h1>`-`<h6>`/`<ul>`/`<ol>` 等，且子元素不含嵌套 Flow） | `false` |
 | `multiLayer` | 未知标签（`<svg>`/`<canvas>`/`<video>`/`<iframe>`/`<math>` 等）或含嵌套 Flow 的块级元素 | `true` |
 
-`multiLayer` 块会附带 `styledHtml`（带完整 computed style 内联的 HTML 副本），供步骤 5 的 LLM 转化使用。
+`multiLayer` 块会附带 `styledHtml`（带有效样式内联的 HTML 副本：白名单视觉属性的计算值，`var()` 已解析，与 UA 默认值及父元素继承值差分去重；剥离 class 与字体名，缩进空白折叠，pre 内容原样保留），供步骤 5 的 LLM 转化使用。
 
 产物：`steps/4_chunk_list.json`
 
@@ -126,7 +126,7 @@ node <skill-root>/script/chunker.mjs <url-dir>
 
 读取 `steps/4_chunk_list.json`，筛选 `needsLLM: true` 的块（即 `type: "multiLayer"` 的块）。
 
-你的任务：对每个 `multiLayer` 块，基于其 `styledHtml`（带完整内联样式的 HTML）进行转化。每个块有两种转化路径：
+你的任务：对每个 `multiLayer` 块，基于其 `styledHtml`（带有效内联样式的 HTML，仅含渲染有效的计算值）进行转化。每个块有两种转化路径：
 
 **路径 A：转化为 Phrasing 内容（优先）**
 

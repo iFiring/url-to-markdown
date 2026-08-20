@@ -122,9 +122,70 @@ test('管线 article-1: snapshot → clean → chunk', async () => {
 
   // 验证 multiLayer 块有 styledHtml
   const multiLayer = out.chunks.filter((c) => c.type === 'multiLayer');
+  assert.ok(multiLayer.length > 0, 'article-1 应有 multiLayer 块');
   for (const chunk of multiLayer) {
     assert.ok(chunk.styledHtml, `multiLayer 块 ${chunk.id} 应有 styledHtml`);
     assert.ok(chunk.needsLLM === true, `multiLayer 块 ${chunk.id} 应标记 needsLLM`);
+  }
+});
+
+test('管线 article-1: styledHtml 只含渲染有效的计算样式（瘦身）', async () => {
+  const out = await runPipelineTest('article-1.html', 'article-1_key_ids.json');
+  const multiLayer = out.chunks.filter((c) => c.type === 'multiLayer');
+  assert.ok(multiLayer.length > 0, 'article-1 应有 multiLayer 块');
+
+  let totalStyled = 0;
+  for (const chunk of multiLayer) {
+    const s = chunk.styledHtml;
+    totalStyled += s.length;
+    // 白名单外的噪声属性（UA/默认值全量转储的标志）不得出现
+    assert.ok(
+      !/accent-color:|animation-|anchor-name:|caret-color:|transition-|cursor:|user-select:/.test(s),
+      `块 ${chunk.id} styledHtml 不应含白名单外属性（如 accent-color/animation-*）`
+    );
+    // 样式已全量内联，class 是纯噪声
+    assert.ok(!s.includes('class='), `块 ${chunk.id} styledHtml 不应含 class 属性`);
+    // var() 必须是已解析的计算值
+    assert.ok(!s.includes('var('), `块 ${chunk.id} styledHtml 不应含未解析的 var()`);
+    // data-u2m-id 必须保留（下游按 id 引用）
+    assert.ok(s.includes('data-u2m-id'), `块 ${chunk.id} styledHtml 应保留 data-u2m-id`);
+    // 单块安全上限（基线最小块 147KB）
+    assert.ok(s.length < 128 * 1024, `块 ${chunk.id} styledHtml 应 < 128KB，实际 ${s.length}`);
+  }
+  // 总量上限（基线约 9.3MB）
+  assert.ok(totalStyled < 512 * 1024, `styledHtml 总量应 < 512KB，实际 ${totalStyled}`);
+
+  // 夹具有效样式必须保留（计算后的真实值）
+  const all = multiLayer.map((c) => c.styledHtml).join('\n');
+  assert.ok(all.includes('text-transform:uppercase'), '应保留 text-transform 有效值');
+  assert.ok(all.includes('position:absolute'), '应保留 position 有效值');
+  assert.ok(all.includes('font-size:'), '应保留 font-size 计算值');
+
+  // 字体名对下游转化无用（Markdown 不带字体，SVG 规范用系统字体栈）：不保留 font-family 与含字体名的 font 简写
+  for (const chunk of multiLayer) {
+    assert.ok(!chunk.styledHtml.includes('font-family'), `块 ${chunk.id} 不应保留 font-family`);
+    assert.ok(!/(^|;)\s*font:/.test(chunk.styledHtml), `块 ${chunk.id} 不应保留 font 简写（含字体名）`);
+  }
+
+  // 缩进空白（含换行的纯空白文本节点）是源码格式化噪声，应折叠；pre 内的空白除外
+  for (const chunk of multiLayer) {
+    const withoutPre = chunk.styledHtml.replace(/<pre[\s\S]*?<\/pre>/g, '<pre></pre>');
+    assert.ok(!/>\s*\n\s*</.test(withoutPre), `块 ${chunk.id} 不应含换行缩进空白`);
+  }
+
+  // 文本保真：空白折叠不得改变文本内容（归一化后与原始 html 字段一致）
+  // 实体解码（&amp; 必须最后，防双重解码）
+  const decode = (s) => s
+    .replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&amp;/g, '&');
+  const normText = (h) => decode(h).replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+  for (const chunk of multiLayer) {
+    assert.equal(
+      normText(chunk.styledHtml), normText(chunk.html),
+      `块 ${chunk.id} styledHtml 文本内容应与原始 html 一致`
+    );
   }
 });
 
