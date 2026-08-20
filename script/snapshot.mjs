@@ -6,7 +6,7 @@ import path from 'node:path';
 import { chromium } from 'playwright';
 import { emit, emitError, usage, log } from './lib/contract.mjs';
 import { storageStatePath, ensureUrlDirs } from './lib/env.mjs';
-import { proxyLaunchOptions, readStorageState, writeStorageState, mergeStorageState, EMPTY_STATE } from './lib/browser.mjs';
+import { proxyLaunchOptions } from './lib/browser.mjs';
 import { readSharedScript } from './lib/placeholder.mjs';
 import { snapshotLogin } from './lib/snapshot-login.mjs';
 import { snapshotScroll } from './lib/snapshot-scroll.mjs';
@@ -46,15 +46,16 @@ async function main() {
 
   // 启动浏览器（共享上下文）
   const browser = await chromium.launch({ headless: true, ...proxyLaunchOptions() });
-  const ctxOpts = { viewport: { width: 1280, height: 3000 }, bypassCSP: true };
-  if (ssPath && fsSync.existsSync(ssPath)) ctxOpts.storageState = ssPath;
-  const context = await browser.newContext(ctxOpts);
-  await context.route('**/*', (route) =>
-    route.request().resourceType() === 'media' ? route.abort() : route.continue());
-  await context.addInitScript({ content: pageInit });
-  const page = await context.newPage();
-
+  let context;
   try {
+    const ctxOpts = { viewport: { width: 1280, height: 3000 }, bypassCSP: true };
+    if (ssPath && fsSync.existsSync(ssPath)) ctxOpts.storageState = ssPath;
+    context = await browser.newContext(ctxOpts);
+    await context.route('**/*', (route) =>
+      route.request().resourceType() === 'media' ? route.abort() : route.continue());
+    await context.addInitScript({ content: pageInit });
+    const page = await context.newPage();
+
     await snapshotLogin(page, url, { timeout, storageStatePath: ssPath, log });
     await snapshotScroll(page, { scrollRounds });
     await snapshotDetect(page);
@@ -70,10 +71,10 @@ async function main() {
       elements: result.elements,
     });
   } catch (e) {
-    await context.close().catch(() => {});
+    await context?.close().catch(() => {});
     await browser.close().catch(() => {});
     emitError(e.reason || e.message, 1);
   }
 }
 
-main().catch((e) => emitError(e.message, 1));
+main().catch((e) => emitError(e.reason || e.message, 1));
