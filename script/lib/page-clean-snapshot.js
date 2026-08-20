@@ -45,6 +45,8 @@ function __u2mCleanSnapshot(cfg) {
   }
 
   // 6. 长文本占位：textContent.length > MIN_CHARS → {{LONG_TEXT_k|N_CHARS}}
+  //    纯空白文本节点（源码缩进/换行）不含语义内容，不占位——否则会在
+  //    父子元素之间凭空捏造"长文本"，误导步骤 3 的结构识别
   var k = 0;
   var walker = document.createTreeWalker(
     document.body,
@@ -60,7 +62,7 @@ function __u2mCleanSnapshot(cfg) {
   for (var i = 0; i < textNodes.length; i++) {
     var tn = textNodes[i];
     var text = tn.textContent;
-    if (text.length > MIN_CHARS) {
+    if (text.length > MIN_CHARS && text.trim() !== '') {
       k++;
       tn.textContent = '{{LONG_TEXT_' + k + '|' + text.length + '_CHARS}}';
     }
