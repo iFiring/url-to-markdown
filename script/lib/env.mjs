@@ -33,6 +33,7 @@ export function ensureUrlDirs(url) {
   const draft = path.join(assets, 'draft');
   const complex = path.join(assets, 'complex');
   const images = path.join(assets, 'images');
-  for (const d of [dir, assets, draft, complex, images]) fs.mkdirSync(d, { recursive: true });
-  return { urlDir: dir, wf: dir, assets, draft, complex, images, manifest: path.join(dir, 'manifest.json') };
+  const steps = path.join(dir, 'steps');
+  for (const d of [dir, assets, draft, complex, images, steps]) fs.mkdirSync(d, { recursive: true });
+  return { urlDir: dir, wf: dir, assets, draft, complex, images, steps, manifest: path.join(dir, 'manifest.json') };
 }
