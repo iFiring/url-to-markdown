@@ -60,7 +60,53 @@ function __u2mCleanSnapshot(cfg) {
     }
   }
 
-  // 8. 长文本占位：textContent.length > MIN_CHARS → {{LONG_TEXT_k|N_CHARS}}
+  // 8. 删除空元素：子树内既无非空白文本、也无内容元素的空壳（含仅空白文本者）。
+  //    级联：后序单趟——判定基于子树的真实内容，子空则父亦空，自然级联到任意深度。
+  //    内容元素（img/br/svg/pre/h1-h6 等）本身即内容，即使无子节点也保留；
+  //    含文本的 span/div 等天然不空，不受影响。置于按钮删除与 SVG 清空之后，
+  //    只含按钮的容器随之级联清除。
+  var KEEP_EMPTY = {
+    IMG: 1, IFRAME: 1, VIDEO: 1, AUDIO: 1, CANVAS: 1, OBJECT: 1, EMBED: 1,
+    SOURCE: 1, TRACK: 1, PICTURE: 1,
+    BR: 1, HR: 1, INPUT: 1, SELECT: 1, TEXTAREA: 1, WBR: 1,
+    SVG: 1, MATH: 1, PRE: 1,
+    H1: 1, H2: 1, H3: 1, H4: 1, H5: 1, H6: 1
+  };
+
+  // SVG/MathML 命名空间元素的 tagName 保留原大小写（如小写 'svg'），
+  // 统一按大写查表
+  function keepTag(el) {
+    return KEEP_EMPTY[el.tagName.toUpperCase()] === 1;
+  }
+
+  function hasContent(el) {
+    var nodes = el.childNodes;
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      if (n.nodeType === 3) {
+        if (n.textContent.trim() !== '') return true;
+      } else if (n.nodeType === 1) {
+        if (keepTag(n)) return true;
+        if (hasContent(n)) return true;
+      }
+    }
+    return false;
+  }
+
+  var empties = [];
+  function collectEmpty(el) {
+    var children = el.children;
+    for (var i = 0; i < children.length; i++) collectEmpty(children[i]);
+    if (!keepTag(el) && !hasContent(el)) empties.push(el);
+  }
+  var bodyChildren = document.body.children;
+  for (var i = 0; i < bodyChildren.length; i++) collectEmpty(bodyChildren[i]);
+  for (var i = empties.length - 1; i >= 0; i--) {
+    var emp = empties[i];
+    if (emp.parentNode) emp.parentNode.removeChild(emp);
+  }
+
+  // 9. 长文本占位：textContent.length > MIN_CHARS → {{LONG_TEXT_k|N_CHARS}}
   //    纯空白文本节点（源码缩进/换行）不含语义内容，不占位——否则会在
   //    父子元素之间凭空捏造"长文本"，误导步骤 3 的结构识别
   var k = 0;

@@ -100,6 +100,11 @@ async function runPipelineTest(fixtureName, keyIdsFixture) {
     !/<[a-z][a-z0-9-]*[^>]*\srole\s*=\s*["']button["']/i.test(cleaned),
     `${fixtureName}: 清洗后不应含 role="button" 控件`
   );
+  // 空壳元素（子树无非空白文本、无内容元素）应被级联删除
+  assert.ok(
+    !/data-u2m-id="\d+"><\/div>/.test(cleaned),
+    `${fixtureName}: 清洗后不应残留空 div`
+  );
 
   // 步骤 3（模拟）：复制预定义的 key_ids
   const keyIdsPath = path.resolve(`test/fixtures/${keyIdsFixture}`);

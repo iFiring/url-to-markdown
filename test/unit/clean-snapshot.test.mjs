@@ -73,6 +73,61 @@ test('clean_snapshot.mjs: 对 article-1 快照执行清洗', async () => {
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
+test('clean_snapshot.mjs: 空元素级联删除，有内容的元素保留', async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-clean-empty-'));
+  const urlDir = path.join(tmpRoot, 'empty-article');
+  const stepsDir = path.join(urlDir, 'steps');
+  fs.mkdirSync(stepsDir, { recursive: true });
+
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div id="root" data-u2m-id="1">
+    <div data-u2m-id="2"></div>
+    <div data-u2m-id="3">
+      <div data-u2m-id="4"></div>
+    </div>
+    <div data-u2m-id="5">   </div>
+    <div data-u2m-id="6">正文内容</div>
+    <div data-u2m-id="7"><span data-u2m-id="8">行内文本</span></div>
+    <span data-u2m-id="9"></span>
+    <img data-u2m-id="10" src="x.png" alt="x">
+    <svg data-u2m-id="11"></svg>
+    <h1 data-u2m-id="12"></h1>
+    <div data-u2m-id="13"><br></div>
+  </div>
+</body></html>`;
+  fs.writeFileSync(path.join(stepsDir, '1_snapshot.html'), snapshot);
+
+  const script = path.resolve('script/clean_snapshot.mjs');
+  const r = await runScript(process.execPath, [script, urlDir], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+  const cleaned = fs.readFileSync(out.cleanedSnapshot, 'utf8');
+
+  // 空壳删除（含级联与"仅空白"情形）
+  assert.ok(!cleaned.includes('data-u2m-id="2"'), '空 div 应删除');
+  assert.ok(!cleaned.includes('data-u2m-id="3"'), '仅含空子元素的父元素应级联删除');
+  assert.ok(!cleaned.includes('data-u2m-id="4"'), '嵌套的空子元素应删除');
+  assert.ok(!cleaned.includes('data-u2m-id="5"'), '仅含空白文本的元素应删除');
+  assert.ok(!cleaned.includes('data-u2m-id="9"'), '空 span 应删除');
+
+  // 有内容的元素必须保留
+  assert.ok(cleaned.includes('data-u2m-id="6"'), '含文本的元素必须保留');
+  assert.ok(cleaned.includes('data-u2m-id="7"'), '含文本 span 的父元素必须保留');
+  assert.ok(cleaned.includes('data-u2m-id="8"'), '含文本的 span 必须保留');
+  assert.ok(cleaned.includes('data-u2m-id="10"'), 'img 必须保留');
+  assert.ok(cleaned.includes('<svg></svg>'), 'svg 壳必须保留');
+  assert.ok(cleaned.includes('data-u2m-id="12"'), '标题（h1）即使为空也保留');
+  assert.ok(cleaned.includes('data-u2m-id="13"'), '含 br 的元素必须保留');
+
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
 test('clean_snapshot.mjs: 纯空白文本节点（缩进）不占位', async () => {
   // 回归：父元素开标签与子元素之间的缩进空白（>16 字符）曾被占位成
   // {{LONG_TEXT_k|N_CHARS}}，凭空给步骤 3 的 LLM 捏造"父子之间存在长文本"。

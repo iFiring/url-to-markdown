@@ -63,6 +63,7 @@ node <skill-root>/script/clean_snapshot.mjs <url-dir>
 打开 `steps/1_snapshot.html`，执行结构清洗：
 - 删除所有 `style` 属性、`<style>` 标签、`<link>` 标签、`<meta>` 标签、`<base>` 标签（`<title>` 保留）
 - 删除按钮类控件（`<button>`、`role="button"`、按钮型 `<input>`）——交互 UI 与正文结构无关
+- 级联删除空元素（子树无非空白文本、无内容元素的空壳）；`img`/`svg`/`br`/`hr`/`iframe`/`pre`/`h1`-`h6` 等内容元素即使无子节点也保留，含文本的元素不受影响
 - 清空 SVG 内容（仅保留空 `<svg></svg>` 壳）
 - 长文本（`textContent.length > 16` 的非空白文本）替换为 `{{LONG_TEXT_k|N_CHARS}}` 占位符；纯空白文本节点（源码缩进）不占位
 
