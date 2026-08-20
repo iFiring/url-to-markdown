@@ -93,6 +93,13 @@ async function runPipelineTest(fixtureName, keyIdsFixture) {
   const cleaned = fs.readFileSync(cleanedPath, 'utf8');
   assert.ok(!cleaned.match(/ style="/), `${fixtureName}: 清洗后不应含 CSS style 属性`);
   assert.ok(cleaned.includes('LONG_TEXT'), `${fixtureName}: 应含长文本占位符`);
+  // 按钮类控件（button / role=button / input 按钮）是交互 UI 噪声，整体删除；
+  // 断言限定在开标签位置，避免误伤正文里恰好出现的同名字符串
+  assert.ok(!/<button[\s>]/.test(cleaned), `${fixtureName}: 清洗后不应含 <button> 标签`);
+  assert.ok(
+    !/<[a-z][a-z0-9-]*[^>]*\srole\s*=\s*["']button["']/i.test(cleaned),
+    `${fixtureName}: 清洗后不应含 role="button" 控件`
+  );
 
   // 步骤 3（模拟）：复制预定义的 key_ids
   const keyIdsPath = path.resolve(`test/fixtures/${keyIdsFixture}`);
