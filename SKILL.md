@@ -66,7 +66,7 @@ node <skill-root>/script/clean_snapshot.mjs <url-dir>
   - 删除按钮类控件（`<button>`、`role="button"`、按钮型 `<input>`）——交互 UI 与正文结构无关
   - 级联删除空元素（子树无非空白文本、无内容元素的空壳）；`img`/`svg`/`br`/`hr`/`iframe`/`pre`/`h1`-`h6` 等内容元素即使无子节点也保留，含文本的元素不受影响
 - 仅清洗版：删除所有 `style` 属性与 `<style>` 标签、清空 SVG 内容（仅保留空 `<svg></svg>` 壳）
-- 仅带样式版：保留 `style` 属性、`<style>` 标签与完整 SVG（SVG 内文字不占位、原样保留）
+- 仅带样式版：保留 `style` 属性与 `<style>` 标签；SVG 瘦身为空壳（仅留标签的 `id`/`class`/`data-u2m-id`，其余属性与子元素全部删除）
 - 长文本占位（两版编号逐一对应；中英文分标准；纯空白文本节点与 svg/style 子树文本不占位）：
   - 中文文本（含汉字）：字符数 > 16 → `{{LONG_TEXT_k|N_chars}}`（N=字符数）
   - 英文文本（不含汉字）：单词数 > 12 → `{{LONG_TEXT_k|N_words}}`（N=单词数）

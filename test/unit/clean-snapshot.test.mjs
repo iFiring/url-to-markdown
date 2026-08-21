@@ -217,7 +217,7 @@ test('clean_snapshot.mjs: 中英文分标准占位，并生成 2_long_text.json 
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('clean_snapshot.mjs: 带样式快照保留样式与 SVG，占位符与清洗版严格一致', async () => {
+test('clean_snapshot.mjs: 带样式快照保留样式，SVG 瘦身为壳，占位符与清洗版严格一致', async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-clean-styled-'));
   const urlDir = path.join(tmpRoot, 'styled-article');
   const stepsDir = path.join(urlDir, 'steps');
@@ -233,7 +233,7 @@ test('clean_snapshot.mjs: 带样式快照保留样式与 SVG，占位符与清�
   <style>.y{color:green}${cssLong}</style>
   <div data-u2m-id="1">
     <p data-u2m-id="2" style="color:blue">${htmlLong}</p>
-    <svg data-u2m-id="3" width="100" height="100"><text>${svgLong}</text></svg>
+    <svg id="fig1" class="chart" data-u2m-id="3" width="100" height="100"><text>${svgLong}</text></svg>
   </div>
 </body></html>`;
   fs.writeFileSync(path.join(stepsDir, '1_snapshot.html'), snapshot);
@@ -257,12 +257,17 @@ test('clean_snapshot.mjs: 带样式快照保留样式与 SVG，占位符与清�
   assert.ok(cleaned.includes('<svg></svg>'), '清洗版 SVG 应清空为壳');
   assert.ok(!cleaned.includes(svgLong), '清洗版不应残留 SVG 文本');
 
-  // 带样式版：保留 style 属性、<style> 标签与完整 SVG（含样式与文本）
+  // 带样式版：保留 style 属性与 <style> 标签；SVG 瘦身为壳（仅 id/class/data-u2m-id）
   assert.ok(styled.includes('style="color:blue"'), '带样式版应保留元素 style 属性');
   assert.ok(styled.includes('<style'), '带样式版应保留 <style> 标签');
-  assert.ok(styled.includes(svgLong), '带样式版应保留 SVG 文本（原样，不占位）');
   assert.ok(styled.includes(cssLong), '带样式版应保留 body 内 <style> 文本（原样，不占位）');
-  assert.ok(!styled.includes('<svg></svg>'), '带样式版 SVG 不应被清空');
+  const svgOpen = styled.match(/<svg[^>]*>/);
+  assert.ok(svgOpen, '带样式版应含 <svg> 开标签');
+  assert.ok(svgOpen[0].includes('id="fig1"'), 'svg 壳应保留 id');
+  assert.ok(svgOpen[0].includes('class="chart"'), 'svg 壳应保留 class');
+  assert.ok(svgOpen[0].includes('data-u2m-id="3"'), 'svg 壳应保留 data-u2m-id');
+  assert.ok(!/width=|height=/.test(svgOpen[0]), 'svg 壳不应保留 width/height 等其他属性');
+  assert.ok(!styled.includes(svgLong) && !styled.includes('<text'), '带样式版不应残留 SVG 子元素与文本');
 
   // 两版占位符集合完全一致（编号与 N 值逐一对应）
   const ph = (h) => (h.match(/\{\{LONG_TEXT_\d+\|\d+_[a-z]+\}\}/g) || []).sort();

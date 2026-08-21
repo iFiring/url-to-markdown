@@ -2,9 +2,10 @@
  * 步骤 2 页面内清洗函数。在浏览器 evaluate 中执行。
  * 单趟清洗产出两份快照：
  *   html       —— 清洗版：剥样式、SVG 清空（步骤 3 的结构视图）
- *   styledHtml —— 带样式版：保留 style 属性、<style> 标签与完整 SVG，其余与清洗版一致
+ *   styledHtml —— 带样式版：保留 style 属性与 <style> 标签，SVG 瘦身为壳
+ *                 （仅留 id/class/data-u2m-id），其余与清洗版一致
  * 两版共享同一套结构清洗与长文本占位，占位符编号逐一对应；
- * 占位跳过 svg/style 子树文本（清洗版会清空 SVG、删除 <style>，若占位会破坏两版对应）。
+ * 占位跳过 svg/style 子树文本（两版都会删除 SVG 内容与 <style>，若占位会产生孤儿编号）。
  */
 function __u2mCleanSnapshot(cfg) {
   cfg = cfg || {};
@@ -90,9 +91,9 @@ function __u2mCleanSnapshot(cfg) {
   //    原文按占位编号收集进 longTexts，由 CLI 写 2_long_text.json 供后续恢复。
   //    纯空白文本节点（源码缩进/换行）不含语义内容，不占位——否则会在
   //    父子元素之间凭空捏造"长文本"，误导步骤 3 的结构识别。
-  //    svg/style 子树内的文本不占位——清洗版随后会清空 SVG、删除 <style>，
-  //    若占位，占位符会随之消失而编号留在清单里，两版也无法对应；
-  //    这些文字在带样式版中原样保留
+  //    svg/style 子树内的文本不占位——两版都会删除 SVG 内容，清洗版还会删 <style>，
+  //    若占位，占位符会随之消失而编号留在清单里；
+  //    <style> 文本在带样式版中原样保留，SVG 文本两版都不保留
   var MIN_WORDS = typeof cfg.minWords === 'number' ? cfg.minWords : 12;
   var CJK_RE = /[一-鿿]/; // CJK 统一表意文字基本区（U+4E00–U+9FFF）
   function skipPlaceholder(textNode) {
@@ -132,30 +133,42 @@ function __u2mCleanSnapshot(cfg) {
     tn.textContent = '{{LONG_TEXT_' + k + '|' + n + '_' + unit + '}}';
   }
 
-  // --- 此刻 DOM 为"带样式清洗态"（样式/SVG 完整、占位已打）：先序列化带样式版 ---
-  var styledHtml = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
-
-  // 7. 清空 SVG：删除所有属性和子元素，仅保留空 <svg></svg>（仅清洗版）
+  // 7. SVG 瘦身（带样式版）：只留 svg 标签及其 id/class/data-u2m-id，
+  //    删除其余属性与全部子元素——完整 SVG 体积庞大，带样式版只需结构身份
   var svgs = document.querySelectorAll('svg');
   for (var i = 0; i < svgs.length; i++) {
     var svg = svgs[i];
-    // 删除所有属性
-    while (svg.attributes.length > 0) {
-      svg.removeAttribute(svg.attributes[0].name);
-    }
-    // 删除所有子元素
     while (svg.firstChild) {
       svg.removeChild(svg.firstChild);
     }
+    var attrNames = [];
+    for (var j = 0; j < svg.attributes.length; j++) attrNames.push(svg.attributes[j].name);
+    for (var j = 0; j < attrNames.length; j++) {
+      var name = attrNames[j];
+      if (name !== 'id' && name !== 'class' && name !== 'data-u2m-id') {
+        svg.removeAttribute(name);
+      }
+    }
   }
 
-  // 8. 删除所有 style 属性（仅清洗版）
+  // --- 此刻 DOM 为"带样式清洗态"（样式完整、SVG 已瘦身、占位已打）：先序列化带样式版 ---
+  var styledHtml = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+
+  // 8. 清空 SVG 壳：剥掉瘦身壳上剩余的 id/class/data-u2m-id → 裸 <svg></svg>（仅清洗版）
+  for (var i = 0; i < svgs.length; i++) {
+    var svg = svgs[i];
+    while (svg.attributes.length > 0) {
+      svg.removeAttribute(svg.attributes[0].name);
+    }
+  }
+
+  // 9. 删除所有 style 属性（仅清洗版）
   var styled = document.querySelectorAll('[style]');
   for (var i = 0; i < styled.length; i++) {
     styled[i].removeAttribute('style');
   }
 
-  // 9. 删除所有 <style> 标签（仅清洗版）
+  // 10. 删除所有 <style> 标签（仅清洗版）
   var styles = document.querySelectorAll('style');
   for (var i = styles.length - 1; i >= 0; i--) {
     styles[i].parentNode.removeChild(styles[i]);
