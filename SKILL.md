@@ -171,10 +171,62 @@ node <skill-root>/script/extract_article.mjs <url-dir>
 
 | stdout status | 动作 |
 |---|---|
-| `ok` | 进入步骤 4。`elementCount` 为提取的元素数 |
+| `ok` | 进入步骤 3.4。`elementCount` 为提取的元素数 |
 | `error` | 按 `reason` 处理：3.2 产物缺失→跑步骤 3.2；key_ids 缺失→跑步骤 3；id 未命中 / listFlowIds 为空→重跑步骤 3 |
 
+### 步骤 3.4 · markdown 骨架生成（LLM 步骤）
+
+读取 `steps/3.3_article.html`。
+
+你的任务：把文章视图转换成一份 **markdown 骨架**——数组按文档序排列，每项一个单键对象，key 是语义标签，value 是该块的内容模板。长文本只引用占位编号、一字不抄，正文回填由后续脚本完成。
+
+**词汇表**：
+
+| key | value |
+|---|---|
+| `h1`-`h6` | 标题内容（块级 `#` 前缀由回填脚本加，不写在 value） |
+| `p` | 段落内容 |
+| `blockquote` | 引用内容（`> ` 前缀由回填脚本加） |
+| `ul` / `ol` | 列表体，`- xxx` / `1. xxx` 行（行级语法写在 value） |
+| `code` | 对象 `{"lang": "tsx", "content": "..."}`：代码内容 + 语言（语言取自源码块标注或内容判断，无法判断时可省略 `lang`；围栏由回填脚本加）。仅用于**裸**代码块——带背景/边框/标题栏包装的代码块部件按 `trans2svg` 模块标准整体转 SVG |
+| `img` | 图片绝对 URL |
+| `table` | 完整 markdown 管线表（含 `\|--\|--\|` 分隔行） |
+| `trans2svg` | 元素 `data-u2m-id`：独立复杂视觉模块（背景色/边框父元素 + 多级边框/背景色子元素）且**可矢量重建**，后续步骤生成 SVG |
+| `trans2img` | 元素 `data-u2m-id`：复杂模块中**不可矢量重建**者——含多张图片（照片拼贴等）或照片/位图内容，后续步骤截图 |
+
+**value 写法**：
+- 长文本**只引用编号**：读到的 `{{LONG_TEXT_5|47_chars}}` 写成 `{{LONG_TEXT_5}}`（不带后缀）
+- 短文本（未达步骤 2 占位阈值）与 URL：照抄
+- 行内格式（`**粗体**`、`[文](url)`、`` `code` ``）由你写入 value
+- key 是**语义判断**的结果：div 判成标题就写 `h2`，span 容器判成段落就写 `p`，不必与 DOM 标签一致
+
+**约束**：
+- 保持文档序、不重不漏——`trans2svg`/`trans2img` 标记子树**之外**的每个 `{{LONG_TEXT_k}}` 编号**恰好引用一次**（回填脚本按此机械校验）；标记子树内的占位符**不在骨架引用**——其文本由 SVG 生成/截图轮自行还原
+- 一个顶层元素可展开为多条（`figure` → `img` 条 + `figcaption` 的 `p` 条），也可收敛为一条（卡片 div → 单个 `p`）
+- 分派判定两段式：先按**模块标准**圈定——父元素带背景色/边框，子元素再带多级边框/背景色（卡片组、对比面板、图表、图解、带包装的代码块部件）；再按**可矢量化**二分：可矢量重建走 `trans2svg`，含多张图片或不可矢量重建（照片/位图）走 `trans2img`。外层 figure 容器不入标记范围，模块的 caption/脚注单独成 `p` 条目；仅裸代码块走 `code`。模块之外一律文本形态（优先扁平化）
+- 不虚构原文没有的信息
+
+将结果写入 `steps/3.4_skeleton.json`：
+
+```json
+[
+  {"h1": "{{LONG_TEXT_1}}"},
+  {"p": "作者：{{LONG_TEXT_2}} · {{LONG_TEXT_3}}"},
+  {"img": "https://example.com/a/cover.png"},
+  {"blockquote": "{{LONG_TEXT_4}}"},
+  {"code": {"lang": "python", "content": "def hello():\n    print('hi')"}},
+  {"trans2svg": "412"},
+  {"table": "|季度|营收|\n|--|--|\n|Q1|1.2亿|"},
+  {"ul": "- {{LONG_TEXT_10}}\n- {{LONG_TEXT_11}}"},
+  {"trans2img": "518"}
+]
+```
+
+**后续（尚未实现）**：回填脚本读骨架 + `2_long_text.json` 生成最终 markdown；`trans2svg` 元素按 id 取内联样式 HTML（文本先还原成真实文字）交 LLM 生成自包含 SVG；`trans2img` 元素由脚本开浏览器截图。在回填路径端到端跑通前，步骤 4/5 旧路径暂保留可用。
+
 ### 步骤 4 · 分块
+
+> **旧路径**（读 1_snapshot 的分块转化流程）：3.4 骨架回填端到端跑通前暂保留；可不经 3.4，从步骤 3 完成后直接进入。
 
 ```bash
 node <skill-root>/script/chunker.mjs <url-dir>
