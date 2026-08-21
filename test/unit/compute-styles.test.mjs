@@ -7,14 +7,14 @@ import { fileURLToPath } from 'node:url';
 import { runScript } from '../helpers/run-script.mjs';
 
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
-const pageScriptPath = path.resolve(thisDir, '../../script/lib/page-compute-styles.js');
+const pageScriptPath = path.resolve(thisDir, '../../script/lib/page-finalize-inline.js');
 
-test('page-compute-styles.js: 文件存在且包含 __u2mComputeStyles 函数', () => {
+test('page-finalize-inline.js: 文件存在且包含 __u2mFinalizeInline 函数', () => {
   const src = fs.readFileSync(pageScriptPath, 'utf8');
-  assert.ok(src.includes('function __u2mComputeStyles'), '应定义 __u2mComputeStyles');
+  assert.ok(src.includes('function __u2mFinalizeInline'), '应定义 __u2mFinalizeInline');
 });
 
-test('page-compute-styles.js: 函数可被 evaluate 格式调用', () => {
+test('page-finalize-inline.js: 函数可被 evaluate 格式调用', () => {
   const src = fs.readFileSync(pageScriptPath, 'utf8');
   const wrapped = `(${src})()`;
   assert.doesNotThrow(() => new Function('return ' + wrapped));
@@ -27,9 +27,9 @@ test('compute_styles.mjs: 无参数时输出 usage_error', async () => {
   assert.equal(JSON.parse(r.stdout).status, 'usage_error');
 });
 
-// 模拟步骤 3.1 产物：<style> 规则 + 原有内联样式 + class + 文本/非文本元素
+// 模拟步骤 3.1 产物：<style> 规则 + 原有内联样式（含噪声声明）+ class + 文本/非文本元素
 const EXTRACT = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>样式计算</title><style>.box{border:2px solid red;background-color:#f0f0f0}.plain{color:#333;font-weight:bold}p{font-size:18px}</style></head><body><div class="box" style="margin:0" data-u2m-id="1"><p class="plain" data-u2m-id="2">文本</p><div data-u2m-id="3">默认文本</div><span data-u2m-id="4"></span></div></body></html>`;
+<html lang="zh-CN"><head><title>样式计算</title><style>.box{border:2px solid red;background-color:#f0f0f0}.plain{color:#333;font-weight:bold;font-family:Georgia}p{font-size:18px}</style></head><body><div class="box" style="margin:0;font-family:Arial,sans-serif;-webkit-font-smoothing:antialiased;font-style:normal;color:inherit" data-u2m-id="1"><p class="plain" data-u2m-id="2">文本</p><div data-u2m-id="3">默认文本</div><em style="font-style:italic" data-u2m-id="5">强调</em><span data-u2m-id="4"></span></div></body></html>`;
 
 function setupTmp(name, { withExtract = true } = {}) {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), `u2m-styles-${name}-`));
@@ -42,7 +42,7 @@ function setupTmp(name, { withExtract = true } = {}) {
   return { tmpRoot, urlDir, stepsDir };
 }
 
-test('compute_styles.mjs: 计算版/juice 版各自内联并删净 <style> 与 class', async () => {
+test('compute_styles.mjs: juice 内联并删净 <style> 与 class，只产一份文件', async () => {
   const { tmpRoot, urlDir, stepsDir } = setupTmp('ok');
   const script = path.resolve('script/compute_styles.mjs');
   const r = await runScript(process.execPath, [script, urlDir], {
@@ -52,53 +52,34 @@ test('compute_styles.mjs: 计算版/juice 版各自内联并删净 <style> 与 c
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
-  assert.equal(out.computedStyles, path.join(stepsDir, '3.2_computed_styles.html'));
   assert.equal(out.juiceStyles, path.join(stepsDir, '3.2_juice_styles.html'));
-  assert.equal(out.styledCount, 3, '有目标属性的元素应为 3 个（1/2/3）');
+  assert.equal(out.styledCount, 2, '带内联样式的元素应为 2 个（1/2）');
 
-  const computed = fs.readFileSync(out.computedStyles, 'utf8');
+  // 计算版已移除：不再产出
+  assert.ok(!fs.existsSync(path.join(stepsDir, '3.2_computed_styles.html')), '不应再产出计算版文件');
+  assert.equal(out.computedStyles, undefined, 'emit 不应再含 computedStyles 字段');
+
   const juiced = fs.readFileSync(out.juiceStyles, 'utf8');
 
-  // --- 计算版：终态为纯内联 ---
-  assert.ok(!computed.includes('<style'), '计算版不应含 <style> 标签');
-  assert.ok(!computed.includes('class='), '计算版不应含 class 属性');
-
-  // id1（box）：border 三属性 × 4 边 + 背景色；原有 margin 内联被替换掉
-  assert.ok(computed.includes('border-top-width: 2px'), '应有计算边框宽度');
-  assert.ok(computed.includes('border-top-style: solid'), '应有计算边框样式');
-  assert.ok(computed.includes('border-top-color: rgb(255, 0, 0)'), '应有计算边框颜色');
-  assert.ok(computed.includes('background-color: rgb(240, 240, 240)'), '应有计算背景色');
-  assert.ok(!computed.includes('margin'), '原有内联 margin 不应保留');
-
-  // id2（文本元素）：字号/字重/颜色（#333 → rgb）
-  assert.ok(computed.includes('font-size: 18px'), '应有计算字号');
-  assert.ok(computed.includes('font-weight: 700'), 'bold 应计算为 700');
-  assert.ok(computed.includes('color: rgb(51, 51, 51)'), '应有计算颜色');
-
-  // id3（默认样式文本）：字号/字重有，黑色 color 不写
-  assert.ok(computed.includes('font-weight: 400'), '默认字重应写为 400');
-  assert.ok(!computed.includes('color: rgb(0, 0, 0)'), '黑色文本 color 不应写入');
-  assert.ok(!computed.includes('background-color: rgba(0, 0, 0, 0)'), '透明背景不应写入');
-  assert.ok(!computed.includes('border-top-style: none'), 'none 边框不应写入');
-
-  // id4（空 span，无任何目标属性）：不应有 style 属性
-  assert.ok(computed.includes('<span data-u2m-id="4">'), '空元素不应带 style 属性');
-
-  // 非 text 容器（id1 无直接文本）：不应有字体属性
-  const m = computed.match(/<div[^>]*data-u2m-id="1"[^>]*>/);
-  assert.ok(m, 'id1 开标签应存在');
-  assert.ok(!m[0].includes('font-size'), '无直接文本的容器不应有字体属性');
-
-  // --- juice 版：规则内联到元素，<style>/class 删净 ---
-  assert.ok(!juiced.includes('<style'), 'juice 版不应含 <style> 标签');
-  assert.ok(!juiced.includes('class='), 'juice 版不应含 class 属性');
-  assert.ok(juiced.includes('2px solid red'), 'juice 应内联边框规则（字面值）');
-  assert.ok(juiced.includes('#f0f0f0'), 'juice 应内联背景规则（字面值）');
-  assert.ok(juiced.includes('font-weight: bold'), 'juice 应内联字重规则');
-  assert.ok(juiced.includes('color: #333'), 'juice 应内联颜色规则');
-  assert.ok(juiced.includes('font-size: 18px'), 'juice 应内联字号规则');
-  assert.ok(juiced.includes('margin: 0'), 'juice 版原有内联样式参与级联应保留');
+  // 终态：无 <style>、无 class，规则内联到元素（字面声明值）
+  assert.ok(!juiced.includes('<style'), '不应含 <style> 标签');
+  assert.ok(!juiced.includes('class='), '不应含 class 属性');
+  assert.ok(juiced.includes('2px solid red'), '应内联边框规则');
+  // 被清理过的元素经 CSSOM 重序列化，颜色归一为 rgb() 形式（语义等价）
+  assert.ok(juiced.includes('rgb(240, 240, 240)'), '应内联背景规则');
+  assert.ok(juiced.includes('font-weight: bold'), '应内联字重规则');
+  assert.ok(juiced.includes('color: rgb(51, 51, 51)'), '应内联颜色规则');
+  assert.ok(juiced.includes('font-size: 18px'), '应内联字号规则');
+  assert.ok(juiced.includes('margin: 0'), '原有内联样式参与级联应保留');
   assert.ok(juiced.includes('data-u2m-id="2"'), 'data-u2m-id 应保留');
+
+  // 噪声声明清理：font-family / -webkit- 前缀 / font-style（任意值）/ 值为 inherit
+  assert.ok(!juiced.includes('font-family'), 'font-family 声明应删除');
+  assert.ok(!juiced.includes('-webkit-'), '-webkit- 前缀声明应删除');
+  assert.ok(!juiced.includes('font-style'), 'font-style 声明（含 italic）应删除');
+  assert.ok(!juiced.includes('inherit'), '值为 inherit 的声明应删除');
+  // 只剩噪声声明的元素（em 只写了 font-style:normal）：style 属性整体移除
+  assert.ok(juiced.includes('<em data-u2m-id="5">'), '清空后不应残留 style 属性');
 
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });

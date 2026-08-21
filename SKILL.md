@@ -131,26 +131,24 @@ node <skill-root>/script/extract_styled.mjs <url-dir>
 | `ok` | 进入步骤 4。`removedCount` 为删除元素数 |
 | `error` | 按 `reason` 处理：key_ids 缺失→跑步骤 3；快照缺失→跑步骤 2；id 未命中 / listFlowIds 为空→重跑步骤 3 |
 
-### 步骤 3.2 · 样式计算内联
+### 步骤 3.2 · 样式内联（juice）
 
 ```bash
 node <skill-root>/script/compute_styles.mjs <url-dir>
 ```
 
-读取 `steps/3.1_styled_extract.html`，两法各自独立内联样式，产出两份文件。两版终态一致：删除全部 `<style>` 标签与 `class` 属性，样式仅存于内联 style 属性。
+读取 `steps/3.1_styled_extract.html`，juice 按自身 CSS 级联引擎把 `<style>` 规则内联到元素的 style 属性并移除标签（字面声明值：不推导继承、不解析 `var()`；原有内联样式参与级联故保留），随后在浏览器里清理并删净（正文含字面 `class="..."` 文本也不会误伤）：
 
-- **计算版 `steps/3.2_computed_styles.html`**——浏览器 `getComputedStyle` 权威计算值（天然符合 CSS 优先级规则：UA 默认/继承/特异性/`!important`/原内联样式的最终裁决；`var()` 已解析、长度为 px、颜色归一为 rgb/rgba）。目标属性：
-  - border 三属性（width/style/color × 4 边）——某边 border-style 为 `none`/`hidden` 时该边整组跳过（无意义默认不写）
-  - `background-color`——完全透明跳过
-  - 纯文本元素（有非空白直接文本子节点者）：`font-size`、`font-weight`；`color` 为黑色跳过
-  - style 属性**整体替换**为仅含上述计算值；一个目标属性都没有的元素没有 style 属性
-- **juice 版 `steps/3.2_juice_styles.html`**——juice 库按自身级联引擎把 `<style>` 规则内联到元素（字面声明值：不推导继承、不解析 `var()`；原有内联样式参与其级联故保留）
+- **噪声声明删除**：`font-family`、`font-style`（任意值）、`-webkit-` 前缀属性、值为 `inherit` 的声明；清空后移除 style 属性。只动确有噪声的元素——无噪声的保持 juice 字面输出（被清理元素的声明经 CSSOM 重序列化，颜色归一为 rgb() 形式，语义等价）
+- **`<style>` 标签与 `class` 属性删净**
 
-产物：`steps/3.2_computed_styles.html`、`steps/3.2_juice_styles.html`
+终态：无 `<style>`、无 `class`，内联声明只留有意义的。
+
+产物：`steps/3.2_juice_styles.html`
 
 | stdout status | 动作 |
 |---|---|
-| `ok` | 进入步骤 4。`styledCount` 为计算版带样式元素数 |
+| `ok` | 进入步骤 4。`styledCount` 为带内联样式的元素数 |
 | `error` | 3.1 产物缺失→跑步骤 3.1 |
 
 ### 步骤 4 · 分块

@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 // compute_styles.mjs <url-dir>
-// 步骤 3.2：样式计算内联。读 3.1_styled_extract.html，两法各自独立产出：
-//   计算版 3.2_computed_styles.html——浏览器 getComputedStyle 权威值
-//     （border 三属性/背景色/纯文本元素的字号字重颜色）内联到 style 属性，
-//     无意义默认（none 边框/透明背景/黑色文本）不写；
-//   juice 版 3.2_juice_styles.html——juice 库按自身级联引擎内联 <style> 规则
-//     （字面声明值，不推导继承、不解析 var()）。
-// 两版终态一致：删除全部 <style> 标签与 class 属性，样式仅存于内联。
+// 步骤 3.2：样式内联（juice）。读 3.1_styled_extract.html，juice 按自身
+// CSS 级联引擎把 <style> 规则内联到元素的 style 属性并移除标签
+// （字面声明值：不推导继承、不解析 var()；原有内联样式参与级联故保留），
+// 再在浏览器里删净残留 <style> 与全部 class 属性（page-finalize-inline.js）。
+// 终态：无 <style>、无 class，样式仅存于内联。
+// 产物：steps/3.2_juice_styles.html
+// （getComputedStyle 计算版已按效果对比移除，只保留 juice 路径）
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
@@ -52,31 +52,22 @@ async function main() {
   }
 
   const extractHtml = await fsPromises.readFile(extractPath, 'utf8');
-  const pageComputeFn = await readSharedScript('page-compute-styles.js');
+  const pageFinalizeFn = await readSharedScript('page-finalize-inline.js');
 
-  // juice 版：Node 侧内联 <style> 规则并移除标签（class 稍后在浏览器删净）
+  // juice：Node 侧内联 <style> 规则并移除标签（class 稍后在浏览器删净）
   const juicedHtml = juice(extractHtml, { removeStyleTags: true });
 
   let browser;
   try {
     browser = await chromium.launch({ headless: true, ...proxyLaunchOptions() });
     const context = await browser.newContext({ bypassCSP: true });
-
-    // 计算版：真实浏览器里测量计算值并替换内联
     const page = await context.newPage();
-    await page.goto(`file://${extractPath}`, { waitUntil: 'domcontentloaded' });
-    const computed = await page.evaluate(`(${pageComputeFn})()`);
+    await page.setContent(juicedHtml, { waitUntil: 'domcontentloaded' });
+    const final = await page.evaluate(`(${pageFinalizeFn})()`);
 
-    // juice 版：浏览器里仅清场（删 <style> 残留与 class）
-    const stripPage = await context.newPage();
-    await stripPage.setContent(juicedHtml, { waitUntil: 'domcontentloaded' });
-    const stripped = await stripPage.evaluate(`(${pageComputeFn})({mode:'strip'})`);
-
-    const computedPath = path.join(stepsDir, '3.2_computed_styles.html');
     const juicePath = path.join(stepsDir, '3.2_juice_styles.html');
-    await fsPromises.writeFile(computedPath, computed.html, 'utf8');
-    await fsPromises.writeFile(juicePath, stripped.html, 'utf8');
-    log(`样式计算完成: ${computedPath} / ${juicePath} (${computed.styledCount} 个元素带样式)`);
+    await fsPromises.writeFile(juicePath, final.html, 'utf8');
+    log(`样式内联完成: ${juicePath} (${final.styledCount} 个元素带样式)`);
 
     // 先关浏览器再 emit
     await context.close();
@@ -84,9 +75,8 @@ async function main() {
 
     emit({
       status: 'ok',
-      computedStyles: computedPath,
       juiceStyles: juicePath,
-      styledCount: computed.styledCount,
+      styledCount: final.styledCount,
     });
   } catch (e) {
     await browser?.close().catch(() => {});
