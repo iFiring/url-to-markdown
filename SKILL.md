@@ -128,7 +128,7 @@ node <skill-root>/script/extract_styled.mjs <url-dir>
 
 | stdout status | 动作 |
 |---|---|
-| `ok` | 进入步骤 4。`removedCount` 为删除元素数 |
+| `ok` | 进入步骤 3.2。`removedCount` 为删除元素数 |
 | `error` | 按 `reason` 处理：key_ids 缺失→跑步骤 3；快照缺失→跑步骤 2；id 未命中 / listFlowIds 为空→重跑步骤 3 |
 
 ### 步骤 3.2 · 样式内联（juice）
@@ -148,8 +148,30 @@ node <skill-root>/script/compute_styles.mjs <url-dir>
 
 | stdout status | 动作 |
 |---|---|
-| `ok` | 进入步骤 4。`styledCount` 为带内联样式的元素数 |
+| `ok` | 进入步骤 3.3。`styledCount` 为带内联样式的元素数 |
 | `error` | 3.1 产物缺失→跑步骤 3.1 |
+
+### 步骤 3.3 · 文章视图提取
+
+```bash
+node <skill-root>/script/extract_article.mjs <url-dir>
+```
+
+`<url-dir>` 为 `working/` 下的 URL 目录名（相对或绝对路径均可）。
+
+读取 `steps/3.2_juice_styles.html` 与 `steps/3_key_ids.json`，新建一份只含文章主体的 html，按**分组顺序**（标题 → 说明 → 正文块）把元素提取进新 `<body>`：
+
+- `titleIds` / `descriptionIds`：**元素本身**（完整子树，属性与内容一字不动）
+- `listFlowIds`：遍历各容器子节点，**元素与非空白裸文本按文档序交错迁入**——裸文本没有 `data-u2m-id` 但可能是未包标签的正文，丢弃即内容损失；纯空白文本与注释不迁（容器本身与祖先骨架不入新 html）
+- 去重：同一元素被指名两次（如 description 同时是 flow 子元素）只出现一次
+- head：保留原文 `<title>`；`<html lang>` 照抄
+
+产物：`steps/3.3_article.html`
+
+| stdout status | 动作 |
+|---|---|
+| `ok` | 进入步骤 4。`elementCount` 为提取的元素数 |
+| `error` | 按 `reason` 处理：3.2 产物缺失→跑步骤 3.2；key_ids 缺失→跑步骤 3；id 未命中 / listFlowIds 为空→重跑步骤 3 |
 
 ### 步骤 4 · 分块
 
@@ -236,4 +258,5 @@ node <skill-root>/script/chunker.mjs <url-dir>
 | `snapshot` 报 `virtual_list` 但用户确信是普通长页 | 该站可能主动裁剪离屏 DOM（与虚拟列表同构，产出亦只是部分窗口），属已知边界；建议改用其他抓取方式 |
 | 页面加载报 `net::ERR_TUNNEL_CONNECTION_FAILED` / `ERR_PROXY_CONNECTION_FAILED` | 本机系统代理不可用或拒绝目标站：设 `U2M_PROXY=direct` 绕过系统代理，或 `U2M_PROXY=http://<host>:<port>` 显式指定可用代理后重跑 |
 | `clean_snapshot` 报找不到快照 | 先运行步骤 1 生成 `1_snapshot.html` |
+| `extract_article` 报找不到纯内联视图 | 先运行步骤 3.2 生成 `3.2_juice_styles.html` |
 | `chunker` 报找不到 key_ids | 先运行步骤 3 生成 `3_key_ids.json` |
