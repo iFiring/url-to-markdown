@@ -86,8 +86,8 @@ function __u2mCleanSnapshot(cfg) {
   }
 
   // 6. 长文本占位（中英文分标准；两版共享，编号逐一对应）：
-  //    含汉字（CJK）→ 中文标准：字符数 > MIN_CHARS → {{LONG_TEXT_k|N_chars}}
-  //    不含汉字    → 英文标准：单词数 > MIN_WORDS → {{LONG_TEXT_k|N_words}}
+  //    含汉字（CJK）→ 中文标准：字符数 > MIN_CHARS → {{LONG_TEXT_k|n_chars}}
+  //    不含汉字    → 英文标准：单词数 > MIN_WORDS → {{LONG_TEXT_k|n_words}}
   //    原文按占位编号收集进 longTexts，由 CLI 写 2_long_text.json 供后续恢复。
   //    纯空白文本节点（源码缩进/换行）不含语义内容，不占位——否则会在
   //    父子元素之间凭空捏造"长文本"，误导步骤 3 的结构识别。

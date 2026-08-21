@@ -68,8 +68,8 @@ node <skill-root>/script/clean_snapshot.mjs <url-dir>
 - 仅清洗版：删除所有 `style` 属性与 `<style>` 标签、清空 SVG 内容（仅保留空 `<svg></svg>` 壳）
 - 仅带样式版：保留 `style` 属性与 `<style>` 标签；SVG 瘦身为空壳（仅留标签的 `id`/`class`/`data-u2m-id`，其余属性与子元素全部删除）
 - 长文本占位（两版编号逐一对应；中英文分标准；纯空白文本节点与 svg/style 子树文本不占位）：
-  - 中文文本（含汉字）：字符数 > 16 → `{{LONG_TEXT_k|N_chars}}`（N=字符数）
-  - 英文文本（不含汉字）：单词数 > 12 → `{{LONG_TEXT_k|N_words}}`（N=单词数）
+  - 中文文本（含汉字）：字符数 > 16 → `{{LONG_TEXT_k|n_chars}}`（n=字符数）
+  - 英文文本（不含汉字）：单词数 > 12 → `{{LONG_TEXT_k|n_words}}`（n=单词数）
   - 原文按占位编号记入 `steps/2_long_text.json`（编号 → 原文映射），供后续流程恢复
 
 产物：`steps/2_clean_snapshot.html`（步骤 3 的结构视图）、`steps/2_clean_style_snapshot.html`（带样式版）、`steps/2_long_text.json`
@@ -83,7 +83,7 @@ node <skill-root>/script/clean_snapshot.mjs <url-dir>
 
 读取 `steps/2_clean_snapshot.html`。
 
-你的任务：仅根据 DOM 结构（元素层级、标签类型、嵌套深度）和长文本占位符（`{{LONG_TEXT_k|N_chars}}` / `{{LONG_TEXT_k|N_words}}`）分布，找到以下三类关键元素的 `data-u2m-id`：
+你的任务：仅根据 DOM 结构（元素层级、标签类型、嵌套深度）和长文本占位符（`{{LONG_TEXT_k|n_chars}}` / `{{LONG_TEXT_k|n_words}}`）分布，找到以下三类关键元素的 `data-u2m-id`：
 
 1. **标题分块**（`titleIds`）：文章主标题对应的元素 ID。通常是层级最高的 `<h1>`-`<h3>` 或结构上处于列表流顶部的标题性容器
 2. **说明分块**（`descriptionIds`）：描述性元数据对应的元素 ID，如作者、日期、摘要、副标题等。可为空数组
