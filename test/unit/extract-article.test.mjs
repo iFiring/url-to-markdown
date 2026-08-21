@@ -66,6 +66,7 @@ test('extract_article.mjs: 分组顺序提取进新 body，骨架与 flow 容器
   const html = fs.readFileSync(out.article, 'utf8');
 
   // key 元素与 flow 子元素保留，属性与内容一字不动
+  assert.ok(html.includes('<body style="max-width: 768px; margin: 4rem auto">'), 'body 应带居中布局内联样式');
   assert.ok(html.includes('<title>测试文章</title>'), '<title> 应保留');
   assert.ok(html.includes('<html lang="zh-CN">'), 'lang 应保留');
   assert.ok(html.includes('<h1 style="font-size: 32px; font-weight: bold" data-u2m-id="1">标题</h1>'));
@@ -125,7 +126,7 @@ test('extract_article.mjs: flow 内未包标签的非空白文本按文档序迁
 
   const html = fs.readFileSync(out.article, 'utf8');
   // 文本 1/文本 2 迁入，且与元素按文档序交错；flow 容器不入
-  assert.ok(html.includes('<body><h1 data-u2m-id="1">标题</h1>文本 1<p data-u2m-id="5">段落</p>文本 2<figure data-u2m-id="6">…</figure></body>'),
+  assert.ok(html.includes('<body style="max-width: 768px; margin: 4rem auto"><h1 data-u2m-id="1">标题</h1>文本 1<p data-u2m-id="5">段落</p>文本 2<figure data-u2m-id="6">…</figure></body>'),
     `body 应按文档序交错迁入裸文本: ${html.slice(html.indexOf('<body>'))}`);
   assert.ok(!html.includes('data-u2m-id="4"'), 'flow 容器应不入');
   fs.rmSync(tmpRoot, { recursive: true, force: true });
@@ -147,7 +148,7 @@ test('extract_article.mjs: 纯空白文本与注释不迁入', async () => {
 
   const html = fs.readFileSync(out.article, 'utf8');
   // 纯空白文本节点与注释被跳过，body 内元素直接相连，无 <!--注-->
-  assert.ok(html.includes('<body><h1 data-u2m-id="1">标题</h1><p data-u2m-id="5">段落</p></body>'),
+  assert.ok(html.includes('<body style="max-width: 768px; margin: 4rem auto"><h1 data-u2m-id="1">标题</h1><p data-u2m-id="5">段落</p></body>'),
     `body 不应含空白或注释: ${html.slice(html.indexOf('<body>'))}`);
   assert.ok(!html.includes('<!--'), '注释不应迁入');
   fs.rmSync(tmpRoot, { recursive: true, force: true });

@@ -10,7 +10,8 @@
  * 属性与内容一字不动；同一元素被指名两次（如 description 同时是
  * flow 子元素）只迁移一次；被指名元素若嵌套在另一被提取元素内部，
  * 会先迁出（原位留空），不会重复出现。
- * head 保留原文 <title>，<html lang> 照抄。
+ * head 保留原文 <title>，<html lang> 照抄；新 <body> 带阅读布局内联
+ * 样式 max-width:768px + margin:4rem auto（限宽水平居中，上下留白）。
  * 注意：chunker 的列表流遍历仍是 el.children（裸文本不入块），
  * 两处语义有意不同——如需对齐另行决策。
  */
@@ -50,6 +51,7 @@ function __u2mExtractArticle(keyIds) {
   );
   var lang = document.documentElement.getAttribute('lang');
   if (lang) doc.documentElement.setAttribute('lang', lang);
+  doc.body.setAttribute('style', 'max-width: 768px; margin: 4rem auto');
 
   var seen = [];
   var count = 0;

@@ -165,6 +165,7 @@ node <skill-root>/script/extract_article.mjs <url-dir>
 - `listFlowIds`：遍历各容器子节点，**元素与非空白裸文本按文档序交错迁入**——裸文本没有 `data-u2m-id` 但可能是未包标签的正文，丢弃即内容损失；纯空白文本与注释不迁（容器本身与祖先骨架不入新 html）
 - 去重：同一元素被指名两次（如 description 同时是 flow 子元素）只出现一次
 - head：保留原文 `<title>`；`<html lang>` 照抄
+- 新 `<body>` 带阅读布局内联样式 `max-width: 768px; margin: 4rem auto`（限宽、水平居中）
 
 产物：`steps/3.3_article.html`
 
