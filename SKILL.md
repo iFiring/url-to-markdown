@@ -110,6 +110,27 @@ node <skill-root>/script/clean_snapshot.mjs <url-dir>
 }
 ```
 
+### 步骤 3.1 · 样式视图裁剪
+
+```bash
+node <skill-root>/script/extract_styled.mjs <url-dir>
+```
+
+`<url-dir>` 为 `working/` 下的 URL 目录名（相对或绝对路径均可）。
+
+读取 `steps/3_key_ids.json` 与 `steps/2_clean_style_snapshot.html`，裁剪出只含文章主体的带样式视图：
+
+- **完整保留（一字不动，含全部标签属性与样式属性）**：三类 key 元素（`titleIds`/`descriptionIds`/`listFlowIds`）的子树 + 它们到 `<body>` 的祖先链——祖先上下文不变，CSS 选择器照常生效
+- **`<head>` 完全不动**（`<title>` + 全部 `<style>` 原地保留）；body 里即将删除的分支中若有 `<style>`，先挪入 `<head>` 再删分支，样式标签零丢失
+- **删除**：其余全部 body 元素（封面区块、推荐、营销等 step 3 排除的内容）
+
+产物：`steps/3.1_styled_extract.html`
+
+| stdout status | 动作 |
+|---|---|
+| `ok` | 进入步骤 4。`removedCount` 为删除元素数 |
+| `error` | 按 `reason` 处理：key_ids 缺失→跑步骤 3；快照缺失→跑步骤 2；id 未命中 / listFlowIds 为空→重跑步骤 3 |
+
 ### 步骤 4 · 分块
 
 ```bash
