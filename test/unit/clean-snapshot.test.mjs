@@ -216,3 +216,64 @@ test('clean_snapshot.mjs: 中英文分标准占位，并生成 2_long_text.json 
 
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
+
+test('clean_snapshot.mjs: 带样式快照保留样式与 SVG，占位符与清洗版严格一致', async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-clean-styled-'));
+  const urlDir = path.join(tmpRoot, 'styled-article');
+  const stepsDir = path.join(urlDir, 'steps');
+  fs.mkdirSync(stepsDir, { recursive: true });
+
+  // HTML 长文本（应占位）+ SVG 内长文本与 body 内 <style> 长 CSS（不应占位，否则两版编号错位）
+  const htmlLong = '这是一段足够长的中文文本，用来触发占位符的产生。';
+  const svgLong = '很长的SVG文本内容，如果参与占位会导致编号错位的问题出现。';
+  const cssLong = '/* 这是一段足够长的CSS注释，用来验证样式文本不会被占位。 */';
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title><style>.x{color:red}</style></head>
+<body>
+  <style>.y{color:green}${cssLong}</style>
+  <div data-u2m-id="1">
+    <p data-u2m-id="2" style="color:blue">${htmlLong}</p>
+    <svg data-u2m-id="3" width="100" height="100"><text>${svgLong}</text></svg>
+  </div>
+</body></html>`;
+  fs.writeFileSync(path.join(stepsDir, '1_snapshot.html'), snapshot);
+
+  const script = path.resolve('script/clean_snapshot.mjs');
+  const r = await runScript(process.execPath, [script, urlDir], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+
+  const cleaned = fs.readFileSync(out.cleanedSnapshot, 'utf8');
+  assert.ok(out.styledSnapshot, 'emit 应含 styledSnapshot 路径');
+  const styled = fs.readFileSync(out.styledSnapshot, 'utf8');
+
+  // 清洗版：无样式、SVG 清空
+  assert.ok(!cleaned.match(/ style="/), '清洗版不应含 style 属性');
+  assert.ok(!cleaned.includes('<style'), '清洗版不应含 <style> 标签');
+  assert.ok(cleaned.includes('<svg></svg>'), '清洗版 SVG 应清空为壳');
+  assert.ok(!cleaned.includes(svgLong), '清洗版不应残留 SVG 文本');
+
+  // 带样式版：保留 style 属性、<style> 标签与完整 SVG（含样式与文本）
+  assert.ok(styled.includes('style="color:blue"'), '带样式版应保留元素 style 属性');
+  assert.ok(styled.includes('<style'), '带样式版应保留 <style> 标签');
+  assert.ok(styled.includes(svgLong), '带样式版应保留 SVG 文本（原样，不占位）');
+  assert.ok(styled.includes(cssLong), '带样式版应保留 body 内 <style> 文本（原样，不占位）');
+  assert.ok(!styled.includes('<svg></svg>'), '带样式版 SVG 不应被清空');
+
+  // 两版占位符集合完全一致（编号与 N 值逐一对应）
+  const ph = (h) => (h.match(/\{\{LONG_TEXT_\d+\|\d+_[a-z]+\}\}/g) || []).sort();
+  assert.deepEqual(ph(styled), ph(cleaned), '两版长文本占位符应完全一致');
+  assert.ok(cleaned.includes('{{LONG_TEXT_'), 'HTML 长文本应被占位');
+  assert.ok(!styled.includes(htmlLong), '带样式版中 HTML 长文本同样应被占位');
+
+  // 恢复清单条数 = 占位数（SVG 文本与 <style> CSS 均不参与，故仅 htmlLong 一条）
+  assert.equal(out.longTextCount, 1, '仅 HTML 长文本占位，SVG/style 文本不计入');
+  const longTexts = JSON.parse(fs.readFileSync(out.longText, 'utf8'));
+  assert.deepEqual(longTexts, { 1: htmlLong }, '恢复清单应仅含 HTML 长文本');
+
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});

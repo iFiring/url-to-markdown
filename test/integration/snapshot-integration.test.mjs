@@ -153,6 +153,21 @@ async function runPipelineTest(fixtureName, keyIdsFixture) {
     assert.ok(cleaned.includes(`{{LONG_TEXT_${k}|`), `${fixtureName}: 占位符 ${k} 应出现在清洗快照中`);
   }
 
+  // 2_clean_style_snapshot.html：带样式版——保留样式，结构清洗与占位符和清洗版逐一对应
+  assert.ok(out2.styledSnapshot, `${fixtureName}: emit 应含 styledSnapshot 路径`);
+  const styledPath = path.join(stepsDir, '2_clean_style_snapshot.html');
+  assert.ok(fs.existsSync(styledPath), `${fixtureName}: 2_clean_style_snapshot.html 应存在`);
+  const styled = fs.readFileSync(styledPath, 'utf8');
+  assert.ok(
+    styled.includes('style="') || styled.includes('<style'),
+    `${fixtureName}: 带样式版应保留样式`
+  );
+  assert.ok(!/<button[\s>]/.test(styled), `${fixtureName}: 带样式版同样应删除按钮`);
+  assert.ok(!/<meta/.test(styled) && !/<link/.test(styled), `${fixtureName}: 带样式版同样应删 meta/link`);
+  // 占位符一一对应：两版占位符集合完全相同（编号与 N 值）
+  const phOf = (h) => (h.match(/\{\{LONG_TEXT_\d+\|\d+_[a-z]+\}\}/g) || []).sort();
+  assert.deepEqual(phOf(styled), phOf(cleaned), `${fixtureName}: 两版占位符应逐一对应`);
+
   // 步骤 3（模拟）：复制预定义的 key_ids
   const keyIdsPath = path.resolve(`test/fixtures/${keyIdsFixture}`);
   fs.copyFileSync(keyIdsPath, path.join(stepsDir, '3_key_ids.json'));

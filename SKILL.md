@@ -60,21 +60,23 @@ node <skill-root>/script/clean_snapshot.mjs <url-dir>
 
 `<url-dir>` 为 `working/` 下的 URL 目录名（相对或绝对路径均可）。
 
-打开 `steps/1_snapshot.html`，执行结构清洗：
-- 删除所有 `style` 属性、`<style>` 标签、`<link>` 标签、`<meta>` 标签、`<base>` 标签（`<title>` 保留）
-- 删除按钮类控件（`<button>`、`role="button"`、按钮型 `<input>`）——交互 UI 与正文结构无关
-- 级联删除空元素（子树无非空白文本、无内容元素的空壳）；`img`/`svg`/`br`/`hr`/`iframe`/`pre`/`h1`-`h6` 等内容元素即使无子节点也保留，含文本的元素不受影响
-- 清空 SVG 内容（仅保留空 `<svg></svg>` 壳）
-- 长文本占位（中英文分标准；纯空白文本节点不占位）：
+打开 `steps/1_snapshot.html`，单趟结构清洗，产出两份快照（共享同一套清洗与占位）：
+- 共同清洗（两版一致）：
+  - 删除 `<link>` 标签、`<meta>` 标签、`<base>` 标签（`<title>` 保留）
+  - 删除按钮类控件（`<button>`、`role="button"`、按钮型 `<input>`）——交互 UI 与正文结构无关
+  - 级联删除空元素（子树无非空白文本、无内容元素的空壳）；`img`/`svg`/`br`/`hr`/`iframe`/`pre`/`h1`-`h6` 等内容元素即使无子节点也保留，含文本的元素不受影响
+- 仅清洗版：删除所有 `style` 属性与 `<style>` 标签、清空 SVG 内容（仅保留空 `<svg></svg>` 壳）
+- 仅带样式版：保留 `style` 属性、`<style>` 标签与完整 SVG（SVG 内文字不占位、原样保留）
+- 长文本占位（两版编号逐一对应；中英文分标准；纯空白文本节点与 svg/style 子树文本不占位）：
   - 中文文本（含汉字）：字符数 > 16 → `{{LONG_TEXT_k|N_chars}}`（N=字符数）
   - 英文文本（不含汉字）：单词数 > 12 → `{{LONG_TEXT_k|N_words}}`（N=单词数）
   - 原文按占位编号记入 `steps/2_long_text.json`（编号 → 原文映射），供后续流程恢复
 
-产物：`steps/2_clean_snapshot.html`、`steps/2_long_text.json`
+产物：`steps/2_clean_snapshot.html`（步骤 3 的结构视图）、`steps/2_clean_style_snapshot.html`（带样式版）、`steps/2_long_text.json`
 
 | stdout status | 动作 |
 |---|---|
-| `ok` | 进入步骤 3。`longTextCount` 字段为占位符数量，`longText` 为恢复清单路径 |
+| `ok` | 进入步骤 3。`longTextCount` 为占位符数量，`longText` 为恢复清单路径，`styledSnapshot` 为带样式版路径 |
 | `error` | 按 `reason` 处理：快照缺失→先跑步骤 1；其他→反馈给用户 |
 
 ### 步骤 3 · 关键 ID 识别（LLM 步骤）

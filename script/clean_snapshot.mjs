@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // clean_snapshot.mjs <url-dir>
-// 步骤 2：结构清洗。打开 1_snapshot.html，剥尽样式/SVG 内容，长文本占位。
+// 步骤 2：结构清洗。打开 1_snapshot.html，长文本占位，产出两份快照：
+// 清洗版（剥样式/清空 SVG）与带样式版（保留 style/<style>/完整 SVG）。
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
@@ -61,6 +62,9 @@ async function main() {
     // 写盘
     const cleanedPath = path.join(stepsDir, '2_clean_snapshot.html');
     await fsPromises.writeFile(cleanedPath, result.html, 'utf8');
+    // 带样式版：保留 style 属性/<style>/完整 SVG，占位符与清洗版逐一对应
+    const styledPath = path.join(stepsDir, '2_clean_style_snapshot.html');
+    await fsPromises.writeFile(styledPath, result.styledHtml, 'utf8');
     // 长文本恢复清单：占位编号 → 原文
     const longTextPath = path.join(stepsDir, '2_long_text.json');
     await fsPromises.writeFile(longTextPath, JSON.stringify(result.longTexts), 'utf8');
@@ -73,6 +77,7 @@ async function main() {
     emit({
       status: 'ok',
       cleanedSnapshot: cleanedPath,
+      styledSnapshot: styledPath,
       longText: longTextPath,
       longTextCount: result.longTextCount,
     });
