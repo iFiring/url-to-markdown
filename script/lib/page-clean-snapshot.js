@@ -49,17 +49,38 @@ function __u2mCleanSnapshot(cfg) {
     skeletons[i].parentNode.removeChild(skeletons[i]);
   }
 
-  // 6. 删除空元素：子树内既无非空白文本、也无内容元素的空壳（含仅空白文本者）。
+  // 6. 删除媒体播放器标签 <video>/<audio>——播放器控件无正文结构价值，
+  //     子元素 <source>/<track> 随之删除（分派不受影响：chunker 读 1_snapshot）
+  var players = document.querySelectorAll('video, audio');
+  for (var i = players.length - 1; i >= 0; i--) {
+    players[i].parentNode.removeChild(players[i]);
+  }
+
+  // 7. 删除残余表单控件与模态框：<input>/<select>/<textarea>/<label>/<dialog>——
+  //     <form> 已整体删除，这里兜住 form 外的搜索框、下拉、对话框等 UI 控件；
+  //     <header>/<aside> 是正文结构（hero 含主标题、章节 header+aside 交替），不删
+  var controls = document.querySelectorAll('input, select, textarea, label, dialog');
+  for (var i = controls.length - 1; i >= 0; i--) {
+    controls[i].parentNode.removeChild(controls[i]);
+  }
+
+  // 8. 删除空元素：子树内既无非空白文本、也无内容元素的空壳（含仅空白文本者）。
   //    级联：后序单趟——判定基于子树的真实内容，子空则父亦空，自然级联到任意深度。
   //    内容元素（img/br/svg/pre/h1-h6 等）本身即内容，即使无子节点也保留；
-  //    含文本的 span/div 等天然不空，不受影响。置于按钮删除之后，
-  //    只含按钮的容器随之级联清除。
+  //    含文本的 span/div 等天然不空，不受影响。置于各类噪声删除
+  //    （按钮/骨架/媒体/控件）之后，只含噪声的容器随之级联清除。
+  //    video/audio/input 等已在前序步骤整体删除，不再列入白名单。
+  //    表格结构元素（table/tr/td/col 等）即使为空也保留——删掉空单元格/
+  //    空行/列定义会让行列错位，破坏表格整体显示；单元格内的噪声（按钮等）
+  //    照删，留下空壳单元格。
   var KEEP_EMPTY = {
-    IMG: 1, IFRAME: 1, VIDEO: 1, AUDIO: 1, CANVAS: 1, OBJECT: 1, EMBED: 1,
-    SOURCE: 1, TRACK: 1, PICTURE: 1,
-    BR: 1, HR: 1, INPUT: 1, SELECT: 1, TEXTAREA: 1, WBR: 1,
+    IMG: 1, IFRAME: 1, CANVAS: 1, OBJECT: 1, EMBED: 1,
+    SOURCE: 1, PICTURE: 1,
+    BR: 1, HR: 1, WBR: 1,
     SVG: 1, MATH: 1, PRE: 1,
-    H1: 1, H2: 1, H3: 1, H4: 1, H5: 1, H6: 1
+    H1: 1, H2: 1, H3: 1, H4: 1, H5: 1, H6: 1,
+    TABLE: 1, CAPTION: 1, COLGROUP: 1, COL: 1,
+    THEAD: 1, TBODY: 1, TFOOT: 1, TR: 1, TD: 1, TH: 1
   };
 
   // SVG/MathML 命名空间元素的 tagName 保留原大小写（如小写 'svg'），
@@ -95,7 +116,7 @@ function __u2mCleanSnapshot(cfg) {
     if (emp.parentNode) emp.parentNode.removeChild(emp);
   }
 
-  // 7. 长文本占位（中英文分标准；两版共享，编号逐一对应）：
+  // 9. 长文本占位（中英文分标准；两版共享，编号逐一对应）：
   //    含汉字（CJK）→ 中文标准：字符数 > MIN_CHARS → {{LONG_TEXT_k|n_chars}}
   //    不含汉字    → 英文标准：单词数 > MIN_WORDS → {{LONG_TEXT_k|n_words}}
   //    原文按占位编号收集进 longTexts，由 CLI 写 2_long_text.json 供后续恢复。
@@ -143,7 +164,7 @@ function __u2mCleanSnapshot(cfg) {
     tn.textContent = '{{LONG_TEXT_' + k + '|' + n + '_' + unit + '}}';
   }
 
-  // 8. SVG 瘦身（带样式版）：只留 svg 标签及其 id/class/data-u2m-id，
+  // 10. SVG 瘦身（带样式版）：只留 svg 标签及其 id/class/data-u2m-id，
   //    删除其余属性与全部子元素——完整 SVG 体积庞大，带样式版只需结构身份
   var svgs = document.querySelectorAll('svg');
   for (var i = 0; i < svgs.length; i++) {
@@ -164,7 +185,7 @@ function __u2mCleanSnapshot(cfg) {
   // --- 此刻 DOM 为"带样式清洗态"（样式完整、SVG 已瘦身、占位已打）：先序列化带样式版 ---
   var styledHtml = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
 
-  // 9. 清空 SVG 壳：剥掉瘦身壳上剩余的 id/class/data-u2m-id → 裸 <svg></svg>（仅清洗版）
+  // 11. 清空 SVG 壳：剥掉瘦身壳上剩余的 id/class/data-u2m-id → 裸 <svg></svg>（仅清洗版）
   for (var i = 0; i < svgs.length; i++) {
     var svg = svgs[i];
     while (svg.attributes.length > 0) {
@@ -172,13 +193,13 @@ function __u2mCleanSnapshot(cfg) {
     }
   }
 
-  // 10. 删除所有 style 属性（仅清洗版）
+  // 12. 删除所有 style 属性（仅清洗版）
   var styled = document.querySelectorAll('[style]');
   for (var i = 0; i < styled.length; i++) {
     styled[i].removeAttribute('style');
   }
 
-  // 11. 删除所有 <style> 标签（仅清洗版）
+  // 13. 删除所有 <style> 标签（仅清洗版）
   var styles = document.querySelectorAll('style');
   for (var i = styles.length - 1; i >= 0; i--) {
     styles[i].parentNode.removeChild(styles[i]);

@@ -187,6 +187,134 @@ test('clean_snapshot.mjs: 删除 nav/footer/form 及 role 等价物，正文保�
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
+test('clean_snapshot.mjs: 删除 video/audio 与残余表单控件，header/aside 保留', async () => {
+  // 媒体播放器与 form 外残余控件（搜索框/下拉/对话框）不是文章正文；
+  // header/aside 是正文结构（hero 含主标题、章节 header+aside 交替），必须保留
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-clean-media-'));
+  const urlDir = path.join(tmpRoot, 'media-article');
+  const stepsDir = path.join(urlDir, 'steps');
+  fs.mkdirSync(stepsDir, { recursive: true });
+
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div id="root" data-u2m-id="1">
+    <video data-u2m-id="2" src="v.mp4"><source data-u2m-id="3" src="v.webm"><track data-u2m-id="4" kind="subtitles"></video>
+    <audio data-u2m-id="5" src="a.mp3"></audio>
+    <div data-u2m-id="6"><video data-u2m-id="7" src="v2.mp4"></video></div>
+    <input data-u2m-id="8" value="搜索">
+    <select data-u2m-id="9"><option>选项</option></select>
+    <textarea data-u2m-id="10">留言</textarea>
+    <label data-u2m-id="11">标签文本</label>
+    <dialog data-u2m-id="12">对话框内容</dialog>
+    <article data-u2m-id="13"><header data-u2m-id="14"><h1 data-u2m-id="15">标题</h1></header><p data-u2m-id="16">正文段落</p><aside data-u2m-id="17">补充说明</aside></article>
+  </div>
+</body></html>`;
+  fs.writeFileSync(path.join(stepsDir, '1_snapshot.html'), snapshot);
+
+  const script = path.resolve('script/clean_snapshot.mjs');
+  const r = await runScript(process.execPath, [script, urlDir], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+  const cleaned = fs.readFileSync(out.cleanedSnapshot, 'utf8');
+
+  // 媒体播放器整体删除（断言限定开标签位置，避免误伤正文同名字符串）
+  assert.ok(!/<video[\s>]/.test(cleaned), 'video 应删除');
+  assert.ok(!/<audio[\s>]/.test(cleaned), 'audio 应删除');
+  assert.ok(!cleaned.includes('data-u2m-id="2"'), 'video 元素应删除');
+  assert.ok(!cleaned.includes('data-u2m-id="3"'), 'video 内的 source 随之删除');
+  assert.ok(!cleaned.includes('data-u2m-id="4"'), 'video 内的 track 随之删除');
+  assert.ok(!cleaned.includes('data-u2m-id="5"'), 'audio 元素应删除');
+  assert.ok(!cleaned.includes('data-u2m-id="6"'), '只含 video 的包装容器应级联删除');
+
+  // 残余表单控件与模态框删除
+  assert.ok(!/<input[\s>]/.test(cleaned), 'input 应删除');
+  assert.ok(!/<select[\s>]/.test(cleaned), 'select 应删除');
+  assert.ok(!/<textarea[\s>]/.test(cleaned), 'textarea 应删除');
+  assert.ok(!/<label[\s>]/.test(cleaned), 'label 应删除');
+  assert.ok(!/<dialog[\s>]/.test(cleaned), 'dialog 应删除');
+  assert.ok(!cleaned.includes('data-u2m-id="8"'), 'form 外的 input 同样删除');
+  assert.ok(!cleaned.includes('data-u2m-id="9"'), 'select 应删除');
+  assert.ok(!cleaned.includes('data-u2m-id="10"'), 'textarea 应删除');
+  assert.ok(!cleaned.includes('data-u2m-id="11"'), 'label 应删除');
+  assert.ok(!cleaned.includes('data-u2m-id="12"'), 'dialog 应删除');
+
+  // header/aside 是正文结构（hero 含标题、章节补充内容），必须保留
+  assert.ok(cleaned.includes('data-u2m-id="13"'), 'article 正文必须保留');
+  assert.ok(cleaned.includes('data-u2m-id="14"'), 'article 内的 header 必须保留');
+  assert.ok(cleaned.includes('data-u2m-id="15"'), 'header 内的 h1 必须保留');
+  assert.ok(cleaned.includes('data-u2m-id="16"'), '正文段落必须保留');
+  assert.ok(cleaned.includes('data-u2m-id="17"'), 'aside 补充内容必须保留');
+  assert.ok(cleaned.includes('正文段落'), '正文文本必须保留');
+  assert.ok(cleaned.includes('补充说明'), 'aside 文本必须保留');
+
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test('clean_snapshot.mjs: 表格结构整体保留（含空单元格），内部噪声仍删', async () => {
+  // 回归：空 <td>/<th>/<tr>/<col> 不在 KEEP_EMPTY 白名单时会被空元素级联删除，
+  // 删掉后表格行列错位；article-1 实测丢过整个 <colgroup>+4 <col>。
+  // 表格结构元素即使为空也保留；单元格内的按钮等噪声照删，留下空壳单元格。
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-clean-table-'));
+  const urlDir = path.join(tmpRoot, 'table-article');
+  const stepsDir = path.join(urlDir, 'steps');
+  fs.mkdirSync(stepsDir, { recursive: true });
+
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div id="root" data-u2m-id="1">
+    <table data-u2m-id="2">
+      <colgroup data-u2m-id="3"><col data-u2m-id="4"><col data-u2m-id="5"></colgroup>
+      <thead data-u2m-id="6"><tr data-u2m-id="7"><th data-u2m-id="8">列A</th><th data-u2m-id="9"></th></tr></thead>
+      <tbody data-u2m-id="10">
+        <tr data-u2m-id="11"><td data-u2m-id="12">有值</td><td data-u2m-id="13"></td><td data-u2m-id="14"><button data-u2m-id="15">按钮</button></td></tr>
+        <tr data-u2m-id="16"></tr>
+      </tbody>
+    </table>
+    <p data-u2m-id="17">正文段落</p>
+  </div>
+</body></html>`;
+  fs.writeFileSync(path.join(stepsDir, '1_snapshot.html'), snapshot);
+
+  const script = path.resolve('script/clean_snapshot.mjs');
+  const r = await runScript(process.execPath, [script, urlDir], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+  const cleaned = fs.readFileSync(out.cleanedSnapshot, 'utf8');
+
+  // 表格结构全体保留——含空 th/td/tr 与无子节点的 col/colgroup
+  for (const [tid, what] of [
+    ['2', 'table'], ['3', 'colgroup'], ['4', 'col'], ['5', 'col'],
+    ['6', 'thead'], ['7', 'tr'], ['8', '有值的 th'], ['9', '空 th'],
+    ['10', 'tbody'], ['11', 'tr'], ['12', '有值的 td'], ['13', '空 td'],
+    ['14', '含按钮的 td'], ['16', '空 tr'],
+  ]) {
+    assert.ok(cleaned.includes(`data-u2m-id="${tid}"`), `${what} (id=${tid}) 必须保留`);
+  }
+  assert.equal((cleaned.match(/<td[\s>]/g) || []).length, 3, 'td 数量应为 3（不丢空单元格）');
+  assert.equal((cleaned.match(/<tr[\s>]/g) || []).length, 3, 'tr 数量应为 3（不丢空行）');
+  assert.equal((cleaned.match(/<col[\s>]/g) || []).length, 2, 'col 数量应为 2');
+
+  // 单元格内的按钮噪声照删，但留下空壳 td（不破坏列对齐）
+  assert.ok(!/<button[\s>]/.test(cleaned), '单元格内的 button 仍应删除');
+  assert.ok(!cleaned.includes('data-u2m-id="15"'), 'button 元素应删除');
+
+  // 表格外的正文与级联行为不受影响
+  assert.ok(cleaned.includes('data-u2m-id="17"'), '表格外正文必须保留');
+  assert.ok(cleaned.includes('正文段落'), '正文文本必须保留');
+
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
 test('clean_snapshot.mjs: 纯空白文本节点（缩进）不占位', async () => {
   // 回归：父元素开标签与子元素之间的缩进空白（>16 字符）曾被占位成
   // {{LONG_TEXT_k|N_CHARS}}，凭空给步骤 3 的 LLM 捏造"父子之间存在长文本"。

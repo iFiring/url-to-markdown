@@ -65,7 +65,9 @@ node <skill-root>/script/clean_snapshot.mjs <url-dir>
   - 删除 `<link>` 标签、`<meta>` 标签、`<base>` 标签（`<title>` 保留）
   - 删除按钮类控件（`<button>`、`role="button"`、按钮型 `<input>`）——交互 UI 与正文结构无关
   - 删除页面骨架标签（`<nav>`/`<footer>`/`<form>` 及 `role="navigation"`/`role="contentinfo"`/`role="form"` 等价物）——导航/页脚/表单不属于正文，`<article>` 内嵌 footer 同样删除
-  - 级联删除空元素（子树无非空白文本、无内容元素的空壳）；`img`/`svg`/`br`/`hr`/`iframe`/`pre`/`h1`-`h6` 等内容元素即使无子节点也保留，含文本的元素不受影响
+  - 删除媒体播放器（`<video>`/`<audio>`，子元素 `<source>`/`<track>` 随之删除）——播放器无正文结构价值（分派阶段读原始快照，不受影响）
+  - 删除残余表单控件与模态框（`<input>`/`<select>`/`<textarea>`/`<label>`/`<dialog>`）——`<form>` 已整体删除，此处兜住 form 外的搜索框等 UI 控件；`<header>`/`<aside>` 属正文结构（hero/章节），保留
+  - 级联删除空元素（子树无非空白文本、无内容元素的空壳）；`img`/`svg`/`br`/`hr`/`iframe`/`pre`/`h1`-`h6` 等内容元素即使无子节点也保留，含文本的元素不受影响；表格结构（`table`/`tr`/`td`/`th`/`col`/`colgroup` 等）即使为空也全体保留——删掉空单元格/列定义会让行列错位，单元格内的噪声照删、留空壳
 - 仅清洗版：删除所有 `style` 属性与 `<style>` 标签、清空 SVG 内容（仅保留空 `<svg></svg>` 壳）
 - 仅带样式版：保留 `style` 属性与 `<style>` 标签；SVG 瘦身为空壳（仅留标签的 `id`/`class`/`data-u2m-id`，其余属性与子元素全部删除）
 - 长文本占位（两版编号逐一对应；中英文分标准；纯空白文本节点与 svg/style 子树文本不占位）：
