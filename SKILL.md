@@ -65,27 +65,30 @@ node <skill-root>/script/clean_snapshot.mjs <url-dir>
 - 删除按钮类控件（`<button>`、`role="button"`、按钮型 `<input>`）——交互 UI 与正文结构无关
 - 级联删除空元素（子树无非空白文本、无内容元素的空壳）；`img`/`svg`/`br`/`hr`/`iframe`/`pre`/`h1`-`h6` 等内容元素即使无子节点也保留，含文本的元素不受影响
 - 清空 SVG 内容（仅保留空 `<svg></svg>` 壳）
-- 长文本（`textContent.length > 16` 的非空白文本）替换为 `{{LONG_TEXT_k|N_CHARS}}` 占位符；纯空白文本节点（源码缩进）不占位
+- 长文本占位（中英文分标准；纯空白文本节点不占位）：
+  - 中文文本（含汉字）：字符数 > 16 → `{{LONG_TEXT_k|N_chars}}`（N=字符数）
+  - 英文文本（不含汉字）：单词数 > 12 → `{{LONG_TEXT_k|N_words}}`（N=单词数）
+  - 原文按占位编号记入 `steps/2_long_text.json`（编号 → 原文映射），供后续流程恢复
 
-产物：`steps/2_clean_snapshot.html`
+产物：`steps/2_clean_snapshot.html`、`steps/2_long_text.json`
 
 | stdout status | 动作 |
 |---|---|
-| `ok` | 进入步骤 3。`longTextCount` 字段为占位符数量 |
+| `ok` | 进入步骤 3。`longTextCount` 字段为占位符数量，`longText` 为恢复清单路径 |
 | `error` | 按 `reason` 处理：快照缺失→先跑步骤 1；其他→反馈给用户 |
 
 ### 步骤 3 · 关键 ID 识别（LLM 步骤）
 
 读取 `steps/2_clean_snapshot.html`。
 
-你的任务：仅根据 DOM 结构（元素层级、标签类型、嵌套深度）和 `{{LONG_TEXT_k|N_CHARS}}` 占位符分布，找到以下三类关键元素的 `data-u2m-id`：
+你的任务：仅根据 DOM 结构（元素层级、标签类型、嵌套深度）和长文本占位符（`{{LONG_TEXT_k|N_chars}}` / `{{LONG_TEXT_k|N_words}}`）分布，找到以下三类关键元素的 `data-u2m-id`：
 
 1. **标题分块**（`titleIds`）：文章主标题对应的元素 ID。通常是层级最高的 `<h1>`-`<h3>` 或结构上处于列表流顶部的标题性容器
 2. **说明分块**（`descriptionIds`）：描述性元数据对应的元素 ID，如作者、日期、摘要、副标题等。可为空数组
 3. **列表流**（`listFlowIds`）：文章主体区域的父容器 ID。列表流是包含多个子块（段落、图片、代码块等）的最外层容器，可能有多个
 
 **约束**：
-- 不读语义内容——文本已被 `{{LONG_TEXT_k|N_CHARS}}` 占位，你只能看到结构
+- 不读语义内容——文本已被 `{{LONG_TEXT_k|…}}` 占位，你只能看到结构
 - `listFlowIds` 是列表流**最外层父元素**的 `data-u2m-id`，不是子元素的
 - 不选 `<body>` 或 `<html>`——它们的 ID 无意义
 - 如果找不到明确的标题或说明元素，对应数组可为空

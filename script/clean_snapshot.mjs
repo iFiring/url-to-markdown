@@ -61,6 +61,9 @@ async function main() {
     // 写盘
     const cleanedPath = path.join(stepsDir, '2_clean_snapshot.html');
     await fsPromises.writeFile(cleanedPath, result.html, 'utf8');
+    // 长文本恢复清单：占位编号 → 原文
+    const longTextPath = path.join(stepsDir, '2_long_text.json');
+    await fsPromises.writeFile(longTextPath, JSON.stringify(result.longTexts), 'utf8');
     log(`清洗完成: ${cleanedPath} (${result.longTextCount} 个长文本占位符)`);
 
     // 先关浏览器再 emit
@@ -70,6 +73,7 @@ async function main() {
     emit({
       status: 'ok',
       cleanedSnapshot: cleanedPath,
+      longText: longTextPath,
       longTextCount: result.longTextCount,
     });
   } catch (e) {

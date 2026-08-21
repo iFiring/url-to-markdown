@@ -105,6 +105,19 @@ async function runPipelineTest(fixtureName, keyIdsFixture) {
     !/data-u2m-id="\d+"><\/div>/.test(cleaned),
     `${fixtureName}: 清洗后不应残留空 div`
   );
+  // 2_long_text.json：占位编号 → 原文映射，条数与占位符一致，原文可在清洗快照中定位回占位符
+  assert.ok(out2.longText, `${fixtureName}: emit 应含 longText 路径`);
+  const longTextPath = path.join(stepsDir, '2_long_text.json');
+  assert.ok(fs.existsSync(longTextPath), `${fixtureName}: 2_long_text.json 应存在`);
+  const longTexts = JSON.parse(fs.readFileSync(longTextPath, 'utf8'));
+  assert.equal(
+    Object.keys(longTexts).length, out2.longTextCount,
+    `${fixtureName}: 恢复清单条数应等于占位符数量`
+  );
+  for (const [k, txt] of Object.entries(longTexts)) {
+    assert.ok(typeof txt === 'string' && txt.trim() !== '', `${fixtureName}: 原文 ${k} 应为非空白字符串`);
+    assert.ok(cleaned.includes(`{{LONG_TEXT_${k}|`), `${fixtureName}: 占位符 ${k} 应出现在清洗快照中`);
+  }
 
   // 步骤 3（模拟）：复制预定义的 key_ids
   const keyIdsPath = path.resolve(`test/fixtures/${keyIdsFixture}`);

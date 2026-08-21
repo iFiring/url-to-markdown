@@ -106,10 +106,16 @@ function __u2mCleanSnapshot(cfg) {
     if (emp.parentNode) emp.parentNode.removeChild(emp);
   }
 
-  // 9. 长文本占位：textContent.length > MIN_CHARS → {{LONG_TEXT_k|N_CHARS}}
+  // 9. 长文本占位（中英文分标准）：
+  //    含汉字（CJK）→ 中文标准：字符数 > MIN_CHARS → {{LONG_TEXT_k|N_chars}}
+  //    不含汉字    → 英文标准：单词数 > MIN_WORDS → {{LONG_TEXT_k|N_words}}
+  //    原文按占位编号收集进 longTexts，由 CLI 写 2_long_text.json 供后续恢复。
   //    纯空白文本节点（源码缩进/换行）不含语义内容，不占位——否则会在
   //    父子元素之间凭空捏造"长文本"，误导步骤 3 的结构识别
+  var MIN_WORDS = typeof cfg.minWords === 'number' ? cfg.minWords : 12;
+  var CJK_RE = /[一-鿿]/; // CJK 统一表意文字基本区（U+4E00–U+9FFF）
   var k = 0;
+  var longTexts = {};
   var walker = document.createTreeWalker(
     document.body,
     NodeFilter.SHOW_TEXT,
@@ -124,14 +130,25 @@ function __u2mCleanSnapshot(cfg) {
   for (var i = 0; i < textNodes.length; i++) {
     var tn = textNodes[i];
     var text = tn.textContent;
-    if (text.length > MIN_CHARS && text.trim() !== '') {
-      k++;
-      tn.textContent = '{{LONG_TEXT_' + k + '|' + text.length + '_CHARS}}';
+    if (text.trim() === '') continue;
+    var n, unit;
+    if (CJK_RE.test(text)) {
+      if (text.length <= MIN_CHARS) continue;
+      n = text.length;
+      unit = 'chars';
+    } else {
+      n = text.trim().split(/\s+/).length;
+      if (n <= MIN_WORDS) continue;
+      unit = 'words';
     }
+    k++;
+    longTexts[String(k)] = text;
+    tn.textContent = '{{LONG_TEXT_' + k + '|' + n + '_' + unit + '}}';
   }
 
   return {
     html: '<!DOCTYPE html>\n' + document.documentElement.outerHTML,
-    longTextCount: k
+    longTextCount: k,
+    longTexts: longTexts
   };
 }

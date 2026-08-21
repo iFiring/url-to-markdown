@@ -166,3 +166,53 @@ test('clean_snapshot.mjs: 纯空白文本节点（缩进）不占位', async () 
 
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
+
+test('clean_snapshot.mjs: 中英文分标准占位，并生成 2_long_text.json 恢复清单', async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-clean-lang-'));
+  const urlDir = path.join(tmpRoot, 'lang-article');
+  const stepsDir = path.join(urlDir, 'steps');
+  fs.mkdirSync(stepsDir, { recursive: true });
+
+  const zhLong = '汉'.repeat(17); // 17 字 > 16 → 占位（_chars）
+  const zhShort = '汉'.repeat(16); // 16 字 → 不占位
+  const enLong = Array(13).fill('word').join(' '); // 13 词 > 12 → 占位（_words）
+  const enShort = Array(12).fill('word').join(' '); // 12 词、59 字符 → 不占位（与旧"纯字符数"行为的核心差异）
+  const mixed = '汉字'.repeat(9); // 含汉字 → 按中文标准，18 字 → 占位（_chars）
+
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-u2m-id="1"><p data-u2m-id="2">${zhLong}</p></div>
+  <div data-u2m-id="3"><p data-u2m-id="4">${zhShort}</p></div>
+  <div data-u2m-id="5"><p data-u2m-id="6">${enLong}</p></div>
+  <div data-u2m-id="7"><p data-u2m-id="8">${enShort}</p></div>
+  <div data-u2m-id="9"><p data-u2m-id="10">${mixed}</p></div>
+</body></html>`;
+  fs.writeFileSync(path.join(stepsDir, '1_snapshot.html'), snapshot);
+
+  const script = path.resolve('script/clean_snapshot.mjs');
+  const r = await runScript(process.execPath, [script, urlDir], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+  assert.equal(out.longTextCount, 3, '仅中文 17 字、英文 13 词、混合 18 字三段应被占位');
+
+  const cleaned = fs.readFileSync(out.cleanedSnapshot, 'utf8');
+  // 中英文分别按字符数/单词数占位，单位后缀小写
+  assert.ok(cleaned.includes('|17_chars}}'), '中文按字符数占位，后缀 _chars');
+  assert.ok(cleaned.includes('|13_words}}'), '英文按单词数占位，后缀 _words');
+  assert.ok(cleaned.includes('|18_chars}}'), '含汉字的混合文本按中文标准');
+  // 12 词英文即使字符数(59) > 16 也不占位
+  assert.ok(cleaned.includes(enShort), '12 词英文不应占位（即使字符数 > 16）');
+  assert.ok(cleaned.includes(zhShort), '16 字中文不应占位');
+
+  // 2_long_text.json：占位编号 → 原文映射
+  assert.ok(out.longText, 'emit 应含 longText 恢复清单路径');
+  const longTexts = JSON.parse(fs.readFileSync(out.longText, 'utf8'));
+  assert.deepEqual(longTexts, { 1: zhLong, 2: enLong, 3: mixed }, '编号→原文映射应完整');
+
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
