@@ -83,13 +83,14 @@ node <skill-root>/script/clean_snapshot.mjs <url-dir>
 
 读取 `steps/2_clean_snapshot.html`。
 
-你的任务：仅根据 DOM 结构（元素层级、标签类型、嵌套深度）和长文本占位符（`{{LONG_TEXT_k|n_chars}}` / `{{LONG_TEXT_k|n_words}}`）分布，找到以下三类关键元素的 `data-u2m-id`：
+你的任务：这是**一篇文章**，仅根据 DOM 结构（元素层级、标签类型、嵌套深度）和长文本占位符（`{{LONG_TEXT_k|n_chars}}` / `{{LONG_TEXT_k|n_words}}`）分布，找到以下三类关键元素的 `data-u2m-id`：
 
 1. **标题分块**（`titleIds`）：文章主标题对应的元素 ID。通常是层级最高的 `<h1>`-`<h3>` 或结构上处于列表流顶部的标题性容器
 2. **说明分块**（`descriptionIds`）：描述性元数据对应的元素 ID，如作者、日期、摘要、副标题等。可为空数组
 3. **列表流**（`listFlowIds`）：文章主体区域的父容器 ID。列表流是包含多个子块（段落、图片、代码块等）的最外层容器，可能有多个
 
 **约束**：
+- **必须排除**菜单、导航、广告、推荐、视频等不属于文章核心内容的元素
 - 不读语义内容——文本已被 `{{LONG_TEXT_k|…}}` 占位，你只能看到结构
 - `listFlowIds` 是列表流**最外层父元素**的 `data-u2m-id`，不是子元素的
 - 不选 `<body>` 或 `<html>`——它们的 ID 无意义
@@ -100,9 +101,9 @@ node <skill-root>/script/clean_snapshot.mjs <url-dir>
 
 ```json
 {
-  "titleIds": [42],
-  "descriptionIds": [43, 44],
-  "listFlowIds": [10, 88]
+  "titleIds": [1],
+  "descriptionIds": [2, 3],
+  "listFlowIds": [4, 5]
 }
 ```
 
