@@ -52,6 +52,39 @@ test('snapshot.mjs: 虚拟列表页 → error + virtual_list', async () => {
   assert.equal(out.reason, 'virtual_list');
 });
 
+test('snapshot.mjs: 标记 body 全部元素（排除纯文本修饰标签与 svg/math 内部）', async () => {
+  const url = `${server.url}/inline-marking.html`;
+  const r = await runScript(process.execPath, [snapshotScript, url], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 60000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+  assert.ok(out.elements > 0, '应有标记元素');
+  const html = fs.readFileSync(out.snapshot, 'utf8');
+
+  // 开标签计数（(?=[\s>/]) 防止 <b 误匹配 <br>/<body>、<i 误匹配 <img> 等）
+  const total = (tag) => (html.match(new RegExp(`<${tag}(?=[\\s>/])`, 'g')) || []).length;
+  const withId = (tag) => (html.match(new RegExp(`<${tag}(?=[\\s>/])(?=[^>]*data-u2m-id)[^>]*>`, 'g')) || []).length;
+
+  // 块级与有结构意义的行内元素（span/a/code/img）：全部标记
+  for (const tag of ['main', 'div', 'p', 'h1', 'span', 'a', 'code', 'img', 'svg', 'math']) {
+    assert.ok(total(tag) > 0, `夹具应含 <${tag}>`);
+    assert.equal(withId(tag), total(tag), `<${tag}> 应全部带 data-u2m-id`);
+  }
+  // 纯文本修饰与薄语义行内标签：不标记
+  for (const tag of ['strong', 'em', 'b', 'i', 'u', 's', 'mark', 'sub', 'sup', 'br', 'wbr', 'abbr', 'q', 'time', 'kbd', 'samp', 'cite']) {
+    assert.ok(total(tag) > 0, `夹具应含 <${tag}>`);
+    assert.equal(withId(tag), 0, `<${tag}> 不应带 data-u2m-id`);
+  }
+  // svg/math 内部后代不标记（根元素在上面已验证标记）
+  for (const tag of ['g', 'rect', 'circle', 'path', 'mrow', 'mi', 'mo', 'mn']) {
+    assert.ok(total(tag) > 0, `夹具应含 <${tag}>`);
+    assert.equal(withId(tag), 0, `<${tag}>（svg/math 内部）不应带 data-u2m-id`);
+  }
+});
+
 // === 完整管线测试：步骤 1 → 2 → 4 ===
 
 /**
@@ -100,9 +133,10 @@ async function runPipelineTest(fixtureName, keyIdsFixture) {
     !/<[a-z][a-z0-9-]*[^>]*\srole\s*=\s*["']button["']/i.test(cleaned),
     `${fixtureName}: 清洗后不应含 role="button" 控件`
   );
-  // 空壳元素（子树无非空白文本、无内容元素）应被级联删除
+  // 空壳元素（子树无非空白文本、无内容元素）应被级联删除。
+  // 断言锚定 <div> 开标签——否则 <img ... id></div> 中 img 的闭尖括号会误命中
   assert.ok(
-    !/data-u2m-id="\d+"><\/div>/.test(cleaned),
+    !/<div[^>]*data-u2m-id="\d+"[^>]*><\/div>/.test(cleaned),
     `${fixtureName}: 清洗后不应残留空 div`
   );
   // 2_long_text.json：占位编号 → 原文映射，条数与占位符一致，原文可在清洗快照中定位回占位符
@@ -140,7 +174,7 @@ async function runPipelineTest(fixtureName, keyIdsFixture) {
 test('管线 article-1: snapshot → clean → chunk', async () => {
   const out = await runPipelineTest('article-1.html', 'article-1_key_ids.json');
 
-  // article-1 key_ids: { titleIds:[], descriptionIds:[], listFlowIds:[28] }
+  // article-1 key_ids: { titleIds:[], descriptionIds:[], listFlowIds:[67] }
   assert.equal(out.totalChunks > 0, true, '应有分块');
   const types = new Set(out.chunks.map((c) => c.type));
   assert.ok(types.size > 0, '应有至少一种分块类型');
@@ -217,16 +251,16 @@ test('管线 article-1: styledHtml 只含渲染有效的计算样式（瘦身）
 test('管线 article-2: snapshot → clean → chunk', async () => {
   const out = await runPipelineTest('article-2.html', 'article-2_key_ids.json');
 
-  // article-2 key_ids: { titleIds:[895], descriptionIds:[909], listFlowIds:[961, 1087] }
+  // article-2 key_ids: { titleIds:[1081], descriptionIds:[1125], listFlowIds:[1180, 1356] }
   assert.ok(out.totalChunks > 0, '应有分块');
 
   // 验证标题块存在
-  const titleChunks = out.chunks.filter((c) => c.dataU2mId === 895);
-  assert.ok(titleChunks.length > 0, '应有标题分块 (dataU2mId=895)');
+  const titleChunks = out.chunks.filter((c) => c.dataU2mId === 1081);
+  assert.ok(titleChunks.length > 0, '应有标题分块 (dataU2mId=1081)');
 
   // 验证列表流块存在
   const listChunks = out.chunks.filter(
-    (c) => c.dataU2mId === 961 || c.dataU2mId === 1087
+    (c) => c.dataU2mId === 1180 || c.dataU2mId === 1356
   );
   // 列表流的子元素产生的块（子元素有自己的 dataU2mId）
   assert.ok(out.chunks.length > titleChunks.length, '列表流应产生额外分块');

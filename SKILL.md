@@ -41,7 +41,7 @@ node <skill-root>/script/snapshot.mjs <url> [--timeout 300000] [--scroll-rounds 
 1. **登录阶段**：打开 URL，六信号检测是否需要登录；如需登录则弹出 Screencast viewer 供人工操作
 2. **滚动阶段**：渐进滚动到底部再回顶，触发懒加载，等待 DOM 稳定
 3. **检测阶段**：检查是否为虚拟列表（仅渲染可见窗口的页面无法全文转化）
-4. **快照阶段**：注入页面脚本，合并同源 iframe、内联外部 CSS、剥尽 JS、标记 `data-u2m-id`，序列化全保真快照
+4. **快照阶段**：注入页面脚本，合并同源 iframe、内联外部 CSS、剥尽 JS、标记 `data-u2m-id`，序列化全保真快照。标记覆盖 body 内所有元素（文档序连续编号），仅排除纯文本修饰/薄语义行内标签（`strong`/`em`/`b`/`i`/`br`/`wbr`/`abbr`/`q`/`time`/`kbd` 等）与 svg/math 的内部后代（根元素本身仍标记）
 
 产物：`steps/1_snapshot.html`
 

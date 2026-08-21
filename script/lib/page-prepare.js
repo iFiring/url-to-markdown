@@ -1,7 +1,13 @@
 function __u2mPrepareBody(cfg) {
   cfg = cfg || {};
   const MIN_MAIN_TEXT = typeof cfg.minMainText === 'number' ? cfg.minMainText : 500;
-  const ID_SELECTORS = 'div,section,article,aside,nav,header,footer,main,figure,table,thead,tbody,tr,canvas,svg,video,iframe,picture,ul,ol,li,dl,pre,blockquote,details,[role],[data-chart],.chart,.echarts,.highcharts,.MathJax,.MathJax_Display,.katex,.katex-display';
+  // 不标记的纯文本修饰/薄语义行内标签（strong/br 之类只作用于文本，
+  // 无独立结构意义；span/a/code/img 等可承载结构/链接/代码/图片，照常标记）
+  const EXCLUDE_TAGS = new Set([
+    'STRONG', 'EM', 'B', 'I', 'U', 'S', 'SMALL', 'MARK', 'SUB', 'SUP', 'BR', 'WBR',
+    'ABBR', 'CITE', 'DFN', 'KBD', 'SAMP', 'VAR', 'Q', 'TIME', 'DATA', 'BDI', 'BDO',
+    'RUBY', 'RP', 'RT',
+  ]);
 
   // 1. 合并同源内容 iframe（吸收 __u2mMergeIframes，同阈值 500；主文档文本充足则不合并）
   const textLen = (document.body && document.body.innerText ? document.body.innerText : '')
@@ -66,12 +72,18 @@ function __u2mPrepareBody(cfg) {
     try { if (el.src) el.setAttribute('src', el.src); } catch (e) { /* 忽略 */ }
   });
 
-  // 7. 打 data-u2m-id：每个命中候选的元素按文档序递增（父与子都打、无嵌套守卫；叶子文本元素不在候选内）
+  // 7. 打 data-u2m-id：body 内所有元素按文档序递增标记，仅排除
+  //    EXCLUDE_TAGS（纯文本修饰/薄语义行内标签）与 svg/math 内部后代
+  //    （根元素本身标记；内部细节对下游不可见——步骤 2 剥 svg 属性，
+  //    转换按原子块处理，标记内部只会膨胀快照）
   let n = 0;
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
   let el = walker.nextNode();
   while (el) {
-    if (el.matches(ID_SELECTORS)) el.setAttribute('data-u2m-id', String(++n));
+    const insideForeign = el.parentElement && el.parentElement.closest('svg, math');
+    if (!EXCLUDE_TAGS.has(el.tagName.toUpperCase()) && !insideForeign) {
+      el.setAttribute('data-u2m-id', String(++n));
+    }
     el = walker.nextNode();
   }
   return true;

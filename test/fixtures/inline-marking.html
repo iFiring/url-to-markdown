@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>行内标记范围测试</title></head>
+<body>
+<main>
+  <h1>行内元素标记范围测试标题</h1>
+  <div>
+    <p>这是<strong>加粗</strong>与<em>强调</em>的段落，含<a href="/x">链接</a>、<span class="hl">样式 span</span>以及<code>inline code</code>。</p>
+    <p>短行<br>换行后继续：<abbr>HTML</abbr>缩写、<q>引文</q>、<time>2026-08-21</time>、<kbd>Ctrl</kbd>按键、<mark>高亮</mark>、H<sub>2</sub>O、x<sup>2</sup>、<b>粗体</b>、<i>斜体</i>、<u>下划线</u>、<s>删除线</s>、<samp>输出</samp>、<cite>引用</cite>、<wbr>断行机会。</p>
+    <img src="/pixel.png" alt="标记测试图">
+    <svg width="120" height="60" viewBox="0 0 120 60">
+      <g fill="red">
+        <rect x="0" y="0" width="60" height="60"></rect>
+        <circle cx="90" cy="30" r="20"></circle>
+        <path d="M0 0 L120 60"></path>
+      </g>
+    </svg>
+    <math><mrow><mi>x</mi><mo>=</mo><mn>1</mn></mrow></math>
+  </div>
+</main>
+</body>
+</html>
