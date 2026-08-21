@@ -128,6 +128,65 @@ test('clean_snapshot.mjs: 空元素级联删除，有内容的元素保留', asy
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
+test('clean_snapshot.mjs: 删除 nav/footer/form 及 role 等价物，正文保留', async () => {
+  // 页面骨架标签（导航/页脚/表单）不属于文章正文，整体删除——含
+  // role 伪装变体与 <article> 内嵌 footer；只含骨架标签的包装容器随之级联清除
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-clean-skel-'));
+  const urlDir = path.join(tmpRoot, 'skel-article');
+  const stepsDir = path.join(urlDir, 'steps');
+  fs.mkdirSync(stepsDir, { recursive: true });
+
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div id="root" data-u2m-id="1">
+    <nav data-u2m-id="2"><a data-u2m-id="3" href="/x">菜单项</a></nav>
+    <div data-u2m-id="4"><nav data-u2m-id="5">嵌套导航</nav></div>
+    <footer data-u2m-id="6">页脚内容</footer>
+    <form data-u2m-id="7"><input data-u2m-id="8" value="q"></form>
+    <div data-u2m-id="9" role="navigation">role 伪装导航</div>
+    <div data-u2m-id="10" role="contentinfo">role 伪装页脚</div>
+    <article data-u2m-id="11"><p data-u2m-id="13">正文段落</p><footer data-u2m-id="12">作者信息</footer></article>
+  </div>
+</body></html>`;
+  fs.writeFileSync(path.join(stepsDir, '1_snapshot.html'), snapshot);
+
+  const script = path.resolve('script/clean_snapshot.mjs');
+  const r = await runScript(process.execPath, [script, urlDir], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+  const cleaned = fs.readFileSync(out.cleanedSnapshot, 'utf8');
+
+  // 骨架标签整体删除（断言限定开标签位置，避免误伤正文里的同名字符串）
+  assert.ok(!/<nav[\s>]/.test(cleaned), 'nav 应删除');
+  assert.ok(!/<footer[\s>]/.test(cleaned), 'footer 应删除');
+  assert.ok(!/<form[\s>]/.test(cleaned), 'form 应删除');
+  assert.ok(!cleaned.includes('data-u2m-id="2"'), 'nav 元素应删除');
+  assert.ok(!cleaned.includes('data-u2m-id="6"'), 'footer 元素应删除');
+  assert.ok(!cleaned.includes('data-u2m-id="7"'), 'form 元素应删除');
+  assert.ok(!cleaned.includes('data-u2m-id="8"'), 'form 内的 input 随 form 一起删除');
+  assert.ok(!cleaned.includes('data-u2m-id="12"'), 'article 内嵌 footer 同样删除');
+
+  // role 伪装变体（div/span/a + role）一并删除
+  assert.ok(
+    !/<[a-z][a-z0-9-]*[^>]*\srole\s*=\s*["'](navigation|contentinfo|form)["']/i.test(cleaned),
+    'role="navigation"/"contentinfo"/"form" 等价物应删除'
+  );
+  assert.ok(!cleaned.includes('data-u2m-id="9"'), 'role 伪装导航应删除');
+  assert.ok(!cleaned.includes('data-u2m-id="10"'), 'role 伪装页脚应删除');
+
+  // 级联与保留
+  assert.ok(!cleaned.includes('data-u2m-id="4"'), '只含 nav 的包装容器应级联删除');
+  assert.ok(cleaned.includes('data-u2m-id="11"'), 'article 正文必须保留');
+  assert.ok(cleaned.includes('正文段落'), '正文文本必须保留');
+
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
 test('clean_snapshot.mjs: 纯空白文本节点（缩进）不占位', async () => {
   // 回归：父元素开标签与子元素之间的缩进空白（>16 字符）曾被占位成
   // {{LONG_TEXT_k|N_CHARS}}，凭空给步骤 3 的 LLM 捏造"父子之间存在长文本"。

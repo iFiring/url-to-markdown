@@ -39,7 +39,17 @@ function __u2mCleanSnapshot(cfg) {
     btns[i].parentNode.removeChild(btns[i]);
   }
 
-  // 5. 删除空元素：子树内既无非空白文本、也无内容元素的空壳（含仅空白文本者）。
+  // 5. 删除页面骨架标签：<nav>/<footer>/<form> 及其 role 等价物——
+  //    导航/页脚/表单不属于文章正文（<article> 内嵌 footer 同样删除）；
+  //    置于空元素级联之前，只含骨架标签的包装容器随之级联清除
+  var skeletons = document.querySelectorAll(
+    'nav, footer, form, [role="navigation"], [role="contentinfo"], [role="form"]'
+  );
+  for (var i = skeletons.length - 1; i >= 0; i--) {
+    skeletons[i].parentNode.removeChild(skeletons[i]);
+  }
+
+  // 6. 删除空元素：子树内既无非空白文本、也无内容元素的空壳（含仅空白文本者）。
   //    级联：后序单趟——判定基于子树的真实内容，子空则父亦空，自然级联到任意深度。
   //    内容元素（img/br/svg/pre/h1-h6 等）本身即内容，即使无子节点也保留；
   //    含文本的 span/div 等天然不空，不受影响。置于按钮删除之后，
@@ -85,7 +95,7 @@ function __u2mCleanSnapshot(cfg) {
     if (emp.parentNode) emp.parentNode.removeChild(emp);
   }
 
-  // 6. 长文本占位（中英文分标准；两版共享，编号逐一对应）：
+  // 7. 长文本占位（中英文分标准；两版共享，编号逐一对应）：
   //    含汉字（CJK）→ 中文标准：字符数 > MIN_CHARS → {{LONG_TEXT_k|n_chars}}
   //    不含汉字    → 英文标准：单词数 > MIN_WORDS → {{LONG_TEXT_k|n_words}}
   //    原文按占位编号收集进 longTexts，由 CLI 写 2_long_text.json 供后续恢复。
@@ -133,7 +143,7 @@ function __u2mCleanSnapshot(cfg) {
     tn.textContent = '{{LONG_TEXT_' + k + '|' + n + '_' + unit + '}}';
   }
 
-  // 7. SVG 瘦身（带样式版）：只留 svg 标签及其 id/class/data-u2m-id，
+  // 8. SVG 瘦身（带样式版）：只留 svg 标签及其 id/class/data-u2m-id，
   //    删除其余属性与全部子元素——完整 SVG 体积庞大，带样式版只需结构身份
   var svgs = document.querySelectorAll('svg');
   for (var i = 0; i < svgs.length; i++) {
@@ -154,7 +164,7 @@ function __u2mCleanSnapshot(cfg) {
   // --- 此刻 DOM 为"带样式清洗态"（样式完整、SVG 已瘦身、占位已打）：先序列化带样式版 ---
   var styledHtml = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
 
-  // 8. 清空 SVG 壳：剥掉瘦身壳上剩余的 id/class/data-u2m-id → 裸 <svg></svg>（仅清洗版）
+  // 9. 清空 SVG 壳：剥掉瘦身壳上剩余的 id/class/data-u2m-id → 裸 <svg></svg>（仅清洗版）
   for (var i = 0; i < svgs.length; i++) {
     var svg = svgs[i];
     while (svg.attributes.length > 0) {
@@ -162,13 +172,13 @@ function __u2mCleanSnapshot(cfg) {
     }
   }
 
-  // 9. 删除所有 style 属性（仅清洗版）
+  // 10. 删除所有 style 属性（仅清洗版）
   var styled = document.querySelectorAll('[style]');
   for (var i = 0; i < styled.length; i++) {
     styled[i].removeAttribute('style');
   }
 
-  // 10. 删除所有 <style> 标签（仅清洗版）
+  // 11. 删除所有 <style> 标签（仅清洗版）
   var styles = document.querySelectorAll('style');
   for (var i = styles.length - 1; i >= 0; i--) {
     styles[i].parentNode.removeChild(styles[i]);
