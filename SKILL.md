@@ -12,6 +12,13 @@ description: "将 URL（网页）的主体内容转换成 Markdown；在需要�
 - 使用：把单个 URL 的正文转为 Markdown 文件
 - 不使用：批量爬取、站点镜像；登录态存于 IndexedDB / Service Worker 的站点
 
+## 工作原则
+
+- 没有明确要求或流程需要的话，你不要自己去读脚本产物
+- 你自己负责 "步骤 3" 和 "步骤 7"的语义化操作：
+  - 当你有权限调用子智能体（Sub-Agent）时，优先把任务交给子智能体
+  - 当任务完成后，你要负责审阅一次
+
 ## 操作手册（步骤 0-9）
 
 本技能目录为 `<skill-root>`（SKILL.md 所在目录）。以下 `<url>` 均指用户给定的完整 URL。
@@ -82,11 +89,9 @@ node <skill-root>/script/clean_snapshot.mjs <url-dir>
 | `ok` | 进入步骤 3。`longTextCount` 为占位符数量，`longText` 为恢复清单路径，`styledSnapshot` 为带样式版路径 |
 | `error` | 按 `reason` 处理：快照缺失→先跑步骤 1；其他→反馈给用户 |
 
-### 步骤 3 · 关键 ID 识别（LLM 步骤）
+### 步骤 3 · 你负责关键 ID 识别
 
-读取 `2_clean_snapshot.html`。
-
-你的任务：这是**一篇文章**，仅根据 DOM 结构（元素层级、标签类型、嵌套深度）和长文本占位符（`{{LONG_TEXT_k|n_chars}}` / `{{LONG_TEXT_k|n_words}}`）分布，找到以下三类关键元素的 `data-u2m-id`：
+读取 `2_clean_snapshot.html`。你的任务：这是**一篇文章**，仅根据 DOM 结构（元素层级、标签类型、嵌套深度）和长文本占位符（`{{LONG_TEXT_k|n_chars}}` / `{{LONG_TEXT_k|n_words}}`）分布，找到以下三类关键元素的 `data-u2m-id`：
 
 1. **标题分块**（`titleIds`）：文章主标题对应的元素 ID。通常是层级最高的 `<h1>`-`<h3>` 或结构上处于列表流顶部的标题性容器
 2. **说明分块**（`descriptionIds`）：描述性元数据对应的元素 ID，如作者、日期、摘要、副标题等。可为空数组
@@ -95,6 +100,7 @@ node <skill-root>/script/clean_snapshot.mjs <url-dir>
 **约束**：
 - **必须排除**菜单、导航、广告、推荐、视频等不属于文章核心内容的元素
 - 不读语义内容——文本已被 `{{LONG_TEXT_k|…}}` 占位，你只能看到结构
+- 当标题或说明分块已经在列表流中，不要再找它们的 `data-u2m-id` 了
 - `listFlowIds` 是列表流**最外层父元素**的 `data-u2m-id`，不是子元素的
 - 不选 `<body>` 或 `<html>`——它们的 ID 无意义
 - 如果找不到明确的标题或说明元素，对应数组可为空
@@ -174,11 +180,9 @@ node <skill-root>/script/extract_article.mjs <url-dir>
 | `ok` | 进入步骤 7。`elementCount` 为提取的元素数 |
 | `error` | 按 `reason` 处理：步骤 5 产物缺失→跑步骤 5；key_ids 缺失→跑步骤 3；id 未命中 / listFlowIds 为空→重跑步骤 3 |
 
-### 步骤 7 · markdown 骨架生成（LLM 步骤）
+### 步骤 7 · 你负责 markdown 骨架生成
 
-读取 `6_article.html`。
-
-你的任务：把文章视图转换成一份 **markdown 骨架**——数组按文档序排列，每项一个单键对象，key 是语义标签，value 是该块的内容模板。长文本只引用占位编号、一字不抄，正文回填由后续脚本完成。
+读取 `6_article.html`。你的任务：把文章视图转换成一份 **markdown 骨架**——数组按文档序排列，每项一个单键对象，key 是语义标签，value 是该块的内容模板。长文本只引用占位编号、一字不抄，正文回填由后续脚本完成。
 
 **词汇表**：
 
@@ -195,7 +199,7 @@ node <skill-root>/script/extract_article.mjs <url-dir>
 
 **value 写法**：
 - 长文本**只引用编号**：读到的 `{{LONG_TEXT_5|47_chars}}` 写成 `{{LONG_TEXT_5}}`（不带后缀）
-- 短文本（未达步骤 2 占位阈值）与 URL：照抄
+- 短文本（未达长文本占位阈值）与 URL：照抄
 - 行内格式（`**粗体**`、`[文](url)`、`` `code` ``）由你写入 value
 - key 是**语义判断**的结果：div 判成标题就写 `h2`，span 容器判成段落就写 `p`，不必与 DOM 标签一致
 
@@ -210,7 +214,7 @@ node <skill-root>/script/extract_article.mjs <url-dir>
 ```json
 [
   {"h1": "{{LONG_TEXT_1}}"},
-  {"p": "作者：{{LONG_TEXT_2}} · {{LONG_TEXT_3}}"},
+  {"p": "作者：{{LONG_TEXT_2}} · 时间：{{LONG_TEXT_3}}"},
   {"img": "https://example.com/a/cover.png"},
   {"blockquote": "{{LONG_TEXT_4}}"},
   {"code": {"lang": "python", "content": "def hello():\n    print('hi')"}},
