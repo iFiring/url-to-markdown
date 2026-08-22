@@ -46,6 +46,35 @@ test('openPage: 打开夹具页、注入 storageState、拦截媒体请求', asy
   }
 });
 
+test('openPage: 永不静默页面（流式长连接）不被 networkidle 卡死', async () => {
+  // /stream.js 发完 headers 后保持连接不 end —— networkidle 永远等不到。
+  // script 用 async 加载：不阻塞 domcontentloaded（同步 script 会卡住 dcl）。
+  const server = http.createServer((req, res) => {
+    if (req.url === '/stream.js') {
+      res.writeHead(200, { 'Content-Type': 'text/javascript' });
+      res.write('// open\n');
+      const iv = setInterval(() => { try { res.write('// ping\n'); } catch { /* 已断开 */ } }, 200);
+      res.on('close', () => clearInterval(iv));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end('<!doctype html><title>never idle</title><h1>hi</h1><script async src="/stream.js"></script>');
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const t0 = Date.now();
+  let s;
+  try {
+    s = await openPage(`http://127.0.0.1:${server.address().port}/`, { settleMs: 1500 });
+    assert.equal(await s.page.title(), 'never idle');
+    const elapsed = Date.now() - t0;
+    assert.ok(elapsed < 20000, `永不静默页面应在 20s 内就绪（实际 ${elapsed}ms）—— networkidle 不应作为 goto 门条件`);
+  } finally {
+    await s?.close().catch(() => {});
+    server.closeAllConnections(); // 流式连接常驻，须先踢掉才能 close
+    await new Promise((r) => server.close(r));
+  }
+});
+
 test('openPage: U2M_PROXY=URL → 页面请求走该代理（absolute-form GET）', async () => {
   const proxy = await startDummyProxy();
   const fx = await startFixtureServer();

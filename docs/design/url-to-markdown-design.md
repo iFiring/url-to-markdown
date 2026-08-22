@@ -129,7 +129,7 @@ render_markdown.mjs <url-dir> → 双 Tab 渲染两份 result.md，人工选择
 
 CLI：`login_url.mjs <url> [--timeout 300000] [--port 0]`（port 0 = 随机可用端口，实际地址回显 stderr 并自动打开）
 
-1. 无头 + 注入全局 storageState 打开 URL（`networkidle` 或 5s 兜底）
+1. 无头 + 注入全局 storageState 打开 URL（`domcontentloaded` 完成导航 + networkidle 尽力等待封顶 8s，等不到不失败——networkidle 作 goto 门条件会被长连接/轮询站点确定性卡死）
 2. 六策略计分检测（`lib/detector.mjs`）：密码框 / URL 特征 / 内容关键词 / 认证 cookie 反查 / 重定向 / SPA 等待。**≥2 项命中判定需登录**；遍历全部 frames 检测 iframe 内登录表单
 3. 已登录 → 刷新合并 storageState（续期）→ `{"status":"logged_in"}` 退出 0
 4. 未登录 → Screencast 登录模式（复用 `.temp/login.mjs` 架构）：
@@ -142,7 +142,7 @@ CLI：`login_url.mjs <url> [--timeout 300000] [--port 0]`（port 0 = 随机可�
 
 CLI：`clear_trans_html.mjs <url>` → `working/<url-dir>/node_workflow/`；`clear_trans_html.py <url>` → `working/<url-dir>/python_workflow/`。逻辑对称、产物隔离、可并行。
 
-1. 注入 storageState 打开（`networkidle` / 5s 兜底）
+1. 注入 storageState 打开（`domcontentloaded` + networkidle 尽力等待封顶 8s，等不到不失败）
 2. **完整性保证（清理的前置条件）**：
    - 懒加载：渐进滚动到底再回顶；启动用超高 viewport（3000px）；**劫持 `IntersectionObserver`**——注入脚本使 callback 立即以 `isIntersecting=true` 触发
    - 虚拟 DOM：不移除任何元素，等待 DOM 稳定（节点数连续 1s 不变）

@@ -60,20 +60,21 @@ export function proxyLaunchOptions(env = process.env) {
   return { proxy: { server: v } };
 }
 
-/** goto：networkidle 失败重试 1 次；两次失败回落 domcontentloaded + 5s 等待。 */
-export async function gotoWithRetry(page, url, log = () => {}, opts = {}) {
-  let lastErr;
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    try {
-      await page.goto(url, { waitUntil: 'networkidle', timeout: 30000, ...opts });
-      return;
-    } catch (e) {
-      lastErr = e;
-      log(`goto 失败(${attempt}/2): ${e.message}`);
-    }
+/**
+ * goto：domcontentloaded 完成导航，再尽力等待网络静默（waitForLoadState
+ * networkidle 封顶 settleMs，等不到不失败）。
+ * 教训：networkidle 作为 goto 门条件会被长连接/轮询站点（埋点、WebSocket、
+ * heartbeat）确定性卡死——30s 超时×重试+回落曾致 65s 才就绪。静默等待只在
+ * 网络确实变静时提前返回，等不到由封顶兜底；真断网时 dcl goto 自会抛错。
+ */
+export async function gotoSettled(page, url, log = () => {}, opts = {}) {
+  const { settleMs = 8000, gotoTimeout = 30000 } = opts;
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: gotoTimeout });
+  try {
+    await page.waitForLoadState('networkidle', { timeout: settleMs });
+  } catch {
+    log(`networkidle ${settleMs}ms 内未达成（长连接/轮询站点常态），继续`);
   }
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await page.waitForTimeout(5000); // 兜底：README「等待 5S 再开始」
 }
 
 /**
@@ -85,6 +86,7 @@ export async function openPage(url, {
   viewport = { width: 1280, height: 3000 },
   initScripts = [],
   storageStatePath: ssPath,
+  settleMs,
   log = () => {},
 } = {}) {
   const browser = await chromium.launch({ headless, ...proxyLaunchOptions() });
@@ -96,7 +98,7 @@ export async function openPage(url, {
       route.request().resourceType() === 'media' ? route.abort() : route.continue());
     for (const script of initScripts) await context.addInitScript({ content: script });
     const page = await context.newPage();
-    await gotoWithRetry(page, url, log);
+    await gotoSettled(page, url, log, settleMs === undefined ? {} : { settleMs });
     return {
       browser, context, page,
       close: async () => { try { await context.close(); } finally { await browser.close(); } },
