@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { runScript } from '../helpers/run-script.mjs';
+import { PIXEL_PNG } from '../helpers/assets.mjs';
 
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
 const pageScriptPath = path.resolve(thisDir, '../../script/lib/page-resolve-placeholders.js');
@@ -193,4 +195,113 @@ test('screenshot_trans.mjs: 缺前置产物时报 error', async () => {
   assert.equal(r3.code, 1);
   assert.ok(JSON.parse(r3.stdout).reason.includes('步骤 2'));
   fs.rmSync(noLt.tmpRoot, { recursive: true, force: true });
+});
+
+// ── 图片下载（assets/images/）──
+
+/** 图片夹具服务器：/Dir/cover.png、/other/cover.png、/pic（无扩展名）、/missing.png（404）。 */
+function startImageServer() {
+  const server = http.createServer((req, res) => {
+    if (req.url === '/missing.png') {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('not found');
+      return;
+    }
+    const ct = req.url === '/pic.svg' ? 'image/svg+xml' : 'image/png';
+    res.writeHead(200, { 'Content-Type': ct });
+    res.end(PIXEL_PNG);
+  });
+  return new Promise((resolve) => server.listen(0, '127.0.0.1', () =>
+    resolve({ base: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((r) => server.close(r)) })));
+}
+
+test('screenshot_trans.mjs: img 条目下载到 assets/images/（冲突编号 + 同 URL 去重 + 失败保留原 URL）', async () => {
+  const srv = await startImageServer();
+  const { tmpRoot, urlDir, assetsDir } = setupTmp('imgs', {
+    skeleton: [
+      { h1: '标题' },
+      { img: `${srv.base}/Dir/cover.png` },
+      { img: `${srv.base}/other/cover.png` },
+      { img: `${srv.base}/Dir/cover.png` },
+      { img: `${srv.base}/pic.svg` },
+      { img: `${srv.base}/missing.png` },
+      { p: '{{LONG_TEXT_5}}' },
+    ],
+  });
+  const script = path.resolve('script/screenshot_trans.mjs');
+  try {
+    const r = await runScript(process.execPath, [script, urlDir], {
+      env: { U2M_WORKING_ROOT: tmpRoot },
+      timeoutMs: 60000,
+    });
+    assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+    const out = JSON.parse(r.stdout);
+    assert.equal(out.status, 'ok');
+    assert.equal(out.skipped, 'no_trans2img', '无 trans2img 仍应 skipped');
+    assert.equal(out.images, 3, '应成功下载 3 张（同 URL 去重后）');
+    assert.deepEqual(out.failedImages, [`${srv.base}/missing.png`], '失败 URL 列入 failedImages');
+
+    // 落盘文件：原名、冲突编号、content-type 定扩展名
+    const imagesDir = path.join(assetsDir, 'images');
+    assert.deepEqual(fs.readdirSync(imagesDir).sort(), ['cover-1.png', 'cover.png', 'pic.svg']);
+    assert.equal(fs.readFileSync(path.join(imagesDir, 'cover.png')).toString('base64'),
+      PIXEL_PNG.toString('base64'), '内容应为服务器返回的字节');
+
+    // resolved skeleton：成功条目改写为本地相对路径，失败条目保留原 URL
+    const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
+    assert.deepEqual(resolved, [
+      { h1: '标题' },
+      { img: 'assets/images/cover.png' },
+      { img: 'assets/images/cover-1.png' },
+      { img: 'assets/images/cover.png' },
+      { img: 'assets/images/pic.svg' },
+      { img: `${srv.base}/missing.png` },
+      { p: '段落一文本内容' },
+    ], '成功下载的 img 应改写为本地路径，失败保留原 URL');
+
+    // 步骤 9 直接可渲染本地引用
+    const r9 = await runScript(process.execPath, [path.resolve('script/render_skeleton.mjs'), urlDir], {
+      env: { U2M_WORKING_ROOT: tmpRoot },
+      timeoutMs: 30000,
+    });
+    assert.equal(r9.code, 0, `stderr: ${r9.stderr}`);
+    const md = fs.readFileSync(path.join(urlDir, '9_markdown.md'), 'utf8');
+    assert.ok(md.includes('![](assets/images/cover.png)'), 'markdown 应引用本地图片');
+    assert.ok(md.includes(`![](${srv.base}/missing.png)`), '失败图片保留远端引用');
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+    await srv.close();
+  }
+});
+
+test('screenshot_trans.mjs: trans2img 与 img 混合时截图、下载同轮完成', async () => {
+  const srv = await startImageServer();
+  const { tmpRoot, urlDir, assetsDir } = setupTmp('mix', {
+    skeleton: [
+      { img: `${srv.base}/Dir/cover.png` },
+      { p: '{{LONG_TEXT_5}}' },
+      { trans2img: '10' },
+    ],
+  });
+  const script = path.resolve('script/screenshot_trans.mjs');
+  try {
+    const r = await runScript(process.execPath, [script, urlDir], {
+      env: { U2M_WORKING_ROOT: tmpRoot },
+      timeoutMs: 60000,
+    });
+    assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+    const out = JSON.parse(r.stdout);
+    assert.equal(out.status, 'ok');
+    assert.equal(out.count, 1, 'trans2img 截图 1 张');
+    assert.equal(out.images, 1, '下载 1 张');
+    assert.ok(fs.existsSync(path.join(assetsDir, 'trans', '10.webp')), '截图应存在');
+    assert.ok(fs.existsSync(path.join(assetsDir, 'images', 'cover.png')), '下载应存在');
+
+    const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
+    assert.equal(resolved[0].img, 'assets/images/cover.png');
+    assert.deepEqual(resolved[2], { trans2img: '10' }, 'trans2img 条目不受图片改写影响');
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+    await srv.close();
+  }
 });
