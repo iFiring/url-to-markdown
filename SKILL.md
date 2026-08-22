@@ -251,6 +251,36 @@ node <skill-root>/script/screenshot_trans.mjs <url-dir>
 | `ok` | 进入步骤 4（或后续回填）。`resolvedSkeleton` 为 resolved skeleton 路径；`count` 为截图数；`replaced` 为截图前的占位符替换数；`skipped: "no_trans2img"` 时只有 resolved skeleton |
 | `error` | 按 `reason` 处理：前置产物缺失→补跑对应步骤；id 在 DOM 未命中→重跑步骤 3.4；占位符引用未定义编号→检查步骤 2 |
 
+### 步骤 3.6 · 骨架回填为 Markdown
+
+```bash
+node <skill-root>/script/render_skeleton.mjs <url-dir>
+```
+
+读取 `steps/3.5_resolved_skeleton.json`，按文档序把每条骨架条目转为 markdown 块，块与块之间以空行分隔。纯 Node，无浏览器依赖。
+
+转换规则（块级语法由此脚本加，行内 markdown 已在 3.4 由 LLM 写好）：
+
+| key | markdown 输出 |
+|---|---|
+| `h1`-`h6` | `#`-`######` + ` ` + value |
+| `p` | value 原样 |
+| `blockquote` | 每行前缀 `> ` |
+| `ul` / `ol` | value 原样（LLM 已写 `- ` / `1. ` 行级语法） |
+| `code` | ` ```{lang}\n{content}\n``` `（`lang` 缺省时仅 ` ``` `） |
+| `img` | `![]({url})` |
+| `table` | value 原样（LLM 已写完整管线表） |
+| `trans2img` | `![](assets/trans/{id}.webp)`（相对 urlDir） |
+
+未知 key 静默跳过。空骨架输出空文件。
+
+产物：`steps/3.6_markdown.md`
+
+| stdout status | 动作 |
+|---|---|
+| `ok` | 进入步骤 4（旧路径）或直接作为最终 markdown。`blocks` 为块数，`bytes` 为字节数 |
+| `error` | 按 `reason` 处理：前置缺失→补跑步骤 3.5 |
+
 ### 步骤 4 · 分块
 
 > **旧路径**（读 1_snapshot 的分块转化流程）：3.4 骨架回填端到端跑通前暂保留；可不经 3.4，从步骤 3 完成后直接进入。
