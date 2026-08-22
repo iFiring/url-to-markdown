@@ -12,12 +12,8 @@
     "test:all": "node --test test/unit/*.test.mjs test/integration/*.test.mjs"
   },
   "dependencies": {
-    "@joplin/turndown-plugin-gfm": "^1.0.2",
-    "@mozilla/readability": "^0.6.0",
     "juice": "^12.1.2",
-    "markdown-it": "^14.1.0",
     "playwright": "^1.49.0",
-    "turndown": "^7.2.0",
     "ws": "^8.18.0"
   },
   "pnpm": {
