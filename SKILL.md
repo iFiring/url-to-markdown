@@ -14,16 +14,35 @@ description: "将 URL（网页）的主体内容转换成 Markdown；在需要�
 
 ## 工作原则
 
-- 没有明确要求或流程需要的话，你不要自己去读脚本产物
+- 没有明确要求或流程需要的话，你不要去读脚本产物
 - 你自己负责 "步骤 3" 和 "步骤 7" 的语义化操作：
   - 当你有权限调用子智能体（Sub-Agent）时，优先把任务交给子智能体
   - 当任务完成后，你要负责审阅一次
 
 ## 操作手册（步骤 0-9）
 
-本技能目录为 `<skill-root>`（SKILL.md 所在目录）。以下 `<url>` 均指用户给定的完整 URL；`<url-dir>` 为 `working/` 下的 URL 目录名（相对或绝对路径均可）。
+本技能目录为 `<skill-root>`（SKILL.md 所在目录）。
 
-所有产物直接存放在 `working/<url-dir>/` 目录下（截图在 `assets/trans/`），`<url-dir>` 由 URL 自动净化生成。各步骤的技术细节与方案见对应脚本头部注释，此处只列命令、产物与分支动作。
+- `<url>` 指用户给定的完整 URL（仅步骤 1）
+- `<url-path>` 由步骤 1 脚本通过 `url.replace(/[^A-Za-z0-9.-]/g, '_')` 自动创建
+- `<url-dir>` 为 URL 专属工作目录 `<skill-root>/working/<url-path>`，步骤 1 之后的产物都存放在此目录下
+
+**`<skill-root>`结构**
+```
+SKILL.md                 # Skill 主体文件
+script/                  # 脚本
+package.json
+
+working/                 # 工作目录
+  cookies/               # 所有访问过 URL 的 cookie 公共存储目录
+  <url-path>/            # 步骤 1-9 的中间产物文件
+    assets/
+      images/
+      trans/
+    1_snapshot.html
+    ...
+    9_markdown.md 
+``` 
 
 ### 步骤 0 · 初始化环境（仅首次或环境变更时）
 
