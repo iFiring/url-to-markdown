@@ -15,15 +15,15 @@ description: "将 URL（网页）的主体内容转换成 Markdown；在需要�
 ## 工作原则
 
 - 没有明确要求或流程需要的话，你不要自己去读脚本产物
-- 你自己负责 "步骤 3" 和 "步骤 7"的语义化操作：
+- 你自己负责 "步骤 3" 和 "步骤 7" 的语义化操作：
   - 当你有权限调用子智能体（Sub-Agent）时，优先把任务交给子智能体
   - 当任务完成后，你要负责审阅一次
 
 ## 操作手册（步骤 0-9）
 
-本技能目录为 `<skill-root>`（SKILL.md 所在目录）。以下 `<url>` 均指用户给定的完整 URL。
+本技能目录为 `<skill-root>`（SKILL.md 所在目录）。以下 `<url>` 均指用户给定的完整 URL；`<url-dir>` 为 `working/` 下的 URL 目录名（相对或绝对路径均可）。
 
-所有产物直接存放在 `working/<url-dir>/` 目录下（截图在 `assets/trans/`），`<url-dir>` 由 URL 自动净化生成。
+所有产物直接存放在 `working/<url-dir>/` 目录下（截图在 `assets/trans/`），`<url-dir>` 由 URL 自动净化生成。各步骤的技术细节与方案见对应脚本头部注释，此处只列命令、产物与分支动作。
 
 ### 步骤 0 · 初始化环境（仅首次或环境变更时）
 
@@ -44,11 +44,7 @@ stderr 中的"警告"不阻断，可忽略。
 node <skill-root>/script/snapshot.mjs <url> [--timeout 300000] [--scroll-rounds 60]
 ```
 
-合并登录检测、渐进滚动、虚拟列表检测、全保真快照抓取为一个步骤。脚本内部依次执行：
-1. **登录阶段**：打开 URL，六信号检测是否需要登录；如需登录则弹出 Screencast viewer 供人工操作
-2. **滚动阶段**：渐进滚动到底部再回顶，触发懒加载，等待 DOM 稳定
-3. **检测阶段**：检查是否为虚拟列表（仅渲染可见窗口的页面无法全文转化）
-4. **快照阶段**：注入页面脚本，合并同源 iframe、内联外部 CSS、剥尽 JS、标记 `data-u2m-id`，序列化全保真快照。标记覆盖 body 内所有元素（文档序连续编号），仅排除纯文本修饰/薄语义行内标签（`strong`/`em`/`b`/`i`/`br`/`wbr`/`abbr`/`q`/`time`/`kbd` 等）与 svg/math 的内部后代（根元素本身仍标记）
+单条命令依次完成登录检测（需要时弹出 Screencast viewer 供人工登录）、渐进滚动、虚拟列表检测、全保真快照抓取（同源 iframe 合并、外部 CSS 内联、剥尽 JS、标记 `data-u2m-id`）。四阶段细节见脚本头部注释。
 
 产物：`1_snapshot.html`
 
@@ -65,24 +61,9 @@ node <skill-root>/script/snapshot.mjs <url> [--timeout 300000] [--scroll-rounds 
 node <skill-root>/script/clean_snapshot.mjs <url-dir>
 ```
 
-`<url-dir>` 为 `working/` 下的 URL 目录名（相对或绝对路径均可）。
+打开 `1_snapshot.html` 单趟结构清洗（删噪声标签/控件、级联删空元素），长文本替换为占位符；清洗规则与占位阈值见脚本头部注释。
 
-打开 `1_snapshot.html`，单趟结构清洗，产出两份快照（共享同一套清洗与占位）：
-- 共同清洗（两版一致）：
-  - 删除 `<link>` 标签、`<meta>` 标签、`<base>` 标签（`<title>` 保留）
-  - 删除按钮类控件（`<button>`、`role="button"`、按钮型 `<input>`）——交互 UI 与正文结构无关
-  - 删除页面骨架标签（`<nav>`/`<footer>`/`<form>` 及 `role="navigation"`/`role="contentinfo"`/`role="form"` 等价物）——导航/页脚/表单不属于正文，`<article>` 内嵌 footer 同样删除
-  - 删除媒体播放器（`<video>`/`<audio>`，子元素 `<source>`/`<track>` 随之删除）——播放器无正文结构价值（分派阶段读原始快照，不受影响）
-  - 删除残余表单控件与模态框（`<input>`/`<select>`/`<textarea>`/`<label>`/`<dialog>`）——`<form>` 已整体删除，此处兜住 form 外的搜索框等 UI 控件；`<header>`/`<aside>` 属正文结构（hero/章节），保留
-  - 级联删除空元素（子树无非空白文本、无内容元素的空壳）；`img`/`svg`/`br`/`hr`/`iframe`/`pre`/`h1`-`h6` 等内容元素即使无子节点也保留，含文本的元素不受影响；表格结构（`table`/`tr`/`td`/`th`/`col`/`colgroup` 等）即使为空也全体保留——删掉空单元格/列定义会让行列错位，单元格内的噪声照删、留空壳
-- 仅清洗版：删除所有 `style` 属性与 `<style>` 标签、清空 SVG 内容（仅保留空 `<svg></svg>` 壳）
-- 仅带样式版：保留 `style` 属性与 `<style>` 标签；SVG 瘦身为空壳（仅留标签的 `id`/`class`/`data-u2m-id`，其余属性与子元素全部删除）
-- 长文本占位（两版编号逐一对应；中英文分标准；纯空白文本节点与 svg/style 子树文本不占位）：
-  - 中文文本（含汉字）：字符数 > 16 → `{{LONG_TEXT_k|n_chars}}`（n=字符数）
-  - 英文文本（不含汉字）：单词数 > 12 → `{{LONG_TEXT_k|n_words}}`（n=单词数）
-  - 原文按占位编号记入 `2_long_text.json`（编号 → 原文映射），供后续流程恢复
-
-产物：`2_clean_snapshot.html`（步骤 3 的结构视图）、`2_clean_style_snapshot.html`（带样式版）、`2_long_text.json`
+产物：`2_clean_snapshot.html`（结构视图）、`2_clean_style_snapshot.html`（带样式版）、`2_long_text.json`（占位符原文映射）
 
 | stdout status | 动作 |
 |---|---|
@@ -122,13 +103,7 @@ node <skill-root>/script/clean_snapshot.mjs <url-dir>
 node <skill-root>/script/extract_styled.mjs <url-dir>
 ```
 
-`<url-dir>` 为 `working/` 下的 URL 目录名（相对或绝对路径均可）。
-
-读取 `3_key_ids.json` 与 `2_clean_style_snapshot.html`，裁剪出只含文章主体的带样式视图：
-
-- **完整保留（一字不动，含全部标签属性与样式属性）**：三类 key 元素（`titleIds`/`descriptionIds`/`listFlowIds`）的子树 + 它们到 `<body>` 的祖先链——祖先上下文不变，CSS 选择器照常生效
-- **`<head>` 完全不动**（`<title>` + 全部 `<style>` 原地保留）；body 里即将删除的分支中若有 `<style>`，先挪入 `<head>` 再删分支，样式标签零丢失
-- **删除**：其余全部 body 元素（封面区块、推荐、营销等 step 3 排除的内容）
+按 `3_key_ids.json` 裁剪 `2_clean_style_snapshot.html`：key 元素子树 + 到 `<body>` 的祖先链一字不动保留，其余 body 元素删除；`<head>` 与全部 `<style>` 保留。裁剪规则见脚本头部注释。
 
 产物：`4_styled_extract.html`
 
@@ -143,12 +118,7 @@ node <skill-root>/script/extract_styled.mjs <url-dir>
 node <skill-root>/script/compute_styles.mjs <url-dir>
 ```
 
-读取 `4_styled_extract.html`，juice 按自身 CSS 级联引擎把 `<style>` 规则内联到元素的 style 属性并移除标签（字面声明值：不推导继承、不解析 `var()`；原有内联样式参与级联故保留），随后在浏览器里清理并删净（正文含字面 `class="..."` 文本也不会误伤）：
-
-- **噪声声明删除**：`font-family`、`font-style`（任意值）、`-webkit-` 前缀属性、值为 `inherit` 的声明；清空后移除 style 属性。只动确有噪声的元素——无噪声的保持 juice 字面输出（被清理元素的声明经 CSSOM 重序列化，颜色归一为 rgb() 形式，语义等价）
-- **`<style>` 标签与 `class` 属性删净**
-
-终态：无 `<style>`、无 `class`，内联声明只留有意义的。
+把 `4_styled_extract.html` 的 `<style>` 规则内联进元素 style 属性，再删噪声声明与残留 `<style>`/`class`，终态纯内联。两轮处理细节见脚本头部注释。
 
 产物：`5_juice_styles.html`
 
@@ -163,15 +133,7 @@ node <skill-root>/script/compute_styles.mjs <url-dir>
 node <skill-root>/script/extract_article.mjs <url-dir>
 ```
 
-`<url-dir>` 为 `working/` 下的 URL 目录名（相对或绝对路径均可）。
-
-读取 `5_juice_styles.html` 与 `3_key_ids.json`，新建一份只含文章主体的 html，按**分组顺序**（标题 → 说明 → 正文块）把元素提取进新 `<body>`：
-
-- `titleIds` / `descriptionIds`：**元素本身**（完整子树，属性与内容一字不动）
-- `listFlowIds`：遍历各容器子节点，**元素与非空白裸文本按文档序交错迁入**——裸文本没有 `data-u2m-id` 但可能是未包标签的正文，丢弃即内容损失；纯空白文本与注释不迁（容器本身与祖先骨架不入新 html）
-- 去重：同一元素被指名两次（如 description 同时是 flow 子元素）只出现一次
-- head：保留原文 `<title>`；`<html lang>` 照抄
-- 新 `<body>` 带阅读布局内联样式 `max-width: 768px; margin: 4rem auto`（限宽、水平居中）
+读 `5_juice_styles.html` 与 `3_key_ids.json`，按分组顺序（标题 → 说明 → 正文块）把 key 元素与列表流子节点迁入新 `<body>`（768px 居中阅读布局）。提取与去重规则见脚本头部注释。
 
 产物：`6_article.html`
 
@@ -232,23 +194,9 @@ node <skill-root>/script/extract_article.mjs <url-dir>
 node <skill-root>/script/screenshot_trans.mjs <url-dir>
 ```
 
-读取 `7_skeleton.json` + `6_article.html` + `2_long_text.json`。
+读 `7_skeleton.json` + `6_article.html` + `2_long_text.json`：先纯 Node 把骨架里所有 `{{LONG_TEXT_k}}` 替换为原文写出 resolved skeleton，再对 `trans2img` 标记的元素在占位符还原后的真实渲染状态下截图。两轮处理细节见脚本头部注释。
 
-你的任务：
-1. 把骨架里所有 `{{LONG_TEXT_k}}` / `{{LONG_TEXT_k|suffix}}` 替换为 `2_long_text.json` 的真实文本，写出与步骤 7 同结构的 `8_resolved_skeleton.json`
-2. 对其中 `trans2img` 标记的元素，在真实渲染状态下截图（子树内占位符已替换）
-
-脚本行为：
-1. 读骨架 + `2_long_text.json`，纯 Node 做占位符替换，写出 `8_resolved_skeleton.json`（条目数、顺序、key 与步骤 7 完全一致，trans2img 条目保留，value 全部为真实文本）
-2. 若骨架中任一 value 引用了 `2_long_text.json` 未定义的编号 → 直接报 error
-3. 按文档序收集骨架中所有 `trans2img` 的 id；若为空：`skipped: "no_trans2img"`，resolved skeleton 已写出，直接进入步骤 9
-4. 用 playwright 加载 `6_article.html`（body 已设 `max-width: 768px`，即真实渲染宽度）
-5. 注入 `page-resolve-placeholders.js`：遍历全文档文本节点，把 `{{LONG_TEXT_k|...}}` / `{{LONG_TEXT_k}}` 替换为 `2_long_text.json` 里的原文（与 resolved skeleton 的还原结果一致，用于截图）
-6. 对每个 id 定位元素并调 `el.screenshot({type: 'webp'})` → `assets/trans/{id}.webp`
-
-产物：
-- `8_resolved_skeleton.json`（必填，结构同步骤 7，所有占位符已还原；下游回填脚本直接读它生成 markdown，无需再拼 `2_long_text.json`）
-- `assets/trans/{id}.webp`（每个 trans2img 一个截图，WebP 格式，2x 分辨率）
+产物：`8_resolved_skeleton.json`（必填，结构同步骤 7，占位符已全部还原；步骤 9 直接读它，无需再拼 `2_long_text.json`）、`assets/trans/{id}.webp`（每个 trans2img 一张，WebP，2x 分辨率）
 
 | stdout status | 动作 |
 |---|---|
@@ -261,22 +209,7 @@ node <skill-root>/script/screenshot_trans.mjs <url-dir>
 node <skill-root>/script/render_skeleton.mjs <url-dir>
 ```
 
-读取 `8_resolved_skeleton.json`，按文档序把每条骨架条目转为 markdown 块，块与块之间以空行分隔。纯 Node，无浏览器依赖。
-
-转换规则（块级语法由此脚本加，行内 markdown 已在步骤 7 由 LLM 写好）：
-
-| key | markdown 输出 |
-|---|---|
-| `h1`-`h6` | `#`-`######` + ` ` + value |
-| `p` | value 原样 |
-| `blockquote` | 每行前缀 `> ` |
-| `ul` / `ol` | value 原样（LLM 已写 `- ` / `1. ` 行级语法） |
-| `code` | ` ```{lang}\n{content}\n``` `（`lang` 缺省时仅 ` ``` `） |
-| `img` | `![]({url})` |
-| `table` | value 原样（LLM 已写完整管线表） |
-| `trans2img` | `![](assets/trans/{id}.webp)`（相对 urlDir） |
-
-未知 key 静默跳过。空骨架输出空文件。
+读 `8_resolved_skeleton.json`，按文档序把每条骨架条目转为 markdown 块（块级语法由此脚本加，行内 markdown 已在步骤 7 写好），块间空行。各 key 的转换规则见脚本头部注释。纯 Node，无浏览器依赖。
 
 产物：`9_markdown.md`
 
@@ -295,4 +228,4 @@ node <skill-root>/script/render_skeleton.mjs <url-dir>
 | 页面加载报 `net::ERR_TUNNEL_CONNECTION_FAILED` / `ERR_PROXY_CONNECTION_FAILED` | 本机系统代理不可用或拒绝目标站：设 `U2M_PROXY=direct` 绕过系统代理，或 `U2M_PROXY=http://<host>:<port>` 显式指定可用代理后重跑 |
 | `clean_snapshot` 报找不到快照 | 先运行步骤 1 生成 `1_snapshot.html` |
 | `extract_article` 报找不到纯内联视图 | 先运行步骤 5 生成 `5_juice_styles.html` |
-| `chunker` 报找不到 key_ids | 先运行步骤 3 生成 `3_key_ids.json` |
+| `extract_styled` / `extract_article` 报找不到 key_ids | 先运行步骤 3 生成 `3_key_ids.json` |

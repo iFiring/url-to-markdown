@@ -1,12 +1,32 @@
 #!/usr/bin/env node
-// compute_styles.mjs <url-dir>
-// 步骤 5：样式内联（juice）。读 4_styled_extract.html，juice 按自身
-// CSS 级联引擎把 <style> 规则内联到元素的 style 属性并移除标签
-// （字面声明值：不推导继承、不解析 var()；原有内联样式参与级联故保留），
-// 再在浏览器里删净残留 <style> 与全部 class 属性（page-finalize-inline.js）。
-// 终态：无 <style>、无 class，样式仅存于内联。
-// 产物：steps/5_juice_styles.html
-// （getComputedStyle 计算版已按效果对比移除，只保留 juice 路径）
+/**
+ * compute_styles.mjs —— 步骤 5：样式内联（juice）。读 4_styled_extract.html，
+ * 产出 <url-dir>/5_juice_styles.html。终态：无 <style>、无 class，
+ * 内联声明只留有意义的。
+ *
+ * 用法:
+ *   node compute_styles.mjs <url-dir>
+ *
+ * 两轮处理：
+ *   1. juice（Node）：按自身 CSS 级联引擎把 <style> 规则内联到元素的
+ *      style 属性并移除标签——字面声明值：不推导继承、不解析 var()；
+ *      原有内联样式参与级联故保留
+ *   2. 浏览器收尾（lib/page-finalize-inline.js）：
+ *      - 噪声声明删除：font-family、font-style（任意值）、-webkit- 前缀
+ *        属性、值为 inherit 的声明；清空后移除 style 属性。只动确有
+ *        噪声的元素——无噪声的保持 juice 字面输出（被清理元素的声明经
+ *        CSSOM 重序列化，颜色归一为 rgb() 形式，语义等价）
+ *      - <style> 标签与 class 属性删净（正文含字面 class="..." 文本也
+ *        不会误伤）
+ *
+ * 历史：getComputedStyle 计算版已按效果对比移除，只保留 juice 路径。
+ *
+ * stdout 输出（有且仅有一行 JSON，日志一律走 stderr）:
+ *   {"status":"ok","juiceStyles":"...","styledCount":N}  → 退出码 0
+ *   {"status":"error","reason":"..."}                    → 1
+ *
+ * 退出码: 0 成功；1 失败；2 参数错误。
+ */
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';

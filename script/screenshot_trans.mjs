@@ -1,10 +1,35 @@
 #!/usr/bin/env node
-// screenshot_trans.mjs <url-dir>
-// 步骤 8：占位符还原 + trans2img 截图。
-// 1) 纯 Node：读 7_skeleton.json + 2_long_text.json → 写出 8_resolved_skeleton.json
-//    （结构同 7，所有 {{LONG_TEXT_k[|suffix]}} 替换为真实文本，trans2img 条目保留）
-// 2) playwright 加载 6_article.html → 注入占位符替换 → 逐元素 el.screenshot →
-//    assets/trans/{id}.webp（2x 分辨率）
+/**
+ * screenshot_trans.mjs —— 步骤 8：占位符还原 + trans2img 截图。
+ * 读 7_skeleton.json + 6_article.html + 2_long_text.json，产出：
+ *   8_resolved_skeleton.json  结构同步骤 7，所有 {{LONG_TEXT_k[|suffix]}}
+ *                             替换为真实文本（trans2img 条目保留）
+ *   assets/trans/{id}.webp    每个 trans2img 元素一张截图（WebP，2x 分辨率）
+ *
+ * 用法:
+ *   node screenshot_trans.mjs <url-dir>
+ *
+ * 两轮处理：
+ *   1. 纯 Node（playwright 之前）：读骨架 + 2_long_text.json 做占位符替换，
+ *      写出 8_resolved_skeleton.json（条目数、顺序、key 与步骤 7 完全一致，
+ *      value 全部为真实文本）。任一 value 引用了未定义编号 → 直接 error。
+ *      骨架无 trans2img 条目时到此为止（skipped: "no_trans2img"，
+ *      resolved skeleton 已写出）
+ *   2. playwright：加载 6_article.html（body 已设 max-width: 768px，即真实
+ *      渲染宽度）→ 注入 lib/page-resolve-placeholders.js 遍历全文档文本
+ *      节点，把 {{LONG_TEXT_k|...}} 替换为原文（与 resolved skeleton 的
+ *      还原结果一致）→ 对每个 trans2img id 定位元素并
+ *      el.screenshot({type: 'webp'}) 写入 assets/trans/{id}.webp
+ *
+ * stdout 输出（有且仅有一行 JSON，日志一律走 stderr）:
+ *   {"status":"ok","count":N,"screenshots":[...],"replaced":M,
+ *    "resolvedSkeleton":"..."}                          → 退出码 0
+ *   {"status":"ok","skipped":"no_trans2img",
+ *    "resolvedSkeleton":"..."}        无 trans2img 条目 → 退出码 0
+ *   {"status":"error","reason":"..."} 前置缺失 / id 未命中 / 未定义编号 → 1
+ *
+ * 退出码: 0 成功；1 失败；2 参数错误。
+ */
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';

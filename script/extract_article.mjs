@@ -1,10 +1,27 @@
 #!/usr/bin/env node
-// extract_article.mjs <url-dir>
-// 步骤 6：文章视图提取。读 5_juice_styles.html 与 3_key_ids.json，
-// 新建一份 html：titleIds/descriptionIds 元素本身 + 各 listFlowId 的元素
-// 子节点，按分组顺序（标题 → 说明 → 正文块）adopt 进新 body，
-// 属性与内容一字不动；flow 容器与祖先骨架不入。
-// 产物：steps/6_article.html
+/**
+ * extract_article.mjs —— 步骤 6：文章视图提取。读 5_juice_styles.html 与
+ * 3_key_ids.json，新建一份只含文章主体的 html，产出 <url-dir>/6_article.html。
+ *
+ * 用法:
+ *   node extract_article.mjs <url-dir>
+ *
+ * 提取规则（按分组顺序：标题 → 说明 → 正文块）：
+ *   - titleIds / descriptionIds：元素本身（完整子树，属性与内容一字不动）
+ *   - listFlowIds：遍历各容器子节点，元素与非空白裸文本按文档序交错迁入
+ *     ——裸文本没有 data-u2m-id 但可能是未包标签的正文，丢弃即内容损失；
+ *     纯空白文本与注释不迁；flow 容器本身与祖先骨架不入新 html
+ *   - 去重：同一元素被指名两次（如 description 同时是 flow 子元素）只出现一次
+ *   - head：保留原文 <title>；<html lang> 照抄
+ *   - 新 <body> 带阅读布局内联样式 max-width: 768px; margin: 4rem auto
+ *     （限宽、水平居中）
+ *
+ * stdout 输出（有且仅有一行 JSON，日志一律走 stderr）:
+ *   {"status":"ok","article":"...","elementCount":N}  → 退出码 0
+ *   {"status":"error","reason":"..."}                 → 1
+ *
+ * 退出码: 0 成功；1 失败；2 参数错误。
+ */
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';

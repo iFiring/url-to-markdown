@@ -1,7 +1,30 @@
 #!/usr/bin/env node
-// render_skeleton.mjs <url-dir>
-// 步骤 9：把 steps/8_resolved_skeleton.json 转为 markdown 文档
-// steps/9_markdown.md。纯 Node，无浏览器依赖。
+/**
+ * render_skeleton.mjs —— 步骤 9：骨架回填为 Markdown。读
+ * 8_resolved_skeleton.json，按文档序把每条骨架条目转为 markdown 块，
+ * 块与块之间以空行分隔，产出 <url-dir>/9_markdown.md（最终产物）。
+ * 纯 Node，无浏览器依赖。
+ *
+ * 用法:
+ *   node render_skeleton.mjs <url-dir>
+ *
+ * 转换规则（块级语法由此脚本加，行内 markdown 已在步骤 7 写好）：
+ *   h1-h6       "#" 前缀（数量 = 级别）
+ *   p           value 原样
+ *   blockquote  每行前缀 "> "
+ *   ul / ol     value 原样（行级 "- " / "1. " 语法已写好）
+ *   code        "```{lang}" 围栏（lang 缺省时仅 "```"）
+ *   img         ![]({url})
+ *   table       value 原样（完整管线表已写好）
+ *   trans2img   ![](assets/trans/{id}.webp)（相对 urlDir）
+ *   未知 key 静默跳过；空骨架输出空文件
+ *
+ * stdout 输出（有且仅有一行 JSON，日志一律走 stderr）:
+ *   {"status":"ok","markdownPath":"...","bytes":N,"blocks":M}  → 退出码 0
+ *   {"status":"error","reason":"..."}                          → 1
+ *
+ * 退出码: 0 成功；1 失败；2 参数错误。
+ */
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';

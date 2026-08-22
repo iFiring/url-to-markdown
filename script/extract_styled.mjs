@@ -1,10 +1,26 @@
 #!/usr/bin/env node
-// extract_styled.mjs <url-dir>
-// 步骤 4：样式视图裁剪。读 3_key_ids.json 与 2_clean_style_snapshot.html，
-// 保留三类 key 元素（titleIds/descriptionIds/listFlowIds）的完整子树与到
-// <body> 的祖先链（一字不动，含全部属性），删除其余 body 元素；
-// <head>（title + <style>）不动，body 分支里的 <style> 挪入 head 后再删分支。
-// 产物：steps/4_styled_extract.html
+/**
+ * extract_styled.mjs —— 步骤 4：样式视图裁剪。读 3_key_ids.json 与
+ * 2_clean_style_snapshot.html，裁剪出只含文章主体的带样式视图，
+ * 产出 <url-dir>/4_styled_extract.html。
+ *
+ * 用法:
+ *   node extract_styled.mjs <url-dir>
+ *
+ * 裁剪规则：
+ *   - 完整保留（一字不动，含全部标签属性与样式属性）：三类 key 元素
+ *     （titleIds/descriptionIds/listFlowIds）的子树 + 它们到 <body> 的
+ *     祖先链——祖先上下文不变，CSS 选择器照常生效
+ *   - <head> 完全不动（<title> + 全部 <style> 原地保留）；body 里即将删除
+ *     的分支中若有 <style>，先挪入 <head> 再删分支，样式标签零丢失
+ *   - 删除：其余全部 body 元素（封面区块、推荐、营销等步骤 3 排除的内容）
+ *
+ * stdout 输出（有且仅有一行 JSON，日志一律走 stderr）:
+ *   {"status":"ok","styledExtract":"...","removedCount":N,"keptCount":M} → 0
+ *   {"status":"error","reason":"..."}   key_ids 缺失 / 快照缺失 / id 未命中 → 1
+ *
+ * 退出码: 0 成功；1 失败；2 参数错误。
+ */
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
