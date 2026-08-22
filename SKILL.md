@@ -222,7 +222,7 @@ node <skill-root>/script/extract_article.mjs <url-dir>
 
 **后续**：步骤 3.5 对 `trans2img` 元素截图（含占位符还原）；回填脚本（尚未实现）读骨架 + `2_long_text.json` 生成最终 markdown。在回填路径端到端跑通前，步骤 4/5 旧路径暂保留可用。
 
-### 步骤 3.5 · trans2img 截图
+### 步骤 3.5 · 占位符还原 + trans2img 截图
 
 ```bash
 node <skill-root>/script/screenshot_trans.mjs <url-dir>
@@ -230,21 +230,25 @@ node <skill-root>/script/screenshot_trans.mjs <url-dir>
 
 读取 `steps/3.4_skeleton.json` + `steps/3.3_article.html` + `steps/2_long_text.json`。
 
-你的任务：对骨架里所有 `trans2img` 标记的元素，在真实渲染状态下截图（先把子树内的占位符替换成真实文本）。
+你的任务：
+1. 把骨架里所有 `{{LONG_TEXT_k}}` / `{{LONG_TEXT_k|suffix}}` 替换为 `2_long_text.json` 的真实文本，写出与 3.4 同结构的 `steps/3.5_resolved_skeleton.json`
+2. 对其中 `trans2img` 标记的元素，在真实渲染状态下截图（子树内占位符已替换）
 
 脚本行为：
-1. 按文档序收集骨架中所有 `trans2img` 的 id
-2. 用 playwright 加载 `3.3_article.html`（body 已设 `max-width: 768px`，即真实渲染宽度）
-3. 注入 `page-resolve-placeholders.js`：遍历全文档文本节点，把 `{{LONG_TEXT_k|...}}` / `{{LONG_TEXT_k}}` 替换为 `2_long_text.json` 里的原文
-4. 对每个 id 定位元素并调 `el.screenshot({type: 'webp'})` → `assets/trans/{id}.webp`
+1. 读骨架 + `2_long_text.json`，纯 Node 做占位符替换，写出 `steps/3.5_resolved_skeleton.json`（条目数、顺序、key 与 3.4 完全一致，trans2img 条目保留，value 全部为真实文本）
+2. 若骨架中任一 value 引用了 `2_long_text.json` 未定义的编号 → 直接报 error
+3. 按文档序收集骨架中所有 `trans2img` 的 id；若为空：`skipped: "no_trans2img"`，resolved skeleton 已写出，直接进入步骤 4
+4. 用 playwright 加载 `3.3_article.html`（body 已设 `max-width: 768px`，即真实渲染宽度）
+5. 注入 `page-resolve-placeholders.js`：遍历全文档文本节点，把 `{{LONG_TEXT_k|...}}` / `{{LONG_TEXT_k}}` 替换为 `2_long_text.json` 里的原文（与 resolved skeleton 的还原结果一致，用于截图）
+6. 对每个 id 定位元素并调 `el.screenshot({type: 'webp'})` → `assets/trans/{id}.webp`
 
-若骨架无 `trans2img` 条目：`skipped: "no_trans2img"`，不写截图，直接进入步骤 4。
-
-产物：`assets/trans/{id}.webp`（每个 trans2img 一个截图，WebP 格式，2x 分辨率）
+产物：
+- `steps/3.5_resolved_skeleton.json`（必填，结构同 3.4，所有占位符已还原；下游回填脚本直接读它生成 markdown，无需再拼 `2_long_text.json`）
+- `assets/trans/{id}.webp`（每个 trans2img 一个截图，WebP 格式，2x 分辨率）
 
 | stdout status | 动作 |
 |---|---|
-| `ok` | 进入步骤 4（或后续回填）。`count` 为截图数；`replaced` 为占位符替换数；`skipped: "no_trans2img"` 时无产物 |
+| `ok` | 进入步骤 4（或后续回填）。`resolvedSkeleton` 为 resolved skeleton 路径；`count` 为截图数；`replaced` 为截图前的占位符替换数；`skipped: "no_trans2img"` 时只有 resolved skeleton |
 | `error` | 按 `reason` 处理：前置产物缺失→补跑对应步骤；id 在 DOM 未命中→重跑步骤 3.4；占位符引用未定义编号→检查步骤 2 |
 
 ### 步骤 4 · 分块

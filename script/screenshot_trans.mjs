@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // screenshot_trans.mjs <url-dir>
-// 步骤 3.5：trans2img 截图。读 3.4 骨架收集 trans2img id，
-// playwright 加载 3.3 → 注入占位符替换（page-resolve-placeholders.js）→
-// 逐元素 el.screenshot 写入 assets/trans/{id}.png。
+// 步骤 3.5：占位符还原 + trans2img 截图。
+// 1) 纯 Node：读 3.4 骨架 + 2_long_text.json → 写出 3.5_resolved_skeleton.json
+//    （结构同 3.4，所有 {{LONG_TEXT_k[|suffix]}} 替换为真实文本，trans2img 条目保留）
+// 2) playwright 加载 3.3 → 注入占位符替换 → 逐元素 el.screenshot →
+//    assets/trans/{id}.webp（2x 分辨率）
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
@@ -32,6 +34,20 @@ function resolveUrlDir(arg) {
   return path.join(workingRoot(), arg);
 }
 
+// 把骨架条目里 value 字符串中的 {{LONG_TEXT_k[|suffix]}} 替换为真实文本。
+// 返回 { resolved, undefined: string[] }。
+function resolveSkeletonString(value, longText) {
+  if (typeof value !== 'string') return { resolved: value, undefined: [] };
+  const PH_RE = /\{\{LONG_TEXT_(\d+)(?:\|[^}]*)?\}\}/g;
+  const undef = [];
+  const resolved = value.replace(PH_RE, (match, id) => {
+    if (Object.prototype.hasOwnProperty.call(longText, id)) return longText[id];
+    undef.push(id);
+    return match;
+  });
+  return { resolved, undefined: undef };
+}
+
 async function main() {
   const args = parseArgs(process.argv);
   if (!args) return;
@@ -55,6 +71,28 @@ async function main() {
   }
 
   const skeleton = JSON.parse(await fsPromises.readFile(skeletonPath, 'utf8'));
+  const longText = JSON.parse(await fsPromises.readFile(longTextPath, 'utf8'));
+
+  // ── resolved skeleton（纯 Node，不依赖 playwright）──
+  const resolvedSkeleton = [];
+  const undefinedRefs = new Set();
+  for (const entry of skeleton) {
+    const keys = Object.keys(entry);
+    const key = keys[0];
+    const { resolved, undefined: undef } = resolveSkeletonString(entry[key], longText);
+    for (const u of undef) undefinedRefs.add(u);
+    resolvedSkeleton.push({ [key]: resolved });
+  }
+
+  const resolvedPath = path.join(stepsDir, '3.5_resolved_skeleton.json');
+  await fsPromises.writeFile(resolvedPath, JSON.stringify(resolvedSkeleton, null, 2));
+
+  if (undefinedRefs.size > 0) {
+    return emitError(
+      `骨架引用了 2_long_text.json 中未定义的占位符编号: ${[...undefinedRefs].sort((a, b) => +a - +b).join(', ')}`,
+      1
+    );
+  }
 
   // 按文档序收集 trans2img id
   const transIds = [];
@@ -63,11 +101,10 @@ async function main() {
   }
 
   if (transIds.length === 0) {
-    log('骨架无 trans2img 条目，跳过');
-    return emit({ status: 'ok', skipped: 'no_trans2img' });
+    log('骨架无 trans2img 条目，跳过截图（已写出 resolved skeleton）');
+    return emit({ status: 'ok', skipped: 'no_trans2img', resolvedSkeleton: resolvedPath });
   }
 
-  const longText = JSON.parse(await fsPromises.readFile(longTextPath, 'utf8'));
   const pageScriptFn = await readSharedScript('page-resolve-placeholders.js');
 
   let browser;
@@ -125,6 +162,7 @@ async function main() {
       count: screenshots.length,
       screenshots,
       replaced: resolveResult.replaced,
+      resolvedSkeleton: resolvedPath,
     });
   } catch (e) {
     if (browser) await browser.close().catch(() => {});
