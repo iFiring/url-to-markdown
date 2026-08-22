@@ -220,7 +220,32 @@ node <skill-root>/script/extract_article.mjs <url-dir>
 ]
 ```
 
-**后续（尚未实现）**：回填脚本读骨架 + `2_long_text.json` 生成最终 markdown；`trans2img` 元素由脚本开浏览器截图。在回填路径端到端跑通前，步骤 4/5 旧路径暂保留可用。
+**后续**：步骤 3.5 对 `trans2img` 元素截图（含占位符还原）；回填脚本（尚未实现）读骨架 + `2_long_text.json` 生成最终 markdown。在回填路径端到端跑通前，步骤 4/5 旧路径暂保留可用。
+
+### 步骤 3.5 · trans2img 截图
+
+```bash
+node <skill-root>/script/screenshot_trans.mjs <url-dir>
+```
+
+读取 `steps/3.4_skeleton.json` + `steps/3.3_article.html` + `steps/2_long_text.json`。
+
+你的任务：对骨架里所有 `trans2img` 标记的元素，在真实渲染状态下截图（先把子树内的占位符替换成真实文本）。
+
+脚本行为：
+1. 按文档序收集骨架中所有 `trans2img` 的 id
+2. 用 playwright 加载 `3.3_article.html`（body 已设 `max-width: 768px`，即真实渲染宽度）
+3. 注入 `page-resolve-placeholders.js`：遍历全文档文本节点，把 `{{LONG_TEXT_k|...}}` / `{{LONG_TEXT_k}}` 替换为 `2_long_text.json` 里的原文
+4. 对每个 id 定位元素并调 `el.screenshot({type: 'webp'})` → `assets/trans/{id}.webp`
+
+若骨架无 `trans2img` 条目：`skipped: "no_trans2img"`，不写截图，直接进入步骤 4。
+
+产物：`assets/trans/{id}.webp`（每个 trans2img 一个截图，WebP 格式，2x 分辨率）
+
+| stdout status | 动作 |
+|---|---|
+| `ok` | 进入步骤 4（或后续回填）。`count` 为截图数；`replaced` 为占位符替换数；`skipped: "no_trans2img"` 时无产物 |
+| `error` | 按 `reason` 处理：前置产物缺失→补跑对应步骤；id 在 DOM 未命中→重跑步骤 3.4；占位符引用未定义编号→检查步骤 2 |
 
 ### 步骤 4 · 分块
 
