@@ -12,10 +12,16 @@
  *      style 属性并移除标签——字面声明值：不推导继承、不解析 var()；
  *      原有内联样式参与级联故保留
  *   2. 浏览器收尾（lib/page-finalize-inline.js）：
- *      - 噪声声明删除：font-family、font-style（任意值）、-webkit- 前缀
- *        属性、值为 inherit 的声明；清空后移除 style 属性。只动确有
- *        噪声的元素——无噪声的保持 juice 字面输出（被清理元素的声明经
- *        CSSOM 重序列化，颜色归一为 rgb() 形式，语义等价）
+ *      - 白名单清理：只留明显结构化的样式——边框背景（border、
+ *        outline、background、box-shadow）、flex 与 grid 布局（display、
+ *        flex、grid、gap、对齐、order）、滚动裁剪（overflow、
+ *        overflow-x/y）、transform——加 font-size/font-weight（步骤 7
+ *        判标题层级的信号）；其余——盒模型几何（宽高、margin、padding、
+ *        box-sizing）、定位、字体与文本类其余（font-
+ *        family、行高、字距、color、text 等）、交互、动画、厂商前缀、
+ *        自定义属性——全删；值为 inherit 的声明删除；清空后移除 style
+ *        属性。只动确有删除的元素——全合规的保持 juice 字面输出（被清
+ *        理元素的声明经 CSSOM 重序列化，颜色归一为 rgb() 形式，语义等价）
  *      - <style> 标签与 class 属性删净（正文含字面 class="..." 文本也
  *        不会误伤）
  *

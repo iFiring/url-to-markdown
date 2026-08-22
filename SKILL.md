@@ -137,7 +137,7 @@ node <skill-root>/script/extract_styled.mjs <url-dir>
 node <skill-root>/script/compute_styles.mjs <url-dir>
 ```
 
-把 `4_styled_extract.html` 的 `<style>` 规则内联进元素 style 属性，再删噪声声明与残留 `<style>`/`class`，终态纯内联。两轮处理细节见脚本头部注释。
+把 `4_styled_extract.html` 的 `<style>` 规则内联进元素 style 属性，再按白名单只保留明显结构化的样式（border/outline/background/box-shadow、flex/grid 布局、overflow、transform）与 font-size/font-weight，删净其余声明及残留 `<style>`/`class`，终态纯内联。两轮处理细节见脚本头部注释。
 
 产物：`5_juice_styles.html`
 
