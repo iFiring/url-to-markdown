@@ -9,16 +9,16 @@ import { runScript } from '../helpers/run-script.mjs';
 import { PIXEL_PNG } from '../helpers/assets.mjs';
 
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
-const pageScriptPath = path.resolve(thisDir, '../../script/lib/page-resolve-placeholders.js');
+const sigScriptPath = path.resolve(thisDir, '../../script/lib/page-element-signature.js');
 
-test('page-resolve-placeholders.js: 文件存在且包含 __u2mResolvePlaceholders 函数', () => {
-  const src = fs.readFileSync(pageScriptPath, 'utf8');
-  assert.ok(src.includes('function __u2mResolvePlaceholders'), '应定义 __u2mResolvePlaceholders');
+test('page-element-signature.js: 文件存在且包含 __u2mElementSignature 函数', () => {
+  const src = fs.readFileSync(sigScriptPath, 'utf8');
+  assert.ok(src.includes('function __u2mElementSignature'), '应定义 __u2mElementSignature');
 });
 
-test('page-resolve-placeholders.js: 函数可被 evaluate 格式调用', () => {
-  const src = fs.readFileSync(pageScriptPath, 'utf8');
-  const wrapped = `(${src})({"1": "ok"})`;
+test('page-element-signature.js: 函数可被 evaluate 格式调用', () => {
+  const src = fs.readFileSync(sigScriptPath, 'utf8');
+  const wrapped = `(${src})(["1"])`;
   assert.doesNotThrow(() => new Function('return ' + wrapped));
 });
 
@@ -29,17 +29,19 @@ test('screenshot_trans.mjs: 无参数时输出 usage_error', async () => {
   assert.equal(JSON.parse(r.stdout).status, 'usage_error');
 });
 
-// 步骤 6 产物：body 768px 居中；trans2img 元素含占位符
-const ARTICLE = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>测试</title></head><body style="max-width: 768px; margin: 4rem auto">
+// 步骤 1 产物：全保真快照——真实文本（占位符只存在于步骤 2 派生视图）、
+// <base data-u2m-base> 指向死端口 → live 重渲染即时失败（ECONNREFUSED），
+// 离线走快照兜底
+const SNAPSHOT = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>测试</title><base data-u2m-base="1" href="http://127.0.0.1:9/dead"></head><body>
 <h1 data-u2m-id="1">标题</h1>
-<p data-u2m-id="2">{{LONG_TEXT_5|10_chars}}</p>
+<p data-u2m-id="2">段落一文本内容</p>
 <div data-u2m-id="10" style="background-color: rgb(240, 240, 240); border: 1px solid rgb(200, 200, 200); padding: 16px">
 <div data-u2m-id="11" style="background-color: rgb(255, 255, 255); padding: 8px">
-<span data-u2m-id="12">{{LONG_TEXT_6|8_chars}}</span>
+<span data-u2m-id="12">重要内容</span>
 </div>
 </div>
-<p data-u2m-id="20">{{LONG_TEXT_8|10_chars}}</p>
+<p data-u2m-id="20">段落二文本内容</p>
 </body></html>`;
 
 const SKELETON = [
@@ -55,19 +57,19 @@ const LONG_TEXT = {
   '8': '段落二文本内容',
 };
 
-function setupTmp(name, { article = ARTICLE, skeleton = SKELETON, longText = LONG_TEXT } = {}) {
+function setupTmp(name, { snapshot = SNAPSHOT, skeleton = SKELETON, longText = LONG_TEXT } = {}) {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), `u2m-sstrans-${name}-`));
   const urlDir = path.join(tmpRoot, 'test-sstrans');
   const assetsDir = path.join(urlDir, 'assets');
   fs.mkdirSync(urlDir, { recursive: true });
   fs.mkdirSync(assetsDir, { recursive: true });
-  if (article !== null) fs.writeFileSync(path.join(urlDir, '6_article.html'), article);
+  if (snapshot !== null) fs.writeFileSync(path.join(urlDir, '1_snapshot.html'), snapshot);
   if (skeleton !== null) fs.writeFileSync(path.join(urlDir, '7_skeleton.json'), JSON.stringify(skeleton));
   if (longText !== null) fs.writeFileSync(path.join(urlDir, '2_long_text.json'), JSON.stringify(longText));
   return { tmpRoot, urlDir, assetsDir };
 }
 
-test('screenshot_trans.mjs: 正常截图 + 占位符还原 + resolved skeleton', async () => {
+test('screenshot_trans.mjs: live 不可达时快照兜底截图 + resolved skeleton + source 字段', async () => {
   const { tmpRoot, urlDir, assetsDir } = setupTmp('ok');
   const script = path.resolve('script/screenshot_trans.mjs');
   const r = await runScript(process.execPath, [script, urlDir], {
@@ -78,7 +80,8 @@ test('screenshot_trans.mjs: 正常截图 + 占位符还原 + resolved skeleton',
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
   assert.equal(out.count, 1, '应截图 1 个元素');
-  assert.equal(out.replaced, 3, '应替换全文档 3 个占位符（含 trans 子树内外）');
+  assert.equal(out.source, 'snapshot', 'live 重渲染失败（死端口）应整体走快照兜底');
+  assert.equal(out.replaced, undefined, 'replaced 字段应随页面内占位符还原一起退役');
   assert.equal(out.resolvedSkeleton, path.join(urlDir, '8_resolved_skeleton.json'));
 
   // 截图文件存在且非空
@@ -129,7 +132,7 @@ test('screenshot_trans.mjs: 无 trans2img 条目时 skipped 但仍输出 resolve
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('screenshot_trans.mjs: DOM 缺 id 时报 error', async () => {
+test('screenshot_trans.mjs: id 在快照也未命中时报 error', async () => {
   const { tmpRoot, urlDir } = setupTmp('miss', {
     skeleton: [{ trans2img: '999' }],
   });
@@ -142,24 +145,6 @@ test('screenshot_trans.mjs: DOM 缺 id 时报 error', async () => {
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'error');
   assert.ok(out.reason.includes('999'), `reason 应含缺失 id: ${out.reason}`);
-  fs.rmSync(tmpRoot, { recursive: true, force: true });
-});
-
-test('screenshot_trans.mjs: 占位符引用未定义编号时报 error', async () => {
-  const { tmpRoot, urlDir } = setupTmp('badref', {
-    article: `<!DOCTYPE html><html><head><title>t</title></head><body style="max-width: 768px"><div data-u2m-id="10"><span>{{LONG_TEXT_999|3_chars}}</span></div></body></html>`,
-    skeleton: [{ trans2img: '10' }],
-    longText: { '5': '其他文本' },
-  });
-  const script = path.resolve('script/screenshot_trans.mjs');
-  const r = await runScript(process.execPath, [script, urlDir], {
-    env: { U2M_WORKING_ROOT: tmpRoot },
-    timeoutMs: 60000,
-  });
-  assert.equal(r.code, 1);
-  const out = JSON.parse(r.stdout);
-  assert.equal(out.status, 'error');
-  assert.ok(out.reason.includes('999'), `reason 应含未定义编号: ${out.reason}`);
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
@@ -221,15 +206,15 @@ test('screenshot_trans.mjs: code 条目引用未定义编号时报 error', async
 test('screenshot_trans.mjs: 缺前置产物时报 error', async () => {
   const script = path.resolve('script/screenshot_trans.mjs');
 
-  // 缺步骤 6
-  const noArt = setupTmp('noart', { article: null });
-  const r1 = await runScript(process.execPath, [script, noArt.urlDir], {
-    env: { U2M_WORKING_ROOT: noArt.tmpRoot },
+  // 缺步骤 1（1_snapshot.html）
+  const noSnap = setupTmp('nosnap', { snapshot: null });
+  const r1 = await runScript(process.execPath, [script, noSnap.urlDir], {
+    env: { U2M_WORKING_ROOT: noSnap.tmpRoot },
     timeoutMs: 60000,
   });
   assert.equal(r1.code, 1);
-  assert.ok(JSON.parse(r1.stdout).reason.includes('步骤 6'));
-  fs.rmSync(noArt.tmpRoot, { recursive: true, force: true });
+  assert.ok(JSON.parse(r1.stdout).reason.includes('步骤 1'));
+  fs.rmSync(noSnap.tmpRoot, { recursive: true, force: true });
 
   // 缺步骤 7
   const noSkel = setupTmp('noskel', { skeleton: null });
@@ -348,6 +333,7 @@ test('screenshot_trans.mjs: trans2img 与 img 混合时截图、下载同轮完�
     const out = JSON.parse(r.stdout);
     assert.equal(out.status, 'ok');
     assert.equal(out.count, 1, 'trans2img 截图 1 张');
+    assert.equal(out.source, 'snapshot', '死端口 base 下混合用例同样走快照兜底');
     assert.equal(out.images, 1, '下载 1 张');
     assert.ok(fs.existsSync(path.join(assetsDir, 'trans', '10.webp')), '截图应存在');
     assert.ok(fs.existsSync(path.join(assetsDir, 'images', 'cover.png')), '下载应存在');

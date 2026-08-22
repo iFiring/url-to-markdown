@@ -205,7 +205,7 @@ node <skill-root>/script/extract_article.mjs <url-dir>
 ]
 ```
 
-**后续**：步骤 8 下载 `img` 条目图片、对 `trans2img` 元素截图（含占位符还原）并写出 resolved skeleton；步骤 9 把骨架回填为最终 markdown。
+**后续**：步骤 8 下载 `img` 条目图片、对 `trans2img` 元素截图（live 重渲染优先、快照兜底）并写出 resolved skeleton；步骤 9 把骨架回填为最终 markdown。
 
 ### 步骤 8 · 占位符还原 + 图片下载 + trans2img 截图
 
@@ -213,14 +213,14 @@ node <skill-root>/script/extract_article.mjs <url-dir>
 node <skill-root>/script/screenshot_trans.mjs <url-dir>
 ```
 
-读 `7_skeleton.json` + `6_article.html` + `2_long_text.json`：先纯 Node 把骨架里所有 `{{LONG_TEXT_k}}` 替换为原文写出 resolved skeleton；再把 `img` 条目的远端图片下载到 `assets/images/`（优先 URL 文件名、冲突带编号），成功者把 resolved skeleton 的 img 值改写为本地路径；最后对 `trans2img` 标记的元素在占位符还原后的真实渲染状态下截图。三轮处理细节见脚本头部注释。
+读 `7_skeleton.json` + `1_snapshot.html` + `2_long_text.json`：先纯 Node 把骨架里所有 `{{LONG_TEXT_k}}` 替换为原文写出 resolved skeleton；再把 `img` 条目的远端图片下载到 `assets/images/`（优先 URL 文件名、冲突带编号），成功者把 resolved skeleton 的 img 值改写为本地路径；最后对 `trans2img` 标记的元素截图——**live 重渲染优先**：按快照 `<base>` 记录的 URL 重新渲染原页面（真实样式/图表/字体），重注入同一套标记脚本后两次渲染结构一致则 `data-u2m-id` 精确对位，与快照侧逐 id 签名严校验，全等才在 live 页截图；失配或重渲染不可达时在快照渲染页兜底。三轮处理细节见脚本头部注释。
 
 产物：`8_resolved_skeleton.json`（必填，结构同步骤 7，占位符已全部还原、下载成功的 img 已指向本地；步骤 9 直接读它，无需再拼 `2_long_text.json`）、`assets/images/<name>`（骨架 img 条目图片）、`assets/trans/{id}.webp`（每个 trans2img 一张，WebP，2x 分辨率）
 
 | stdout status | 动作 |
 |---|---|
-| `ok` | 进入步骤 9。`resolvedSkeleton` 为 resolved skeleton 路径；`count` 为截图数；`replaced` 为截图前的占位符替换数；`images` 为下载成功数、`failedImages` 为失败 URL（其骨架条目保留原 URL，无需处理）；`skipped: "no_trans2img"` 时无截图但图片下载照常 |
-| `error` | 按 `reason` 处理：前置产物缺失→补跑对应步骤；id 在 DOM 未命中→重跑步骤 7；占位符引用未定义编号→检查步骤 2 |
+| `ok` | 进入步骤 9。`resolvedSkeleton` 为 resolved skeleton 路径；`count` 为截图数；`source` 为截图来源（`live` 全部来自重渲染 / `snapshot` 全部快照兜底 / `mixed` 混合——均无需处理）；`images` 为下载成功数、`failedImages` 为失败 URL（其骨架条目保留原 URL，无需处理）；`skipped: "no_trans2img"` 时无截图但图片下载照常 |
+| `error` | 按 `reason` 处理：前置产物缺失→补跑对应步骤；id 在快照未命中→重跑步骤 7；占位符引用未定义编号→检查步骤 2 |
 
 ### 步骤 9 · 骨架回填为 Markdown
 
