@@ -5,15 +5,17 @@
  * 渐进滚动到底再回顶（触发懒加载）+ DOM 稳定等待。
  * 滚动参数必须与 page-detect.js 的 scrollIters/scrollWait 一致（scroll-params 单测守护）。
  * @param {import('playwright').Page} page
- * @param {{scrollRounds?: number}} opts
+ * @param {{scrollRounds?: number, log?: Function}} opts
  */
 export async function snapshotScroll(page, opts = {}) {
-  const { scrollRounds = 60 } = opts;
+  const { scrollRounds = 60, log = () => {} } = opts;
 
   // 渐进滚动
-  await page.evaluate(async (rounds) => {
+  const scrolled = await page.evaluate(async (rounds) => {
     let last = -1;
+    let used = 0;
     for (let i = 0; i < rounds; i++) {
+      used = i + 1;
       window.scrollTo(0, document.body.scrollHeight);
       await new Promise((r) => setTimeout(r, 150));
       const h = document.documentElement.scrollHeight;
@@ -21,7 +23,9 @@ export async function snapshotScroll(page, opts = {}) {
       last = h;
     }
     window.scrollTo(0, 0);
+    return { rounds: used, height: last };
   }, scrollRounds);
+  log(`滚动 ${scrolled.rounds}/${scrollRounds} 轮，页面高度 ${scrolled.height}px`);
 
   // DOM 稳定：节点数连续 1s 不变
   const t0 = Date.now();
@@ -33,4 +37,5 @@ export async function snapshotScroll(page, opts = {}) {
     else if (Date.now() - lastChange >= 1000) break;
     await page.waitForTimeout(200);
   }
+  log(`DOM 稳定: ${last} 个节点（等待 ${((Date.now() - t0) / 1000).toFixed(1)}s）`);
 }

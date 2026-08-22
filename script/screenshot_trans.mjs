@@ -43,7 +43,7 @@ import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
-import { emit, emitError, usage, log } from './lib/contract.mjs';
+import { emit, emitError, usage, log, debug } from './lib/contract.mjs';
 import { workingRoot, storageStatePath } from './lib/env.mjs';
 import { readSharedScript } from './lib/placeholder.mjs';
 import { proxyLaunchOptions } from './lib/browser.mjs';
@@ -138,6 +138,7 @@ async function main() {
     const v = entry.img;
     if (typeof v === 'string' && /^https?:\/\//.test(v) && !imgUrls.includes(v)) imgUrls.push(v);
   }
+  debug(`骨架 ${skeleton.length} 条：trans2img ${transIds.length} 个、img 去重后 ${imgUrls.length} 张`);
 
   if (transIds.length === 0 && imgUrls.length === 0) {
     log('骨架无 trans2img 条目也无 img 条目（已写出 resolved skeleton）');
@@ -223,6 +224,7 @@ async function main() {
       }
       const imgPath = path.join(transDir, `${id}.webp`);
       await h.screenshot({ path: imgPath, type: 'webp' });
+      debug(`trans2img ${id} 截图 → ${imgPath}`);
       screenshots.push(imgPath);
     }
 

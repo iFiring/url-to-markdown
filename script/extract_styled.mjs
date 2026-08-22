@@ -25,7 +25,7 @@ import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
-import { emit, emitError, usage, log } from './lib/contract.mjs';
+import { emit, emitError, usage, log, debug } from './lib/contract.mjs';
 import { workingRoot } from './lib/env.mjs';
 import { readSharedScript } from './lib/placeholder.mjs';
 import { proxyLaunchOptions } from './lib/browser.mjs';
@@ -71,6 +71,7 @@ async function main() {
   if (!Array.isArray(keyIds.listFlowIds) || keyIds.listFlowIds.length === 0) {
     return emitError('listFlowIds 为空（步骤 3 要求至少选一个列表流），请重跑步骤 3');
   }
+  debug(`key_ids: title=${keyIds.titleIds?.length ?? 0} desc=${keyIds.descriptionIds?.length ?? 0} flow=${keyIds.listFlowIds.length}`);
 
   const pageExtractFn = await readSharedScript('page-extract-styled.js');
 

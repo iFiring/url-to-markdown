@@ -66,6 +66,10 @@ export async function collectSignals(page, context, originalUrl, { spaWaitMs = 5
 }
 
 export async function needsLogin(page, context, originalUrl, opts = {}) {
+  const { log = () => {} } = opts;
   const signals = await collectSignals(page, context, originalUrl, opts);
-  return { ...scoreSignals(signals), signals };
+  const score = scoreSignals(signals);
+  const hits = Object.keys(signals).filter((k) => signals[k]);
+  log(`登录检测: ${hits.length ? hits.join('+') : '无信号'} 命中（${score.hits}/6）→ ${score.needsLogin ? '需要登录' : '已登录'}`);
+  return { ...score, signals };
 }

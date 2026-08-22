@@ -38,7 +38,7 @@
 import fsSync from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
-import { emit, emitError, usage, log } from './lib/contract.mjs';
+import { emit, emitError, usage, log, debug } from './lib/contract.mjs';
 import { storageStatePath, ensureUrlDirs } from './lib/env.mjs';
 import { proxyLaunchOptions } from './lib/browser.mjs';
 import { readSharedScript } from './lib/placeholder.mjs';
@@ -74,6 +74,13 @@ async function main() {
 
   const ssPath = storageStatePath();
   const dirs = ensureUrlDirs(url);
+  debug(`url-dir: ${dirs.urlDir}；storageState ${fsSync.existsSync(ssPath) ? '已注入' : '不存在'}；timeout=${timeout}ms scroll-rounds=${scrollRounds}`);
+
+  /** 阶段计时（U2M_DEBUG 时打印；finally 保证失败也见耗时）。 */
+  const timed = async (name, fn) => {
+    const t = performance.now();
+    try { return await fn(); } finally { debug(`${name}耗时 ${((performance.now() - t) / 1000).toFixed(2)}s`); }
+  };
 
   // 加载 initScript
   const pageInit = await readSharedScript('page-init.js');
@@ -90,10 +97,10 @@ async function main() {
     await context.addInitScript({ content: pageInit });
     const page = await context.newPage();
 
-    await snapshotLogin(page, url, { timeout, storageStatePath: ssPath, log });
-    await snapshotScroll(page, { scrollRounds });
-    await snapshotDetect(page);
-    const result = await snapshotCapture(page, { outDir: dirs.urlDir, log });
+    await timed('登录阶段', () => snapshotLogin(page, url, { timeout, storageStatePath: ssPath, log }));
+    await timed('滚动阶段', () => snapshotScroll(page, { scrollRounds, log: debug }));
+    await timed('检测阶段', () => snapshotDetect(page, { log: debug }));
+    const result = await timed('快照阶段', () => snapshotCapture(page, { outDir: dirs.urlDir, log }));
 
     // 先关浏览器再 emit
     await context.close().catch(() => {});

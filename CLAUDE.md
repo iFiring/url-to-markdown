@@ -18,6 +18,11 @@ pnpm test:all                                    # Node 单测 + 集成
 node --test test/unit/contract.test.mjs
 node --test test/integration/render.test.mjs
 npx playwright install chromium                  # 浏览器缓存
+
+# 本地调试日志：U2M_DEBUG=1 时各 CLI 向 stderr 输出 [dbg +N.NNs] 前缀的
+# 调试行（阶段耗时、输入输出字节数、登录检测六信号命中、滚动轮次、逐图下载），
+# 不设则静默——stdout 单行 JSON 契约不受影响
+U2M_DEBUG=1 node script/snapshot.mjs <url>
 ```
 
 环境要求：node ≥20（nvm）、pnpm > yarn > npm。未配置 linter。测试以子进程方式启动真实 CLI、对接随机端口的夹具服务器；集成测试需要已安装 chromium。

@@ -32,3 +32,17 @@ test('log: 走 stderr 不污染 stdout', async () => {
   assert.equal(r.stdout, '{"status":"ok"}\n');
   assert.ok(r.stderr.includes('进度信息'));
 });
+
+test('debug: 默认静默，U2M_DEBUG 时输出到 stderr 且带耗时前缀', async () => {
+  // 默认（未设 U2M_DEBUG）：无输出
+  const off = await node("m.debug('调试信息'); m.emit({status:'ok'}, 0)");
+  assert.equal(off.stdout, '{"status":"ok"}\n');
+  assert.equal(off.stderr, '', '未设 U2M_DEBUG 时 debug 应静默');
+
+  // U2M_DEBUG=1：输出到 stderr，带 [dbg +N.NNs] 耗时前缀
+  const on = await runScript(process.execPath,
+    ['-e', `import('${mod}').then(m => { m.debug('调试信息'); m.emit({status:'ok'}, 0) })`],
+    { env: { U2M_DEBUG: '1' } });
+  assert.equal(on.stdout, '{"status":"ok"}\n');
+  assert.match(on.stderr, /\[dbg \+\d+\.\d+s\] 调试信息\n/);
+});

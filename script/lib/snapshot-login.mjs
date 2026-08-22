@@ -19,7 +19,7 @@ export async function snapshotLogin(page, url, opts = {}) {
   await gotoSettled(page, url, log);
 
   // 检测是否需要登录
-  const result = await detectLogin(page, page.context(), url);
+  const result = await detectLogin(page, page.context(), url, { log });
   if (!result.needsLogin) {
     // 已登录：刷新 storageState
     if (ssPath) {
@@ -62,7 +62,7 @@ export async function snapshotLogin(page, url, opts = {}) {
       page,
       onLoginDone: async (ws) => {
         try {
-          const recheck = await detectLogin(page, page.context(), url, { spaWaitMs: 500 });
+          const recheck = await detectLogin(page, page.context(), url, { spaWaitMs: 500, log });
           if (!recheck.needsLogin) {
             if (ssPath) {
               const base = await readStorageState(ssPath);
@@ -77,7 +77,7 @@ export async function snapshotLogin(page, url, opts = {}) {
       },
       onClientClose: async () => {
         try {
-          const recheck = await detectLogin(page, page.context(), url, { spaWaitMs: 500 });
+          const recheck = await detectLogin(page, page.context(), url, { spaWaitMs: 500, log });
           if (!recheck.needsLogin) {
             if (ssPath) {
               const base = await readStorageState(ssPath);

@@ -9,6 +9,7 @@
 //   - 并发限 4（旧管线 design §6.3 经验），命名按文档序分配（与网络完成顺序无关）
 import fs from 'node:fs';
 import path from 'node:path';
+import { debug } from './contract.mjs';
 
 const KNOWN_EXTS = new Map([
   ['.png', '.png'], ['.jpg', '.jpg'], ['.jpeg', '.jpg'], ['.gif', '.gif'],
@@ -139,6 +140,7 @@ export async function downloadImages(request, urls, imagesDir, { concurrency = 4
     const ext = extFromUrl(url) ?? extFromContentType(r.contentType) ?? '.png';
     const name = allocator.take(imageStemFromUrl(url), ext);
     fs.writeFileSync(path.join(imagesDir, name), r.body);
+    debug(`图片 ${url} → ${relDir}/${name}（${r.body.length} 字节）`);
     map.set(url, `${relDir}/${name}`);
   });
   return { map, failed };

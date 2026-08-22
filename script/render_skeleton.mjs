@@ -28,7 +28,7 @@
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
-import { emit, emitError, usage, log } from './lib/contract.mjs';
+import { emit, emitError, usage, log, debug } from './lib/contract.mjs';
 import { workingRoot } from './lib/env.mjs';
 
 function parseArgs(argv) {
@@ -119,6 +119,7 @@ async function main() {
   }
 
   const skeleton = JSON.parse(await fsPromises.readFile(resolvedPath, 'utf8'));
+  debug(`resolved skeleton ${skeleton.length} 条`);
   const md = convertSkeleton(skeleton);
 
   const outPath = path.join(urlDir, '9_markdown.md');

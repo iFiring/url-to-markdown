@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import { debug } from './contract.mjs';
 
 export const EMPTY_STATE = { cookies: [], origins: [] };
 
@@ -69,9 +70,13 @@ export function proxyLaunchOptions(env = process.env) {
  */
 export async function gotoSettled(page, url, log = () => {}, opts = {}) {
   const { settleMs = 8000, gotoTimeout = 30000 } = opts;
+  const t = performance.now();
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: gotoTimeout });
+  debug(`goto ${url}（${((performance.now() - t) / 1000).toFixed(2)}s）`);
+  const t2 = performance.now();
   try {
     await page.waitForLoadState('networkidle', { timeout: settleMs });
+    debug(`networkidle 达成（${((performance.now() - t2) / 1000).toFixed(2)}s）`);
   } catch {
     log(`networkidle ${settleMs}ms 内未达成（长连接/轮询站点常态），继续`);
   }

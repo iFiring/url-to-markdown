@@ -49,7 +49,7 @@ import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
-import { emit, emitError, usage, log } from './lib/contract.mjs';
+import { emit, emitError, usage, log, debug } from './lib/contract.mjs';
 import { workingRoot } from './lib/env.mjs';
 import { readSharedScript } from './lib/placeholder.mjs';
 import { proxyLaunchOptions } from './lib/browser.mjs';
@@ -86,6 +86,7 @@ async function main() {
   if (!fs.existsSync(snapshotPath)) {
     return emitError(`找不到 ${snapshotPath}，请先运行步骤 1`);
   }
+  debug(`读入快照 ${snapshotPath}（${fs.statSync(snapshotPath).size} 字节）`);
 
   const pageCleanFn = await readSharedScript('page-clean-snapshot.js');
 

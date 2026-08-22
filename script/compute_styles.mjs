@@ -32,7 +32,7 @@ import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import juice from 'juice';
-import { emit, emitError, usage, log } from './lib/contract.mjs';
+import { emit, emitError, usage, log, debug } from './lib/contract.mjs';
 import { workingRoot } from './lib/env.mjs';
 import { readSharedScript } from './lib/placeholder.mjs';
 import { proxyLaunchOptions } from './lib/browser.mjs';
@@ -72,9 +72,11 @@ async function main() {
 
   const extractHtml = await fsPromises.readFile(extractPath, 'utf8');
   const pageFinalizeFn = await readSharedScript('page-finalize-inline.js');
+  debug(`读入 ${extractPath}（${extractHtml.length} 字节）`);
 
   // juice：Node 侧内联 <style> 规则并移除标签（class 稍后在浏览器删净）
   const juicedHtml = juice(extractHtml, { removeStyleTags: true });
+  debug(`juice 内联后 ${juicedHtml.length} 字节`);
 
   let browser;
   try {
