@@ -9,7 +9,8 @@
   "scripts": {
     "test": "node --test test/unit/*.test.mjs",
     "test:integration": "node --test test/integration/*.test.mjs",
-    "test:all": "node --test test/unit/*.test.mjs test/integration/*.test.mjs"
+    "test:all": "node --test test/unit/*.test.mjs test/integration/*.test.mjs",
+    "copy:skill": "node -e 'const fs=require(\"fs\");fs.rmSync(\".temp/skill\",{recursive:true,force:true});fs.mkdirSync(\".temp/skill\",{recursive:true});for(const i of [\"SKILL.md\",\"script\",\"README.md\",\"package.json\"])fs.cpSync(i,\".temp/skill/\"+i,{recursive:true});const f=\".temp/skill/package.json\";const p=JSON.parse(fs.readFileSync(f,\"utf8\"));for(const d of Object.keys(p.dependencies))p.dependencies[d]=JSON.parse(fs.readFileSync(\"node_modules/\"+d+\"/package.json\",\"utf8\")).version;delete p.scripts;fs.writeFileSync(f,JSON.stringify(p,null,2)+\"\\n\");console.log(\"[copy:skill] SKILL 核心已复制到 .temp/skill；依赖版本写死、scripts 段已清:\",p.dependencies)'"
   },
   "dependencies": {
     "juice": "^12.1.2",
