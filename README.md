@@ -1,8 +1,14 @@
 # url to markdown
 
-打开 URL 网页，将主体内容转换成干净的 Markdown 文件。
+打开网页（处理登录墙），把主体内容转换成干净的 Markdown。特殊元素按类型分派：能拿文本形态就拿文本形态（LaTeX 公式、Mermaid 源码、代码块），矢量次之（SVG 直接导出 / LLM 重建），像素截图兜底。
+
+- 使用：把单个 URL 的正文转为 Markdown 文件
+- 不使用：批量爬取、站点镜像；登录态存于 IndexedDB / Service Worker 的站点
+
+操作手册（步骤 0-9 决策表、错误处理）见 [SKILL.md](SKILL.md)；面向 Claude Code 的开发约定与架构说明见 [CLAUDE.md](CLAUDE.md)。
 
 ## Meta Data
+
 ---
 name: url-to-markdown
 description: "将 URL（网页）的主体内容转换成 Markdown；在需要将 URL 转 Markdown 时使用。"
@@ -10,167 +16,106 @@ description: "将 URL（网页）的主体内容转换成 Markdown；在需要�
 
 ## 环境要求
 
-- Node >= 20
-- Linux / MacOS
+- Node ≥ 20（`init.sh` 可经 nvm 自动安装正确版本）
+- Linux / macOS
+- 包管理器优先级 pnpm > yarn > npm（降级使用，不自行安装）
+- Playwright chromium（`init.sh` 检测并安装）
 
 ## 技术栈
 
-- `Playwright`
-- `@mozilla/readability`
-- `turndown` + `@joplin/turndown-plugin-gfm`
+- **Playwright**（chromium）——无头抓取、CDP Screencast 登录中继、元素 2x 截图
+- **juice**——CSS 级联引擎，把 `<style>` 规则内联进元素 style 属性
+- **ws**——Screencast viewer 的 WebSocket 中继
+- 语义分派（步骤 3 关键 ID 识别 / 步骤 7 markdown 骨架）由 LLM agent 按 SKILL.md 手册完成，不依赖 readability / turndown 类转换库
 
 ## 项目结构
 
 ```text
-working/                 # 工作目录
-  cookies/               # 所有访问过 URL 的 cookie 公共存储目录
-  [_U_R_L_]/             # 将特殊字符替换成下划线的 URL
-    assets/
-      draft/             # 复杂元素草稿（内联样式 HTML）
-      complex/           # 特殊元素最终产物（SVG/PNG）
-      images/            # 下载的正文图片
-    sketch.md            # 经过脚本 `clear_trans_html` 初步清洗和转换的 Markdown 文件
-    result.md            # 经过 LLM 优化过的 Markdown 文件（最终交付物）
-
-SKILL.md                 # Skill 主体文件
-script/                  # 脚本
-test/                    # 单元测试
-README.md                # 项目说明
+SKILL.md                 # Skill 主体文件（步骤 0-9 操作手册）
+CLAUDE.md                # 面向 Claude Code 的开发约定
+README.md                # 本文件
+script/                  # CLI 脚本
+  lib/                   # 共享模块（contract / env / browser…）与页面脚本 page-*.js
+test/                    # 单元 / 集成测试 + fixtures + smoke 冒烟清单
+docs/                    # 设计文档与实施计划
 package.json
 pnpm-lock.yaml
+
+working/                 # 运行时工作目录（gitignore，仅保留骨架）
+  cookies/               # 所有访问过 URL 的登录态公共存储（storage_state.json）
+  <url-path>/            # 该 URL 步骤 1-9 的全部产物
+    assets/
+      images/            # 步骤 8 下载的正文图片
+      trans/             # 步骤 8 的 trans2img 截图（WebP，2x 分辨率）
+    1_snapshot.html
+    2_clean_snapshot.html / 2_clean_style_snapshot.html / 2_long_text.json
+    3_key_ids.json
+    4_styled_extract.html
+    5_juice_styles.html
+    6_article.html
+    7_skeleton.json
+    8_resolved_skeleton.json
+    9_markdown.md        # 最终产物
 ```
 
-### Skill 文件夹结构
+`<url-path>` 由 URL 净化生成：非 `[A-Za-z0-9.-]` 替换为 `_`，超 120 字符截断 + sha256(URL) 前 8 位十六进制后缀。
 
-```text
-url-to-markdown/
-  SKILL.md
-  script/
-  working/
-  README.md
-  package.json
-  pnpm-lock.yaml
+## 核心流程（步骤 0-9）
+
+步骤 0-2、4-6、8-9 只运行脚本并按 stdout 的 `status` 分支；步骤 3、7 由 agent（LLM）做语义处理。
+
+| 步骤 | 执行者 | 命令 | 产物 |
+|---|---|---|---|
+| 0 环境初始化 | 脚本 | `bash script/init.sh` | 环境就绪 |
+| 1 快照下载 | 脚本 | `node script/snapshot.mjs <url>` | `1_snapshot.html` |
+| 2 结构清洗 | 脚本 | `node script/clean_snapshot.mjs <url-dir>` | `2_clean_snapshot.html`、`2_clean_style_snapshot.html`、`2_long_text.json` |
+| 3 关键 ID 识别 | **agent** | 读 `2_clean_snapshot.html` | `3_key_ids.json` |
+| 4 样式视图裁剪 | 脚本 | `node script/extract_styled.mjs <url-dir>` | `4_styled_extract.html` |
+| 5 样式内联 | 脚本 | `node script/compute_styles.mjs <url-dir>` | `5_juice_styles.html` |
+| 6 文章视图提取 | 脚本 | `node script/extract_article.mjs <url-dir>` | `6_article.html` |
+| 7 markdown 骨架 | **agent** | 读 `6_article.html` | `7_skeleton.json` |
+| 8 还原 + 下载 + 截图 | 脚本 | `node script/screenshot_trans.mjs <url-dir>` | `8_resolved_skeleton.json`、`assets/images/`、`assets/trans/` |
+| 9 骨架回填 | 脚本 | `node script/render_skeleton.mjs <url-dir>` | `9_markdown.md` |
+
+各步骤的 `status` 分支决策表、骨架词汇表与约束见 SKILL.md；各脚本的技术细节见对应脚本头部注释。
+
+### 关键机制
+
+- **stdout 单行 JSON 契约**：每个 CLI（含 `init.sh`）向 stdout 输出恰好一行 JSON，失败路径也不例外；日志走 stderr；退出码 0/1/2（usage_error=2）。agent 依据 `status` 字段分支，这是整个技能的骨架约定。
+- **共享页面脚本是分类的唯一事实源**：`script/lib/page-*.js` 由 Node 编排层当文本读入注入页面，分类、清理、iframe 合并、样式内联等页面侧逻辑只存在于这些文件，不重复实现于 `.mjs` 层。
+- **登录态**：`working/cookies/storage_state.json` 是唯一全局登录态，仅步骤 1 的登录流程写入（cookie 按 name|domain|path 去重、localStorage 按 origin+name、读取时剔除过期）；转换脚本只读。需要人工登录时弹出 CDP Screencast viewer（无头 chromium → HTTP+WS 页面，JS/CSS 全内联）。
+- **虚拟列表检测**：仅渲染可见窗口的页面无法全文转化，步骤 1 命中即终止（`reason=virtual_list`），不写快照。
+- **长文本占位**：步骤 2 把长文本替换为 `{{LONG_TEXT_k|n_chars}}` / `{{LONG_TEXT_k|n_words}}`，agent 只见结构不见内容，步骤 8 机械还原——语义判断不携带全文，token 可控。
+
+### 环境变量
+
+| 变量 | 作用 |
+|---|---|
+| `U2M_WORKING_ROOT` | 覆盖 working 根目录（测试隔离用） |
+| `U2M_PROXY` | 代理控制：不设则继承系统代理 / `direct` 绕过 / URL 显式钉住 |
+| `U2M_DEBUG` | 非空时各 CLI 向 stderr 输出 `[dbg +N.NNs]` 调试行（阶段耗时、输入输出字节数、登录检测信号、滚动轮次、逐图下载） |
+
+## 测试
+
+```bash
+pnpm test                 # 单元测试（node --test test/unit/*.test.mjs）
+pnpm run test:integration # 集成测试（真 chromium + 本地夹具服务器）
+pnpm test:all             # 全量
 ```
 
-## 核心流程
+- 夹具服务器随机端口（`test/helpers/fixture-server.mjs`），`U2M_WORKING_ROOT` 隔离工作目录
+- 真实 URL 手动冒烟清单见 `test/smoke/SMOKE.md`
 
-- 步骤 [0,1,2,5] 你只需运行脚本和确认结果；步骤 [3,4] 需要你对数据和文本去做语义处理
+## 开发进度
 
-### 0.运行脚本 `init.sh`，初始化环境
-
-- 先检测环境，在环境初始化完成后，通过了则继续下一步
-- 如果环境不支持或者中途报错（非警告，会阻断）了，退出当前 SKill 所有流程，结束并把原因反馈给用户
-
-### 1.打开 URL，判断是否需要进入登录流程，抓取全保真快照
-
-用 Node 脚本 `snapshot.mjs` 打开 URL，它会自动完成四个阶段：登录检测（如需登录则弹出 viewer 供人工操作）、渐进滚动（触发懒加载）、虚拟列表检测（仅渲染可见窗口的页面无法全文转化）、全保真快照抓取（内联 CSS、剥尽 JS、标记 `data-u2m-id`）。产物为 `steps/1_snapshot.html`。
-
-- 每次登录后的 Cookie（set-cookie）需要存储下来，在每次打开 URL 上都要带上
-
-### 2.打开 URL，清理 HTML，转化成 Markdown
-
-用脚本 `clear_trans_html.mjs` 打开页面，清理 DOM 元素，转化成 Markdown。
-
-#### 清理
-
-- 清洗无效 DOM 元素，包括 `<nav>`, `<footer>`, `<aside>`, 侧边栏和广告位。
-- 保留主体页面内容；保留 CSS
-
-#### 转化
-
-- 将复杂的页面元素，在 Markdown 中打上特殊标记
-- 将文本内容，转化成 Markdown
-
-### 3.你负责转换特殊 DOM 元素
-
-特殊的 DOM 元素，你负责转化成 SVG，替换 Markdown 中的标记
-
-- 从目录 `working/[_U_R_L_]/assets/draft/` 获取所有待转换元素（HTML）
-- 非文本的 DOM 元素，转换成 SVG
-
-### 4.你负责对 Markdown 语义去噪
-
-审阅 Markdown 初稿，你负责检查质量并优化内容
-
-- 提示词: "你是一个网页内容清洗专家。以下是网页转换的 Markdown 初稿。请去除其中的广告、推荐阅读、版权声明等无关内容，只保留核心正文。同时，请检查并修复其中的 Markdown 表格格式，确保其符合标准。去除多余的换行，空格。直接输出清洗后的 Markdown。**注意**：不要添加/修改/删除主体文本内容和原义。"
-
-### 5.人工选择 Markdown 文件
-
-用脚本 `render_markdown.mjs` 渲染生成的 Markdown 文件，人工确认后作为最终交付物。
-
-- 使用本地的 Markdown 渲染
-- 给用户选择和提交按钮，脚本返回用户选择的结果并退出
-
-## 脚本列表
-
-- 每次打开 URL 必须将 `Cookies/LocalStorage` 注入到 `Playwright` 上下文
-- Playwright 脚本中不允许播放视频和音频文件
-- 可能有延迟，无头模式下用 `wait_until=networkidle`，或者等待 5S 再开始
-
-### `init.sh`
-
-环境初始化：判断环境和依赖安装，正常则成功退出，异常则报错退出。
-
-- 判断 Node 的正确版本，是否安装了依赖和 chromium，没问题则成功退出；没有 Node，报错退出
-- Node 版本不对，尝试使用 nvm 安装正确版本；无法安装则报错退出
-- Node 包管理器使用优先级 "pnpm > yarn > npm"；降级使用，不要自行安装
-- 配置 `pnpm.onlyBuiltDependencies` 允许 pnpm 安装 `chromium`
-- 初始化 chromium：配置 `pnpm.onlyBuiltDependencies` 允许 pnpm 自动安装 `chromium`；不存在则手动执行 `npx playwright install chromium`，已存在则不需要执行
-
-### `snapshot.mjs`
-
-步骤 1 的统一入口，合并四个阶段为单个 CLI：
-
-1. **登录检测**（`lib/snapshot-login.mjs`）：打开 URL，六信号判断登录态（正文内容不超过 500 字、URL 特征匹配、输入框+密码框检测、页面"登录"元素检测、cookie/token 检测、重定向检测），满足 2 个条件即判定需登录。未登录时弹出 CDP Screencast viewer 供人工操作。登录完成后存储 Cookies/LocalStorage。
-2. **渐进滚动**（`lib/snapshot-scroll.mjs`）：滚动到底部再回顶，触发懒加载，等待 DOM 稳定。
-3. **虚拟列表检测**（`lib/snapshot-detect.mjs`）：检查是否为虚拟列表（仅渲染可见窗口的页面），命中则终止。
-4. **全保真快照**（`lib/snapshot-capture.mjs`）：注入页面脚本，合并同源 iframe、内联外部 CSS、剥尽 JS、注入 `<base>`、打 `data-u2m-id`，序列化 `steps/1_snapshot.html`。
-
-#### 参考
-
-- 登录状态判断：`.temp/login.mjs`
-- 登录状态判断：`.temp/is_login_page.py`
-
-### `clear_trans_html.mjs`
-
-加载快照与 `classify_plan.json`，清理 DOM 元素，转化成 Markdown。
-
-- 如果是内嵌了 iframe 页面，则打开 iframe 页面
-- 懒加载/虚拟 DOM 处理：由 `snapshot.mjs` 在抓取阶段完成（渐进滚动 + DOM 稳定）
-- 在清理和转化前有个前提，必须获取到全部正文内容，不能被懒加载或虚拟 DOM 隐藏
-
-#### 清理
-
-- 清理库，Node 使用 `@mozilla/readability`
-- 清理视频和音频元素；清理按钮元素
-
-#### 转换
-
-- 转换库，Node 使用 `turndown` + `@joplin/turndown-plugin-gfm`
-- 纯图片：下载正文所有 `<img>` 标签的图片，存储在工作目录 `working/[_U_R_L_]/assets/images/IMG_1`，在 Markdown 中引用占位符 `{{IMG_1}}`
-- 复杂非纯文本 `<div>`：先给 DOM 元素截图，截取 DOM 元素（HTML + 有效 CSS 内联样式），存储在工作目录 `working/[_U_R_L_]/assets/draft/COMPLEX_DIV_1`，在 Markdown 中引用占位符 `{{COMPLEX_DIV_1,2,3}}`；
-- 在处理特殊元素后，再使用转换库转换文档
-
-### `render_markdown.mjs`
-
-在浏览器窗口渲染 Markdown，由用户确认，提交后返回 Markdown 路径
-
-#### 参考
-
-- 打开临时网页给用户选择：`.temp/wait-click.mjs`
-
-# 开发进度
-
-按阶段实施，在此处更新开发进度。
-
-| 阶段 | 内容 | 进度（未完成/已完成） |
-|------|---------|------|
-| 项目结构 | 项目总体结构，包括文件夹，package 文件等等 | 已完成 |
-| 初始化脚本 `init.sh` | 环境检测与依赖安装 | 已完成 |
-| 快照脚本 `snapshot.mjs` | 登录检测 + 滚动 + 虚拟列表检测 + 全保真快照 | 已完成 |
-| clear_trans_html | Node 清洗转换 HTML → Markdown | 已完成 |
-| `render_markdown.mjs` | 浏览器渲染，人工确认最终 Markdown | 已完成 |
-| SKILL.md | 操作手册（步骤 0-5、status 分支决策表、错误处理） | 已完成 |
-| 真实 URL 冒烟 | 手动清单见 test/smoke/SMOKE.md | 场景 1 已完成（MDN 文章页端到端通过）；场景 2（登录墙）/3（特殊元素）待人工 |
-| 移除 Python 运行时 | 双稿择优退役，收敛 Node 单运行时 | 已完成 |
-| LLM 驱动分类与快照管线 | capture_snapshot + classify_plan + applyClassifyPlan | 已完成 |
+| 阶段 | 内容 | 进度 |
+|------|------|------|
+| 项目结构 | 目录 / package / `init.sh` 环境自检 | 已完成 |
+| 步骤 1 `snapshot.mjs` | 登录检测 + 渐进滚动 + 虚拟列表检测 + 全保真快照（单 chromium 贯穿） | 已完成 |
+| 步骤 2 `clean_snapshot.mjs` | 结构清洗 + 长文本占位（清洗 / 带样式双产物） | 已完成 |
+| 步骤 3 / 7 agent 语义操作 | key_ids 识别 / markdown 骨架生成（SKILL.md 手册） | 已完成 |
+| 步骤 4-6 | 样式裁剪 → juice 内联 → 文章视图 | 已完成 |
+| 步骤 8 `screenshot_trans.mjs` | 占位符还原 + 图片下载 + trans2img 截图 | 已完成 |
+| 步骤 9 `render_skeleton.mjs` | 骨架回填 markdown | 已完成 |
+| 测试 | 单测 + 集成 107 项 | 已完成 |
+| 真实 URL 冒烟 | 手动清单 `test/smoke/SMOKE.md` | 场景 1 已记录通过（产生于旧双稿管线，新 9 步管线待重验）；场景 2/3 待人工 |

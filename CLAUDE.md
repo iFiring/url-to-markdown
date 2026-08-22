@@ -63,7 +63,7 @@ U2M_DEBUG=1 node script/snapshot.mjs <url>
 - `docs/design/url-to-markdown-design.md`——权威设计文档（§3 契约、§4 storage/URL 规则、§6 各脚本设计、§8 分派表为规范依据）
 - `docs/superpowers/plans/2026-08-18-url-to-markdown.md`——仓库据以构建的 15 任务 TDD 实施计划
 - `docs/superpowers/plans/baseline-notes.md`——SKILL.md baseline 测试发现与差距修复
-- `README.md`——需求来源（其步骤 4 清洗提示词为逐字规范）与进度表
+- `README.md`——项目概览（结构、流程摘要、关键机制、环境变量、进度表）
 - `.temp/`——已 gitignore 的原型（login.mjs、is_login_page.py、wait-click.mjs）；仅供参考，禁止导入
 - `docs/superpowers/specs/2026-08-19-llm-driven-classification-design.md`——LLM 驱动分类与快照管线设计（含 Python 移除）
 - `docs/superpowers/plans/2026-08-19-llm-driven-classification.md`——其实施计划
