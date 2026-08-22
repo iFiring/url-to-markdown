@@ -1,1 +1,0 @@
-{ "version": 2, "mode": "whole", "listFlowSelector": "main > article", "blocks": [ { "id": 2, "action": "passthrough_svg" }, { "id": 3, "action": "latex" } ] }
