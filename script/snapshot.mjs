@@ -59,7 +59,7 @@ async function main() {
     await snapshotLogin(page, url, { timeout, storageStatePath: ssPath, log });
     await snapshotScroll(page, { scrollRounds });
     await snapshotDetect(page);
-    const result = await snapshotCapture(page, { stepsDir: dirs.steps, log });
+    const result = await snapshotCapture(page, { outDir: dirs.urlDir, log });
 
     // 先关浏览器再 emit
     await context.close().catch(() => {});

@@ -16,7 +16,7 @@ description: "将 URL（网页）的主体内容转换成 Markdown；在需要�
 
 本技能目录为 `<skill-root>`（SKILL.md 所在目录）。以下 `<url>` 均指用户给定的完整 URL。
 
-所有产物存放在 `working/<url-dir>/steps/` 目录下，`<url-dir>` 由 URL 自动净化生成。
+所有产物直接存放在 `working/<url-dir>/` 目录下（截图在 `assets/trans/`），`<url-dir>` 由 URL 自动净化生成。
 
 ### 步骤 0 · 初始化环境（仅首次或环境变更时）
 
@@ -43,7 +43,7 @@ node <skill-root>/script/snapshot.mjs <url> [--timeout 300000] [--scroll-rounds 
 3. **检测阶段**：检查是否为虚拟列表（仅渲染可见窗口的页面无法全文转化）
 4. **快照阶段**：注入页面脚本，合并同源 iframe、内联外部 CSS、剥尽 JS、标记 `data-u2m-id`，序列化全保真快照。标记覆盖 body 内所有元素（文档序连续编号），仅排除纯文本修饰/薄语义行内标签（`strong`/`em`/`b`/`i`/`br`/`wbr`/`abbr`/`q`/`time`/`kbd` 等）与 svg/math 的内部后代（根元素本身仍标记）
 
-产物：`steps/1_snapshot.html`
+产物：`1_snapshot.html`
 
 | stdout status | 动作 |
 |---|---|
@@ -60,7 +60,7 @@ node <skill-root>/script/clean_snapshot.mjs <url-dir>
 
 `<url-dir>` 为 `working/` 下的 URL 目录名（相对或绝对路径均可）。
 
-打开 `steps/1_snapshot.html`，单趟结构清洗，产出两份快照（共享同一套清洗与占位）：
+打开 `1_snapshot.html`，单趟结构清洗，产出两份快照（共享同一套清洗与占位）：
 - 共同清洗（两版一致）：
   - 删除 `<link>` 标签、`<meta>` 标签、`<base>` 标签（`<title>` 保留）
   - 删除按钮类控件（`<button>`、`role="button"`、按钮型 `<input>`）——交互 UI 与正文结构无关
@@ -73,9 +73,9 @@ node <skill-root>/script/clean_snapshot.mjs <url-dir>
 - 长文本占位（两版编号逐一对应；中英文分标准；纯空白文本节点与 svg/style 子树文本不占位）：
   - 中文文本（含汉字）：字符数 > 16 → `{{LONG_TEXT_k|n_chars}}`（n=字符数）
   - 英文文本（不含汉字）：单词数 > 12 → `{{LONG_TEXT_k|n_words}}`（n=单词数）
-  - 原文按占位编号记入 `steps/2_long_text.json`（编号 → 原文映射），供后续流程恢复
+  - 原文按占位编号记入 `2_long_text.json`（编号 → 原文映射），供后续流程恢复
 
-产物：`steps/2_clean_snapshot.html`（步骤 3 的结构视图）、`steps/2_clean_style_snapshot.html`（带样式版）、`steps/2_long_text.json`
+产物：`2_clean_snapshot.html`（步骤 3 的结构视图）、`2_clean_style_snapshot.html`（带样式版）、`2_long_text.json`
 
 | stdout status | 动作 |
 |---|---|
@@ -84,7 +84,7 @@ node <skill-root>/script/clean_snapshot.mjs <url-dir>
 
 ### 步骤 3 · 关键 ID 识别（LLM 步骤）
 
-读取 `steps/2_clean_snapshot.html`。
+读取 `2_clean_snapshot.html`。
 
 你的任务：这是**一篇文章**，仅根据 DOM 结构（元素层级、标签类型、嵌套深度）和长文本占位符（`{{LONG_TEXT_k|n_chars}}` / `{{LONG_TEXT_k|n_words}}`）分布，找到以下三类关键元素的 `data-u2m-id`：
 
@@ -100,7 +100,7 @@ node <skill-root>/script/clean_snapshot.mjs <url-dir>
 - 如果找不到明确的标题或说明元素，对应数组可为空
 - 列表流至少选一个——它是后续分块的根容器
 
-将结果写入 `steps/3_key_ids.json`：
+将结果写入 `3_key_ids.json`：
 
 ```json
 {
@@ -118,13 +118,13 @@ node <skill-root>/script/extract_styled.mjs <url-dir>
 
 `<url-dir>` 为 `working/` 下的 URL 目录名（相对或绝对路径均可）。
 
-读取 `steps/3_key_ids.json` 与 `steps/2_clean_style_snapshot.html`，裁剪出只含文章主体的带样式视图：
+读取 `3_key_ids.json` 与 `2_clean_style_snapshot.html`，裁剪出只含文章主体的带样式视图：
 
 - **完整保留（一字不动，含全部标签属性与样式属性）**：三类 key 元素（`titleIds`/`descriptionIds`/`listFlowIds`）的子树 + 它们到 `<body>` 的祖先链——祖先上下文不变，CSS 选择器照常生效
 - **`<head>` 完全不动**（`<title>` + 全部 `<style>` 原地保留）；body 里即将删除的分支中若有 `<style>`，先挪入 `<head>` 再删分支，样式标签零丢失
 - **删除**：其余全部 body 元素（封面区块、推荐、营销等 step 3 排除的内容）
 
-产物：`steps/4_styled_extract.html`
+产物：`4_styled_extract.html`
 
 | stdout status | 动作 |
 |---|---|
@@ -137,14 +137,14 @@ node <skill-root>/script/extract_styled.mjs <url-dir>
 node <skill-root>/script/compute_styles.mjs <url-dir>
 ```
 
-读取 `steps/4_styled_extract.html`，juice 按自身 CSS 级联引擎把 `<style>` 规则内联到元素的 style 属性并移除标签（字面声明值：不推导继承、不解析 `var()`；原有内联样式参与级联故保留），随后在浏览器里清理并删净（正文含字面 `class="..."` 文本也不会误伤）：
+读取 `4_styled_extract.html`，juice 按自身 CSS 级联引擎把 `<style>` 规则内联到元素的 style 属性并移除标签（字面声明值：不推导继承、不解析 `var()`；原有内联样式参与级联故保留），随后在浏览器里清理并删净（正文含字面 `class="..."` 文本也不会误伤）：
 
 - **噪声声明删除**：`font-family`、`font-style`（任意值）、`-webkit-` 前缀属性、值为 `inherit` 的声明；清空后移除 style 属性。只动确有噪声的元素——无噪声的保持 juice 字面输出（被清理元素的声明经 CSSOM 重序列化，颜色归一为 rgb() 形式，语义等价）
 - **`<style>` 标签与 `class` 属性删净**
 
 终态：无 `<style>`、无 `class`，内联声明只留有意义的。
 
-产物：`steps/5_juice_styles.html`
+产物：`5_juice_styles.html`
 
 | stdout status | 动作 |
 |---|---|
@@ -159,7 +159,7 @@ node <skill-root>/script/extract_article.mjs <url-dir>
 
 `<url-dir>` 为 `working/` 下的 URL 目录名（相对或绝对路径均可）。
 
-读取 `steps/5_juice_styles.html` 与 `steps/3_key_ids.json`，新建一份只含文章主体的 html，按**分组顺序**（标题 → 说明 → 正文块）把元素提取进新 `<body>`：
+读取 `5_juice_styles.html` 与 `3_key_ids.json`，新建一份只含文章主体的 html，按**分组顺序**（标题 → 说明 → 正文块）把元素提取进新 `<body>`：
 
 - `titleIds` / `descriptionIds`：**元素本身**（完整子树，属性与内容一字不动）
 - `listFlowIds`：遍历各容器子节点，**元素与非空白裸文本按文档序交错迁入**——裸文本没有 `data-u2m-id` 但可能是未包标签的正文，丢弃即内容损失；纯空白文本与注释不迁（容器本身与祖先骨架不入新 html）
@@ -167,7 +167,7 @@ node <skill-root>/script/extract_article.mjs <url-dir>
 - head：保留原文 `<title>`；`<html lang>` 照抄
 - 新 `<body>` 带阅读布局内联样式 `max-width: 768px; margin: 4rem auto`（限宽、水平居中）
 
-产物：`steps/6_article.html`
+产物：`6_article.html`
 
 | stdout status | 动作 |
 |---|---|
@@ -176,7 +176,7 @@ node <skill-root>/script/extract_article.mjs <url-dir>
 
 ### 步骤 7 · markdown 骨架生成（LLM 步骤）
 
-读取 `steps/6_article.html`。
+读取 `6_article.html`。
 
 你的任务：把文章视图转换成一份 **markdown 骨架**——数组按文档序排列，每项一个单键对象，key 是语义标签，value 是该块的内容模板。长文本只引用占位编号、一字不抄，正文回填由后续脚本完成。
 
@@ -205,7 +205,7 @@ node <skill-root>/script/extract_article.mjs <url-dir>
 - 分派判定：按**模块标准**圈定——父元素带背景色/边框，子元素再带多级边框/背景色（卡片组、对比面板、图表、图解、带包装的代码块部件）→ 一律走 `trans2img`。外层 figure 容器不入标记范围，模块的 caption/脚注单独成 `p` 条目；仅裸代码块走 `code`。模块之外一律文本形态（优先扁平化）
 - 不虚构原文没有的信息
 
-将结果写入 `steps/7_skeleton.json`：
+将结果写入 `7_skeleton.json`：
 
 ```json
 [
@@ -228,14 +228,14 @@ node <skill-root>/script/extract_article.mjs <url-dir>
 node <skill-root>/script/screenshot_trans.mjs <url-dir>
 ```
 
-读取 `steps/7_skeleton.json` + `steps/6_article.html` + `steps/2_long_text.json`。
+读取 `7_skeleton.json` + `6_article.html` + `2_long_text.json`。
 
 你的任务：
-1. 把骨架里所有 `{{LONG_TEXT_k}}` / `{{LONG_TEXT_k|suffix}}` 替换为 `2_long_text.json` 的真实文本，写出与步骤 7 同结构的 `steps/8_resolved_skeleton.json`
+1. 把骨架里所有 `{{LONG_TEXT_k}}` / `{{LONG_TEXT_k|suffix}}` 替换为 `2_long_text.json` 的真实文本，写出与步骤 7 同结构的 `8_resolved_skeleton.json`
 2. 对其中 `trans2img` 标记的元素，在真实渲染状态下截图（子树内占位符已替换）
 
 脚本行为：
-1. 读骨架 + `2_long_text.json`，纯 Node 做占位符替换，写出 `steps/8_resolved_skeleton.json`（条目数、顺序、key 与步骤 7 完全一致，trans2img 条目保留，value 全部为真实文本）
+1. 读骨架 + `2_long_text.json`，纯 Node 做占位符替换，写出 `8_resolved_skeleton.json`（条目数、顺序、key 与步骤 7 完全一致，trans2img 条目保留，value 全部为真实文本）
 2. 若骨架中任一 value 引用了 `2_long_text.json` 未定义的编号 → 直接报 error
 3. 按文档序收集骨架中所有 `trans2img` 的 id；若为空：`skipped: "no_trans2img"`，resolved skeleton 已写出，直接进入步骤 9
 4. 用 playwright 加载 `6_article.html`（body 已设 `max-width: 768px`，即真实渲染宽度）
@@ -243,7 +243,7 @@ node <skill-root>/script/screenshot_trans.mjs <url-dir>
 6. 对每个 id 定位元素并调 `el.screenshot({type: 'webp'})` → `assets/trans/{id}.webp`
 
 产物：
-- `steps/8_resolved_skeleton.json`（必填，结构同步骤 7，所有占位符已还原；下游回填脚本直接读它生成 markdown，无需再拼 `2_long_text.json`）
+- `8_resolved_skeleton.json`（必填，结构同步骤 7，所有占位符已还原；下游回填脚本直接读它生成 markdown，无需再拼 `2_long_text.json`）
 - `assets/trans/{id}.webp`（每个 trans2img 一个截图，WebP 格式，2x 分辨率）
 
 | stdout status | 动作 |
@@ -257,7 +257,7 @@ node <skill-root>/script/screenshot_trans.mjs <url-dir>
 node <skill-root>/script/render_skeleton.mjs <url-dir>
 ```
 
-读取 `steps/8_resolved_skeleton.json`，按文档序把每条骨架条目转为 markdown 块，块与块之间以空行分隔。纯 Node，无浏览器依赖。
+读取 `8_resolved_skeleton.json`，按文档序把每条骨架条目转为 markdown 块，块与块之间以空行分隔。纯 Node，无浏览器依赖。
 
 转换规则（块级语法由此脚本加，行内 markdown 已在步骤 7 由 LLM 写好）：
 
@@ -274,7 +274,7 @@ node <skill-root>/script/render_skeleton.mjs <url-dir>
 
 未知 key 静默跳过。空骨架输出空文件。
 
-产物：`steps/9_markdown.md`
+产物：`9_markdown.md`
 
 | stdout status | 动作 |
 |---|---|

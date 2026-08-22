@@ -55,10 +55,9 @@ async function main() {
   if (!urlDirArg) return usage('用法: screenshot_trans.mjs <url-dir>');
 
   const urlDir = resolveUrlDir(urlDirArg);
-  const stepsDir = path.join(urlDir, 'steps');
-  const articlePath = path.join(stepsDir, '6_article.html');
-  const skeletonPath = path.join(stepsDir, '7_skeleton.json');
-  const longTextPath = path.join(stepsDir, '2_long_text.json');
+  const articlePath = path.join(urlDir, '6_article.html');
+  const skeletonPath = path.join(urlDir, '7_skeleton.json');
+  const longTextPath = path.join(urlDir, '2_long_text.json');
 
   if (!fs.existsSync(articlePath)) {
     return emitError(`找不到 ${articlePath}，请先运行步骤 6`);
@@ -84,7 +83,7 @@ async function main() {
     resolvedSkeleton.push({ [key]: resolved });
   }
 
-  const resolvedPath = path.join(stepsDir, '8_resolved_skeleton.json');
+  const resolvedPath = path.join(urlDir, '8_resolved_skeleton.json');
   await fsPromises.writeFile(resolvedPath, JSON.stringify(resolvedSkeleton, null, 2));
 
   if (undefinedRefs.size > 0) {

@@ -34,19 +34,18 @@ const STYLED_SNAPSHOT = `<!DOCTYPE html>
 function setupTmp(name, keyIds, { withSnapshot = true } = {}) {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), `u2m-extract-${name}-`));
   const urlDir = path.join(tmpRoot, 'test-article');
-  const stepsDir = path.join(urlDir, 'steps');
-  fs.mkdirSync(stepsDir, { recursive: true });
+  fs.mkdirSync(urlDir, { recursive: true });
   if (withSnapshot) {
-    fs.writeFileSync(path.join(stepsDir, '2_clean_style_snapshot.html'), STYLED_SNAPSHOT);
+    fs.writeFileSync(path.join(urlDir, '2_clean_style_snapshot.html'), STYLED_SNAPSHOT);
   }
   if (keyIds !== null) {
-    fs.writeFileSync(path.join(stepsDir, '3_key_ids.json'), JSON.stringify(keyIds));
+    fs.writeFileSync(path.join(urlDir, '3_key_ids.json'), JSON.stringify(keyIds));
   }
-  return { tmpRoot, urlDir, stepsDir };
+  return { tmpRoot, urlDir };
 }
 
 test('extract_styled.mjs: 保留 key 子树+骨架链与属性，删噪声，body style 挪 head', async () => {
-  const { tmpRoot, urlDir, stepsDir } = setupTmp('ok', {
+  const { tmpRoot, urlDir } = setupTmp('ok', {
     titleIds: [3],
     descriptionIds: [4],
     listFlowIds: [5],
@@ -60,7 +59,7 @@ test('extract_styled.mjs: 保留 key 子树+骨架链与属性，删噪声，bod
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
   assert.equal(out.removedCount, 4, '应删除 4 个噪声元素（8/9/10/11）');
-  assert.equal(out.styledExtract, path.join(stepsDir, '4_styled_extract.html'));
+  assert.equal(out.styledExtract, path.join(urlDir, '4_styled_extract.html'));
 
   const html = fs.readFileSync(out.styledExtract, 'utf8');
 
@@ -106,7 +105,7 @@ test('extract_styled.mjs: key id 未命中时报 error 并列出缺失 id', asyn
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'error');
   assert.ok(out.reason.includes('99'), `reason 应含缺失 id: ${out.reason}`);
-  assert.ok(!fs.existsSync(path.join(tmpRoot, 'test-article', 'steps', '4_styled_extract.html')), '失败不应写产物');
+  assert.ok(!fs.existsSync(path.join(tmpRoot, 'test-article', '4_styled_extract.html')), '失败不应写产物');
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 

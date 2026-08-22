@@ -34,16 +34,15 @@ const EXTRACT = `<!DOCTYPE html>
 function setupTmp(name, { withExtract = true } = {}) {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), `u2m-styles-${name}-`));
   const urlDir = path.join(tmpRoot, 'test-article');
-  const stepsDir = path.join(urlDir, 'steps');
-  fs.mkdirSync(stepsDir, { recursive: true });
+  fs.mkdirSync(urlDir, { recursive: true });
   if (withExtract) {
-    fs.writeFileSync(path.join(stepsDir, '4_styled_extract.html'), EXTRACT);
+    fs.writeFileSync(path.join(urlDir, '4_styled_extract.html'), EXTRACT);
   }
-  return { tmpRoot, urlDir, stepsDir };
+  return { tmpRoot, urlDir };
 }
 
 test('compute_styles.mjs: juice 内联并删净 <style> 与 class，只产一份文件', async () => {
-  const { tmpRoot, urlDir, stepsDir } = setupTmp('ok');
+  const { tmpRoot, urlDir } = setupTmp('ok');
   const script = path.resolve('script/compute_styles.mjs');
   const r = await runScript(process.execPath, [script, urlDir], {
     env: { U2M_WORKING_ROOT: tmpRoot },
@@ -52,11 +51,11 @@ test('compute_styles.mjs: juice 内联并删净 <style> 与 class，只产一份
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
-  assert.equal(out.juiceStyles, path.join(stepsDir, '5_juice_styles.html'));
+  assert.equal(out.juiceStyles, path.join(urlDir, '5_juice_styles.html'));
   assert.equal(out.styledCount, 2, '带内联样式的元素应为 2 个（1/2）');
 
   // 计算版已移除：不再产出
-  assert.ok(!fs.existsSync(path.join(stepsDir, '5_computed_styles.html')), '不应再产出计算版文件');
+  assert.ok(!fs.existsSync(path.join(urlDir, '5_computed_styles.html')), '不应再产出计算版文件');
   assert.equal(out.computedStyles, undefined, 'emit 不应再含 computedStyles 字段');
 
   const juiced = fs.readFileSync(out.juiceStyles, 'utf8');

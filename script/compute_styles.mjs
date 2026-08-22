@@ -44,8 +44,7 @@ async function main() {
   if (!urlDirArg) return usage('用法: compute_styles.mjs <url-dir>');
 
   const urlDir = resolveUrlDir(urlDirArg);
-  const stepsDir = path.join(urlDir, 'steps');
-  const extractPath = path.join(stepsDir, '4_styled_extract.html');
+  const extractPath = path.join(urlDir, '4_styled_extract.html');
 
   if (!fs.existsSync(extractPath)) {
     return emitError(`找不到 ${extractPath}，请先运行步骤 4`);
@@ -65,7 +64,7 @@ async function main() {
     await page.setContent(juicedHtml, { waitUntil: 'domcontentloaded' });
     const final = await page.evaluate(`(${pageFinalizeFn})()`);
 
-    const juicePath = path.join(stepsDir, '5_juice_styles.html');
+    const juicePath = path.join(urlDir, '5_juice_styles.html');
     await fsPromises.writeFile(juicePath, final.html, 'utf8');
     log(`样式内联完成: ${juicePath} (${final.styledCount} 个元素带样式)`);
 

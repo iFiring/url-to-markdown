@@ -41,9 +41,8 @@ async function main() {
   if (!urlDirArg) return usage('用法: extract_styled.mjs <url-dir>');
 
   const urlDir = resolveUrlDir(urlDirArg);
-  const stepsDir = path.join(urlDir, 'steps');
-  const styledPath = path.join(stepsDir, '2_clean_style_snapshot.html');
-  const keyIdsPath = path.join(stepsDir, '3_key_ids.json');
+  const styledPath = path.join(urlDir, '2_clean_style_snapshot.html');
+  const keyIdsPath = path.join(urlDir, '3_key_ids.json');
 
   if (!fs.existsSync(styledPath)) {
     return emitError(`找不到 ${styledPath}，请先运行步骤 2`);
@@ -81,7 +80,7 @@ async function main() {
       );
     }
 
-    const extractPath = path.join(stepsDir, '4_styled_extract.html');
+    const extractPath = path.join(urlDir, '4_styled_extract.html');
     await fsPromises.writeFile(extractPath, result.html, 'utf8');
     log(`样式视图裁剪完成: ${extractPath} (删除 ${result.removed} 个元素)`);
 

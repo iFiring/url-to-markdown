@@ -26,14 +26,12 @@ export function storageStatePath() { return path.join(workingRoot(), 'cookies', 
 
 export function urlDir(url) { return path.join(workingRoot(), urlToDirName(url)); }
 
-/** 拍平的产物目录：working/<url-dir>/ 直接放 sketch.md/assets/…。 */
+/** 产物目录：working/<url-dir>/ 直接放步骤文件 + assets/。 */
 export function ensureUrlDirs(url) {
   const dir = urlDir(url);
   const assets = path.join(dir, 'assets');
-  const draft = path.join(assets, 'draft');
-  const complex = path.join(assets, 'complex');
   const images = path.join(assets, 'images');
-  const steps = path.join(dir, 'steps');
-  for (const d of [dir, assets, draft, complex, images, steps]) fs.mkdirSync(d, { recursive: true });
-  return { urlDir: dir, wf: dir, assets, draft, complex, images, steps, manifest: path.join(dir, 'manifest.json') };
+  const trans = path.join(assets, 'trans');
+  for (const d of [dir, assets, images, trans]) fs.mkdirSync(d, { recursive: true });
+  return { urlDir: dir, wf: dir, assets, images, trans };
 }

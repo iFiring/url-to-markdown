@@ -41,9 +41,8 @@ async function main() {
   if (!urlDirArg) return usage('用法: extract_article.mjs <url-dir>');
 
   const urlDir = resolveUrlDir(urlDirArg);
-  const stepsDir = path.join(urlDir, 'steps');
-  const juicedPath = path.join(stepsDir, '5_juice_styles.html');
-  const keyIdsPath = path.join(stepsDir, '3_key_ids.json');
+  const juicedPath = path.join(urlDir, '5_juice_styles.html');
+  const keyIdsPath = path.join(urlDir, '3_key_ids.json');
 
   if (!fs.existsSync(juicedPath)) {
     return emitError(`找不到 ${juicedPath}，请先运行步骤 5`);
@@ -81,7 +80,7 @@ async function main() {
       );
     }
 
-    const articlePath = path.join(stepsDir, '6_article.html');
+    const articlePath = path.join(urlDir, '6_article.html');
     await fsPromises.writeFile(articlePath, result.html, 'utf8');
     log(`文章视图提取完成: ${articlePath} (${result.count} 个元素)`);
 

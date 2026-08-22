@@ -67,8 +67,7 @@ async function main() {
   if (!urlDirArg) return usage('用法: clean_snapshot.mjs <url-dir>');
 
   const urlDir = resolveUrlDir(urlDirArg);
-  const stepsDir = path.join(urlDir, 'steps');
-  const snapshotPath = path.join(stepsDir, '1_snapshot.html');
+  const snapshotPath = path.join(urlDir, '1_snapshot.html');
 
   if (!fs.existsSync(snapshotPath)) {
     return emitError(`找不到 ${snapshotPath}，请先运行步骤 1`);
@@ -89,13 +88,13 @@ async function main() {
     const result = await page.evaluate(`(${pageCleanFn})()`);
 
     // 写盘
-    const cleanedPath = path.join(stepsDir, '2_clean_snapshot.html');
+    const cleanedPath = path.join(urlDir, '2_clean_snapshot.html');
     await fsPromises.writeFile(cleanedPath, result.html, 'utf8');
     // 带样式版：保留 style 属性/<style>/完整 SVG，占位符与清洗版逐一对应
-    const styledPath = path.join(stepsDir, '2_clean_style_snapshot.html');
+    const styledPath = path.join(urlDir, '2_clean_style_snapshot.html');
     await fsPromises.writeFile(styledPath, result.styledHtml, 'utf8');
     // 长文本恢复清单：占位编号 → 原文
-    const longTextPath = path.join(stepsDir, '2_long_text.json');
+    const longTextPath = path.join(urlDir, '2_long_text.json');
     await fsPromises.writeFile(longTextPath, JSON.stringify(result.longTexts), 'utf8');
     log(`清洗完成: ${cleanedPath} (${result.longTextCount} 个长文本占位符)`);
 

@@ -7,11 +7,11 @@ import { readSharedScript } from './placeholder.mjs';
 /**
  * 全保真快照抓取。evaluate __u2mPrepareBody 后序列化 DOM。
  * @param {import('playwright').Page} page
- * @param {{stepsDir: string, log?: Function}} opts
+ * @param {{outDir: string, log?: Function}} opts
  * @returns {Promise<{snapshotPath: string, elements: number}>}
  */
 export async function snapshotCapture(page, opts = {}) {
-  const { stepsDir, log = () => {} } = opts;
+  const { outDir, log = () => {} } = opts;
 
   const pagePrepare = await readSharedScript('page-prepare.js');
 
@@ -25,8 +25,8 @@ export async function snapshotCapture(page, opts = {}) {
   const elements = (snapshot.match(/data-u2m-id="\d+"/g) || []).length;
 
   // 写盘
-  await fs.mkdir(stepsDir, { recursive: true });
-  const snapshotPath = path.join(stepsDir, '1_snapshot.html');
+  await fs.mkdir(outDir, { recursive: true });
+  const snapshotPath = path.join(outDir, '1_snapshot.html');
   await fs.writeFile(snapshotPath, '<!DOCTYPE html>\n' + snapshot, 'utf8');
 
   log(`快照已保存: ${snapshotPath} (${elements} 个标记元素)`);

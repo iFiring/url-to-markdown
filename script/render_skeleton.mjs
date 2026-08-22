@@ -89,8 +89,7 @@ async function main() {
   if (!urlDirArg) return usage('用法: render_skeleton.mjs <url-dir>');
 
   const urlDir = resolveUrlDir(urlDirArg);
-  const stepsDir = path.join(urlDir, 'steps');
-  const resolvedPath = path.join(stepsDir, '8_resolved_skeleton.json');
+  const resolvedPath = path.join(urlDir, '8_resolved_skeleton.json');
 
   if (!fs.existsSync(resolvedPath)) {
     return emitError(`找不到 ${resolvedPath}，请先运行步骤 8`, 1);
@@ -99,7 +98,7 @@ async function main() {
   const skeleton = JSON.parse(await fsPromises.readFile(resolvedPath, 'utf8'));
   const md = convertSkeleton(skeleton);
 
-  const outPath = path.join(stepsDir, '9_markdown.md');
+  const outPath = path.join(urlDir, '9_markdown.md');
   await fsPromises.writeFile(outPath, md);
 
   log(`markdown 已生成: ${outPath}（${md.length} 字节）`);

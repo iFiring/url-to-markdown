@@ -56,18 +56,17 @@ const LONG_TEXT = {
 function setupTmp(name, { article = ARTICLE, skeleton = SKELETON, longText = LONG_TEXT } = {}) {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), `u2m-sstrans-${name}-`));
   const urlDir = path.join(tmpRoot, 'test-sstrans');
-  const stepsDir = path.join(urlDir, 'steps');
   const assetsDir = path.join(urlDir, 'assets');
-  fs.mkdirSync(stepsDir, { recursive: true });
+  fs.mkdirSync(urlDir, { recursive: true });
   fs.mkdirSync(assetsDir, { recursive: true });
-  if (article !== null) fs.writeFileSync(path.join(stepsDir, '6_article.html'), article);
-  if (skeleton !== null) fs.writeFileSync(path.join(stepsDir, '7_skeleton.json'), JSON.stringify(skeleton));
-  if (longText !== null) fs.writeFileSync(path.join(stepsDir, '2_long_text.json'), JSON.stringify(longText));
-  return { tmpRoot, urlDir, stepsDir, assetsDir };
+  if (article !== null) fs.writeFileSync(path.join(urlDir, '6_article.html'), article);
+  if (skeleton !== null) fs.writeFileSync(path.join(urlDir, '7_skeleton.json'), JSON.stringify(skeleton));
+  if (longText !== null) fs.writeFileSync(path.join(urlDir, '2_long_text.json'), JSON.stringify(longText));
+  return { tmpRoot, urlDir, assetsDir };
 }
 
 test('screenshot_trans.mjs: 正常截图 + 占位符还原 + resolved skeleton', async () => {
-  const { tmpRoot, urlDir, assetsDir, stepsDir } = setupTmp('ok');
+  const { tmpRoot, urlDir, assetsDir } = setupTmp('ok');
   const script = path.resolve('script/screenshot_trans.mjs');
   const r = await runScript(process.execPath, [script, urlDir], {
     env: { U2M_WORKING_ROOT: tmpRoot },
@@ -78,7 +77,7 @@ test('screenshot_trans.mjs: 正常截图 + 占位符还原 + resolved skeleton',
   assert.equal(out.status, 'ok');
   assert.equal(out.count, 1, '应截图 1 个元素');
   assert.equal(out.replaced, 3, '应替换全文档 3 个占位符（含 trans 子树内外）');
-  assert.equal(out.resolvedSkeleton, path.join(stepsDir, '8_resolved_skeleton.json'));
+  assert.equal(out.resolvedSkeleton, path.join(urlDir, '8_resolved_skeleton.json'));
 
   // 截图文件存在且非空
   const imgPath = path.join(assetsDir, 'trans', '10.webp');
@@ -92,7 +91,7 @@ test('screenshot_trans.mjs: 正常截图 + 占位符还原 + resolved skeleton',
   assert.equal(buf.toString('ascii', 8, 12), 'WEBP', 'WebP WEBP signature');
 
   // resolved skeleton：占位符全部还原，trans2img 保留
-  const resolved = JSON.parse(fs.readFileSync(path.join(stepsDir, '8_resolved_skeleton.json'), 'utf8'));
+  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
   assert.deepEqual(resolved, [
     { h1: '标题' },
     { p: '段落一文本内容' },
@@ -104,7 +103,7 @@ test('screenshot_trans.mjs: 正常截图 + 占位符还原 + resolved skeleton',
 });
 
 test('screenshot_trans.mjs: 无 trans2img 条目时 skipped 但仍输出 resolved skeleton', async () => {
-  const { tmpRoot, urlDir, assetsDir, stepsDir } = setupTmp('skip', {
+  const { tmpRoot, urlDir, assetsDir } = setupTmp('skip', {
     skeleton: [{ h1: '标题' }, { p: '{{LONG_TEXT_5}}' }],
   });
   const script = path.resolve('script/screenshot_trans.mjs');
@@ -119,7 +118,7 @@ test('screenshot_trans.mjs: 无 trans2img 条目时 skipped 但仍输出 resolve
   assert.ok(!fs.existsSync(path.join(assetsDir, 'trans')), 'skipped 不应创建 trans 目录');
 
   // skipped 路径也应写出 resolved skeleton
-  const resolved = JSON.parse(fs.readFileSync(path.join(stepsDir, '8_resolved_skeleton.json'), 'utf8'));
+  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
   assert.deepEqual(resolved, [
     { h1: '标题' },
     { p: '段落一文本内容' },

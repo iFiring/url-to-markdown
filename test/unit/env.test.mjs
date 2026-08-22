@@ -29,29 +29,18 @@ test('workingRoot 受 U2M_WORKING_ROOT 覆盖；storageStatePath 固定子路径
   delete process.env.U2M_WORKING_ROOT;
 });
 
-test('ensureUrlDirs 拍平创建目录并返回 manifest 路径（wf === urlDir）', () => {
+test('ensureUrlDirs 创建 urlDir + assets/{images,trans} 并返回路径', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-'));
   process.env.U2M_WORKING_ROOT = root;
   const dirs = ensureUrlDirs('https://example.com/a');
-  for (const k of ['urlDir', 'wf', 'assets', 'draft', 'complex', 'images', 'steps']) {
+  for (const k of ['urlDir', 'wf', 'assets', 'images', 'trans']) {
     assert.ok(fs.existsSync(dirs[k]), `缺目录 ${k}`);
   }
   assert.equal(dirs.wf, dirs.urlDir);
   assert.equal(dirs.urlDir, path.join(root, urlToDirName('https://example.com/a')));
-  assert.equal(dirs.manifest, path.join(dirs.urlDir, 'manifest.json'));
+  assert.equal(dirs.assets, path.join(dirs.urlDir, 'assets'));
+  assert.equal(dirs.images, path.join(dirs.assets, 'images'));
+  assert.equal(dirs.trans, path.join(dirs.assets, 'trans'));
   delete process.env.U2M_WORKING_ROOT;
-});
-
-test('ensureUrlDirs: 创建 steps/ 目录并返回 stepsDir', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-env-'));
-  process.env.U2M_WORKING_ROOT = tmpDir;
-  try {
-    const dirs = ensureUrlDirs('https://example.com/article');
-    assert.ok(dirs.steps, 'steps 字段应存在');
-    assert.ok(dirs.steps.endsWith('/steps') || dirs.steps.endsWith('\\steps'));
-    assert.ok(fs.existsSync(dirs.steps), 'steps/ 目录应已创建');
-  } finally {
-    delete process.env.U2M_WORKING_ROOT;
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  }
+  fs.rmSync(root, { recursive: true, force: true });
 });

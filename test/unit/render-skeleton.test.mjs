@@ -40,12 +40,11 @@ const RESOLVED = [
 function setup(name, { resolved = RESOLVED } = {}) {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), `u2m-rskel-${name}-`));
   const urlDir = path.join(tmpRoot, 'test-rskel');
-  const stepsDir = path.join(urlDir, 'steps');
-  fs.mkdirSync(stepsDir, { recursive: true });
+  fs.mkdirSync(urlDir, { recursive: true });
   if (resolved !== null) {
-    fs.writeFileSync(path.join(stepsDir, '8_resolved_skeleton.json'), JSON.stringify(resolved));
+    fs.writeFileSync(path.join(urlDir, '8_resolved_skeleton.json'), JSON.stringify(resolved));
   }
-  return { tmpRoot, urlDir, stepsDir };
+  return { tmpRoot, urlDir };
 }
 
 test('render_skeleton.mjs: 缺前置文件时报 error', async () => {
@@ -61,7 +60,7 @@ test('render_skeleton.mjs: 缺前置文件时报 error', async () => {
 });
 
 test('render_skeleton.mjs: 全类型条目转换为 markdown', async () => {
-  const { tmpRoot, urlDir, stepsDir } = setup('full');
+  const { tmpRoot, urlDir } = setup('full');
   const r = await runScript(process.execPath, [scriptPath, urlDir], {
     env: { U2M_WORKING_ROOT: tmpRoot },
   });
@@ -69,7 +68,7 @@ test('render_skeleton.mjs: 全类型条目转换为 markdown', async () => {
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
 
-  const mdPath = path.join(stepsDir, '9_markdown.md');
+  const mdPath = path.join(urlDir, '9_markdown.md');
   assert.equal(out.markdownPath, mdPath);
   assert.ok(fs.existsSync(mdPath), `产物应存在: ${mdPath}`);
 
@@ -96,7 +95,7 @@ test('render_skeleton.mjs: 全类型条目转换为 markdown', async () => {
 });
 
 test('render_skeleton.mjs: 空骨架输出空 markdown', async () => {
-  const { tmpRoot, urlDir, stepsDir } = setup('empty', { resolved: [] });
+  const { tmpRoot, urlDir } = setup('empty', { resolved: [] });
   const r = await runScript(process.execPath, [scriptPath, urlDir], {
     env: { U2M_WORKING_ROOT: tmpRoot },
   });
@@ -105,7 +104,7 @@ test('render_skeleton.mjs: 空骨架输出空 markdown', async () => {
   assert.equal(out.status, 'ok');
   assert.equal(out.blocks, 0);
 
-  const mdPath = path.join(stepsDir, '9_markdown.md');
+  const mdPath = path.join(urlDir, '9_markdown.md');
   const md = fs.readFileSync(mdPath, 'utf8');
   assert.equal(md.trim(), '', '空骨架应产出空 markdown');
 
@@ -113,13 +112,13 @@ test('render_skeleton.mjs: 空骨架输出空 markdown', async () => {
 });
 
 test('render_skeleton.mjs: 相对路径 url-dir 正常解析', async () => {
-  const { tmpRoot, urlDir, stepsDir } = setup('relpath');
+  const { tmpRoot, urlDir } = setup('relpath');
   const r = await runScript(process.execPath, [scriptPath, 'test-rskel'], {
     env: { U2M_WORKING_ROOT: tmpRoot },
   });
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
-  assert.ok(fs.existsSync(path.join(stepsDir, '9_markdown.md')));
+  assert.ok(fs.existsSync(path.join(urlDir, '9_markdown.md')));
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });

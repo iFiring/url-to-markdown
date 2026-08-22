@@ -35,19 +35,18 @@ const JUICED = `<!DOCTYPE html>
 function setupTmp(name, keyIds, { withJuiced = true } = {}) {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), `u2m-article-${name}-`));
   const urlDir = path.join(tmpRoot, 'test-article');
-  const stepsDir = path.join(urlDir, 'steps');
-  fs.mkdirSync(stepsDir, { recursive: true });
+  fs.mkdirSync(urlDir, { recursive: true });
   if (withJuiced) {
-    fs.writeFileSync(path.join(stepsDir, '5_juice_styles.html'), JUICED);
+    fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), JUICED);
   }
   if (keyIds !== null) {
-    fs.writeFileSync(path.join(stepsDir, '3_key_ids.json'), JSON.stringify(keyIds));
+    fs.writeFileSync(path.join(urlDir, '3_key_ids.json'), JSON.stringify(keyIds));
   }
-  return { tmpRoot, urlDir, stepsDir };
+  return { tmpRoot, urlDir };
 }
 
 test('extract_article.mjs: 分组顺序提取进新 body，骨架与 flow 容器不入，属性一字不动', async () => {
-  const { tmpRoot, urlDir, stepsDir } = setupTmp('ok', {
+  const { tmpRoot, urlDir } = setupTmp('ok', {
     titleIds: [1],
     descriptionIds: [2, 3],
     listFlowIds: [4],
@@ -60,7 +59,7 @@ test('extract_article.mjs: 分组顺序提取进新 body，骨架与 flow 容器
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
-  assert.equal(out.article, path.join(stepsDir, '6_article.html'));
+  assert.equal(out.article, path.join(urlDir, '6_article.html'));
   assert.equal(out.elementCount, 6, '应提取 6 个元素（1 标题 + 2 说明 + 3 正文块）');
 
   const html = fs.readFileSync(out.article, 'utf8');
@@ -93,8 +92,8 @@ test('extract_article.mjs: 分组顺序提取进新 body，骨架与 flow 容器
 test('extract_article.mjs: 同一元素既是 description 又是 flow 子元素时只出现一次', async () => {
   const dup = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>去重</title></head><body><h1 data-u2m-id="1">标题</h1><div data-u2m-id="4"><p style="color: red" data-u2m-id="2">作者行</p><p data-u2m-id="5">正文</p></div></body></html>`;
-  const { tmpRoot, urlDir, stepsDir } = setupTmp('dup', { titleIds: [1], descriptionIds: [2], listFlowIds: [4] });
-  fs.writeFileSync(path.join(stepsDir, '5_juice_styles.html'), dup);
+  const { tmpRoot, urlDir } = setupTmp('dup', { titleIds: [1], descriptionIds: [2], listFlowIds: [4] });
+  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), dup);
   const script = path.resolve('script/extract_article.mjs');
   const r = await runScript(process.execPath, [script, urlDir], {
     env: { U2M_WORKING_ROOT: tmpRoot },
@@ -113,8 +112,8 @@ test('extract_article.mjs: 同一元素既是 description 又是 flow 子元素�
 test('extract_article.mjs: flow 内未包标签的非空白文本按文档序迁入', async () => {
   const bare = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>裸文本</title></head><body><h1 data-u2m-id="1">标题</h1><div data-u2m-id="4">文本 1<p data-u2m-id="5">段落</p>文本 2<figure data-u2m-id="6">…</figure></div></body></html>`;
-  const { tmpRoot, urlDir, stepsDir } = setupTmp('bare', { titleIds: [1], descriptionIds: [], listFlowIds: [4] });
-  fs.writeFileSync(path.join(stepsDir, '5_juice_styles.html'), bare);
+  const { tmpRoot, urlDir } = setupTmp('bare', { titleIds: [1], descriptionIds: [], listFlowIds: [4] });
+  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), bare);
   const script = path.resolve('script/extract_article.mjs');
   const r = await runScript(process.execPath, [script, urlDir], {
     env: { U2M_WORKING_ROOT: tmpRoot },
@@ -135,8 +134,8 @@ test('extract_article.mjs: flow 内未包标签的非空白文本按文档序迁
 test('extract_article.mjs: 纯空白文本与注释不迁入', async () => {
   const ws = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>空白</title></head><body><h1 data-u2m-id="1">标题</h1><div data-u2m-id="4"> <p data-u2m-id="5">段落</p><!--注--></div></body></html>`;
-  const { tmpRoot, urlDir, stepsDir } = setupTmp('ws', { titleIds: [1], descriptionIds: [], listFlowIds: [4] });
-  fs.writeFileSync(path.join(stepsDir, '5_juice_styles.html'), ws);
+  const { tmpRoot, urlDir } = setupTmp('ws', { titleIds: [1], descriptionIds: [], listFlowIds: [4] });
+  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), ws);
   const script = path.resolve('script/extract_article.mjs');
   const r = await runScript(process.execPath, [script, urlDir], {
     env: { U2M_WORKING_ROOT: tmpRoot },
@@ -165,7 +164,7 @@ test('extract_article.mjs: key id 未命中时报 error 并列出缺失 id', asy
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'error');
   assert.ok(out.reason.includes('99'), `reason 应含缺失 id: ${out.reason}`);
-  assert.ok(!fs.existsSync(path.join(tmpRoot, 'test-article', 'steps', '6_article.html')), '失败不应写产物');
+  assert.ok(!fs.existsSync(path.join(tmpRoot, 'test-article', '6_article.html')), '失败不应写产物');
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
