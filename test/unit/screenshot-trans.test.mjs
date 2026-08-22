@@ -163,6 +163,61 @@ test('screenshot_trans.mjs: 占位符引用未定义编号时报 error', async (
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
+test('screenshot_trans.mjs: code 条目 content 内的占位符同样还原', async () => {
+  const { tmpRoot, urlDir } = setupTmp('code', {
+    skeleton: [
+      { h1: '标题' },
+      { p: '{{LONG_TEXT_5}}' },
+      { code: { lang: 'python', content: '{{LONG_TEXT_6}}' } },
+    ],
+  });
+  const script = path.resolve('script/screenshot_trans.mjs');
+  const r = await runScript(process.execPath, [script, urlDir], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 60000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+  assert.equal(out.skipped, 'no_trans2img');
+
+  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
+  assert.deepEqual(resolved, [
+    { h1: '标题' },
+    { p: '段落一文本内容' },
+    { code: { lang: 'python', content: '重要内容' } },
+  ], 'code 对象的 content 占位符应被还原');
+
+  // 步骤 9 端到端：围栏内是还原后的代码，而非字面占位符
+  const r9 = await runScript(process.execPath, [path.resolve('script/render_skeleton.mjs'), urlDir], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r9.code, 0, `stderr: ${r9.stderr}`);
+  const md = fs.readFileSync(path.join(urlDir, '9_markdown.md'), 'utf8');
+  assert.ok(md.includes('```python\n重要内容\n```'), '最终 markdown 应含还原后的代码围栏');
+  assert.ok(!md.includes('{{LONG_TEXT'), '最终 markdown 不应残留字面占位符');
+
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test('screenshot_trans.mjs: code 条目引用未定义编号时报 error', async () => {
+  const { tmpRoot, urlDir } = setupTmp('coderef', {
+    skeleton: [{ code: { content: '{{LONG_TEXT_999}}' } }],
+    longText: { '5': '其他文本' },
+  });
+  const script = path.resolve('script/screenshot_trans.mjs');
+  const r = await runScript(process.execPath, [script, urlDir], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 60000,
+  });
+  assert.equal(r.code, 1);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'error');
+  assert.ok(out.reason.includes('999'), `reason 应含未定义编号: ${out.reason}`);
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
 test('screenshot_trans.mjs: 缺前置产物时报 error', async () => {
   const script = path.resolve('script/screenshot_trans.mjs');
 

@@ -69,18 +69,33 @@ function resolveUrlDir(arg) {
   return path.join(workingRoot(), arg);
 }
 
-// 把骨架条目里 value 字符串中的 {{LONG_TEXT_k[|suffix]}} 替换为真实文本。
+// 把骨架条目里 value 中的 {{LONG_TEXT_k[|suffix]}} 替换为真实文本。
+// 字符串直接替换；code 条目的 value 是 {lang, content} 对象——对其字符串
+// 属性逐键递归替换（content 引用的长文本占位符同样要还原，否则步骤 9
+// 会把字面占位符写进代码围栏），未定义编号同样上报。
 // 返回 { resolved, undefined: string[] }。
 function resolveSkeletonString(value, longText) {
-  if (typeof value !== 'string') return { resolved: value, undefined: [] };
-  const PH_RE = /\{\{LONG_TEXT_(\d+)(?:\|[^}]*)?\}\}/g;
-  const undef = [];
-  const resolved = value.replace(PH_RE, (match, id) => {
-    if (Object.prototype.hasOwnProperty.call(longText, id)) return longText[id];
-    undef.push(id);
-    return match;
-  });
-  return { resolved, undefined: undef };
+  if (typeof value === 'string') {
+    const PH_RE = /\{\{LONG_TEXT_(\d+)(?:\|[^}]*)?\}\}/g;
+    const undef = [];
+    const resolved = value.replace(PH_RE, (match, id) => {
+      if (Object.prototype.hasOwnProperty.call(longText, id)) return longText[id];
+      undef.push(id);
+      return match;
+    });
+    return { resolved, undefined: undef };
+  }
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const out = {};
+    const undef = [];
+    for (const key of Object.keys(value)) {
+      const r = resolveSkeletonString(value[key], longText);
+      out[key] = r.resolved;
+      undef.push(...r.undefined);
+    }
+    return { resolved: out, undefined: undef };
+  }
+  return { resolved: value, undefined: [] };
 }
 
 async function main() {
