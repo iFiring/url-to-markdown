@@ -27,7 +27,7 @@ test('extract_article.mjs: 无参数时输出 usage_error', async () => {
   assert.equal(JSON.parse(r.stdout).status, 'usage_error');
 });
 
-// 模拟步骤 3.2 产物：纯内联样式（无 class、无 <style>），
+// 模拟步骤 5 产物：纯内联样式（无 class、无 <style>），
 // key 元素挂在祖先骨架（10/11）下，flow 容器（4）含三个元素子节点
 const JUICED = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>测试文章</title></head><body><div data-u2m-id="10"><main data-u2m-id="11"><h1 style="font-size: 32px; font-weight: bold" data-u2m-id="1">标题</h1><div style="color: rgb(102, 102, 102)" data-u2m-id="2">作者</div><div style="color: rgb(102, 102, 102)" data-u2m-id="3">日期</div></main><div style="margin: 0" data-u2m-id="4"><p style="font-size: 18px" data-u2m-id="5">段落一</p><figure data-u2m-id="6"><img src="x.png" data-u2m-id="7"></figure><p data-u2m-id="8">段落二</p></div></div></body></html>`;
@@ -38,7 +38,7 @@ function setupTmp(name, keyIds, { withJuiced = true } = {}) {
   const stepsDir = path.join(urlDir, 'steps');
   fs.mkdirSync(stepsDir, { recursive: true });
   if (withJuiced) {
-    fs.writeFileSync(path.join(stepsDir, '3.2_juice_styles.html'), JUICED);
+    fs.writeFileSync(path.join(stepsDir, '5_juice_styles.html'), JUICED);
   }
   if (keyIds !== null) {
     fs.writeFileSync(path.join(stepsDir, '3_key_ids.json'), JSON.stringify(keyIds));
@@ -60,7 +60,7 @@ test('extract_article.mjs: 分组顺序提取进新 body，骨架与 flow 容器
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
-  assert.equal(out.article, path.join(stepsDir, '3.3_article.html'));
+  assert.equal(out.article, path.join(stepsDir, '6_article.html'));
   assert.equal(out.elementCount, 6, '应提取 6 个元素（1 标题 + 2 说明 + 3 正文块）');
 
   const html = fs.readFileSync(out.article, 'utf8');
@@ -94,7 +94,7 @@ test('extract_article.mjs: 同一元素既是 description 又是 flow 子元素�
   const dup = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>去重</title></head><body><h1 data-u2m-id="1">标题</h1><div data-u2m-id="4"><p style="color: red" data-u2m-id="2">作者行</p><p data-u2m-id="5">正文</p></div></body></html>`;
   const { tmpRoot, urlDir, stepsDir } = setupTmp('dup', { titleIds: [1], descriptionIds: [2], listFlowIds: [4] });
-  fs.writeFileSync(path.join(stepsDir, '3.2_juice_styles.html'), dup);
+  fs.writeFileSync(path.join(stepsDir, '5_juice_styles.html'), dup);
   const script = path.resolve('script/extract_article.mjs');
   const r = await runScript(process.execPath, [script, urlDir], {
     env: { U2M_WORKING_ROOT: tmpRoot },
@@ -114,7 +114,7 @@ test('extract_article.mjs: flow 内未包标签的非空白文本按文档序迁
   const bare = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>裸文本</title></head><body><h1 data-u2m-id="1">标题</h1><div data-u2m-id="4">文本 1<p data-u2m-id="5">段落</p>文本 2<figure data-u2m-id="6">…</figure></div></body></html>`;
   const { tmpRoot, urlDir, stepsDir } = setupTmp('bare', { titleIds: [1], descriptionIds: [], listFlowIds: [4] });
-  fs.writeFileSync(path.join(stepsDir, '3.2_juice_styles.html'), bare);
+  fs.writeFileSync(path.join(stepsDir, '5_juice_styles.html'), bare);
   const script = path.resolve('script/extract_article.mjs');
   const r = await runScript(process.execPath, [script, urlDir], {
     env: { U2M_WORKING_ROOT: tmpRoot },
@@ -136,7 +136,7 @@ test('extract_article.mjs: 纯空白文本与注释不迁入', async () => {
   const ws = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>空白</title></head><body><h1 data-u2m-id="1">标题</h1><div data-u2m-id="4"> <p data-u2m-id="5">段落</p><!--注--></div></body></html>`;
   const { tmpRoot, urlDir, stepsDir } = setupTmp('ws', { titleIds: [1], descriptionIds: [], listFlowIds: [4] });
-  fs.writeFileSync(path.join(stepsDir, '3.2_juice_styles.html'), ws);
+  fs.writeFileSync(path.join(stepsDir, '5_juice_styles.html'), ws);
   const script = path.resolve('script/extract_article.mjs');
   const r = await runScript(process.execPath, [script, urlDir], {
     env: { U2M_WORKING_ROOT: tmpRoot },
@@ -165,7 +165,7 @@ test('extract_article.mjs: key id 未命中时报 error 并列出缺失 id', asy
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'error');
   assert.ok(out.reason.includes('99'), `reason 应含缺失 id: ${out.reason}`);
-  assert.ok(!fs.existsSync(path.join(tmpRoot, 'test-article', 'steps', '3.3_article.html')), '失败不应写产物');
+  assert.ok(!fs.existsSync(path.join(tmpRoot, 'test-article', 'steps', '6_article.html')), '失败不应写产物');
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
@@ -183,7 +183,7 @@ test('extract_article.mjs: listFlowIds 为空时报 error', async () => {
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('extract_article.mjs: 缺 3.2 产物 / 缺 key_ids 时报 error 并指路', async () => {
+test('extract_article.mjs: 缺步骤 5 产物 / 缺 key_ids 时报 error 并指路', async () => {
   const script = path.resolve('script/extract_article.mjs');
 
   const noJuiced = setupTmp('nojuice', { titleIds: [1], listFlowIds: [4] }, { withJuiced: false });
@@ -192,7 +192,7 @@ test('extract_article.mjs: 缺 3.2 产物 / 缺 key_ids 时报 error 并指路',
     timeoutMs: 30000,
   });
   assert.equal(r1.code, 1);
-  assert.ok(JSON.parse(r1.stdout).reason.includes('步骤 3.2'));
+  assert.ok(JSON.parse(r1.stdout).reason.includes('步骤 5'));
   fs.rmSync(noJuiced.tmpRoot, { recursive: true, force: true });
 
   const noKeyIds = setupTmp('nokey', null);

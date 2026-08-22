@@ -27,7 +27,7 @@ test('screenshot_trans.mjs: 无参数时输出 usage_error', async () => {
   assert.equal(JSON.parse(r.stdout).status, 'usage_error');
 });
 
-// 3.3 产物：body 768px 居中；trans2img 元素含占位符
+// 步骤 6 产物：body 768px 居中；trans2img 元素含占位符
 const ARTICLE = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>测试</title></head><body style="max-width: 768px; margin: 4rem auto">
 <h1 data-u2m-id="1">标题</h1>
@@ -60,8 +60,8 @@ function setupTmp(name, { article = ARTICLE, skeleton = SKELETON, longText = LON
   const assetsDir = path.join(urlDir, 'assets');
   fs.mkdirSync(stepsDir, { recursive: true });
   fs.mkdirSync(assetsDir, { recursive: true });
-  if (article !== null) fs.writeFileSync(path.join(stepsDir, '3.3_article.html'), article);
-  if (skeleton !== null) fs.writeFileSync(path.join(stepsDir, '3.4_skeleton.json'), JSON.stringify(skeleton));
+  if (article !== null) fs.writeFileSync(path.join(stepsDir, '6_article.html'), article);
+  if (skeleton !== null) fs.writeFileSync(path.join(stepsDir, '7_skeleton.json'), JSON.stringify(skeleton));
   if (longText !== null) fs.writeFileSync(path.join(stepsDir, '2_long_text.json'), JSON.stringify(longText));
   return { tmpRoot, urlDir, stepsDir, assetsDir };
 }
@@ -78,7 +78,7 @@ test('screenshot_trans.mjs: 正常截图 + 占位符还原 + resolved skeleton',
   assert.equal(out.status, 'ok');
   assert.equal(out.count, 1, '应截图 1 个元素');
   assert.equal(out.replaced, 3, '应替换全文档 3 个占位符（含 trans 子树内外）');
-  assert.equal(out.resolvedSkeleton, path.join(stepsDir, '3.5_resolved_skeleton.json'));
+  assert.equal(out.resolvedSkeleton, path.join(stepsDir, '8_resolved_skeleton.json'));
 
   // 截图文件存在且非空
   const imgPath = path.join(assetsDir, 'trans', '10.webp');
@@ -92,7 +92,7 @@ test('screenshot_trans.mjs: 正常截图 + 占位符还原 + resolved skeleton',
   assert.equal(buf.toString('ascii', 8, 12), 'WEBP', 'WebP WEBP signature');
 
   // resolved skeleton：占位符全部还原，trans2img 保留
-  const resolved = JSON.parse(fs.readFileSync(path.join(stepsDir, '3.5_resolved_skeleton.json'), 'utf8'));
+  const resolved = JSON.parse(fs.readFileSync(path.join(stepsDir, '8_resolved_skeleton.json'), 'utf8'));
   assert.deepEqual(resolved, [
     { h1: '标题' },
     { p: '段落一文本内容' },
@@ -119,7 +119,7 @@ test('screenshot_trans.mjs: 无 trans2img 条目时 skipped 但仍输出 resolve
   assert.ok(!fs.existsSync(path.join(assetsDir, 'trans')), 'skipped 不应创建 trans 目录');
 
   // skipped 路径也应写出 resolved skeleton
-  const resolved = JSON.parse(fs.readFileSync(path.join(stepsDir, '3.5_resolved_skeleton.json'), 'utf8'));
+  const resolved = JSON.parse(fs.readFileSync(path.join(stepsDir, '8_resolved_skeleton.json'), 'utf8'));
   assert.deepEqual(resolved, [
     { h1: '标题' },
     { p: '段落一文本内容' },
@@ -165,24 +165,24 @@ test('screenshot_trans.mjs: 占位符引用未定义编号时报 error', async (
 test('screenshot_trans.mjs: 缺前置产物时报 error', async () => {
   const script = path.resolve('script/screenshot_trans.mjs');
 
-  // 缺 3.3
+  // 缺步骤 6
   const noArt = setupTmp('noart', { article: null });
   const r1 = await runScript(process.execPath, [script, noArt.urlDir], {
     env: { U2M_WORKING_ROOT: noArt.tmpRoot },
     timeoutMs: 60000,
   });
   assert.equal(r1.code, 1);
-  assert.ok(JSON.parse(r1.stdout).reason.includes('步骤 3.3'));
+  assert.ok(JSON.parse(r1.stdout).reason.includes('步骤 6'));
   fs.rmSync(noArt.tmpRoot, { recursive: true, force: true });
 
-  // 缺 3.4
+  // 缺步骤 7
   const noSkel = setupTmp('noskel', { skeleton: null });
   const r2 = await runScript(process.execPath, [script, noSkel.urlDir], {
     env: { U2M_WORKING_ROOT: noSkel.tmpRoot },
     timeoutMs: 60000,
   });
   assert.equal(r2.code, 1);
-  assert.ok(JSON.parse(r2.stdout).reason.includes('步骤 3.4'));
+  assert.ok(JSON.parse(r2.stdout).reason.includes('步骤 7'));
   fs.rmSync(noSkel.tmpRoot, { recursive: true, force: true });
 
   // 缺 2_long_text.json

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // extract_article.mjs <url-dir>
-// 步骤 3.3：文章视图提取。读 3.2_juice_styles.html 与 3_key_ids.json，
+// 步骤 6：文章视图提取。读 5_juice_styles.html 与 3_key_ids.json，
 // 新建一份 html：titleIds/descriptionIds 元素本身 + 各 listFlowId 的元素
 // 子节点，按分组顺序（标题 → 说明 → 正文块）adopt 进新 body，
 // 属性与内容一字不动；flow 容器与祖先骨架不入。
-// 产物：steps/3.3_article.html
+// 产物：steps/6_article.html
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
@@ -42,11 +42,11 @@ async function main() {
 
   const urlDir = resolveUrlDir(urlDirArg);
   const stepsDir = path.join(urlDir, 'steps');
-  const juicedPath = path.join(stepsDir, '3.2_juice_styles.html');
+  const juicedPath = path.join(stepsDir, '5_juice_styles.html');
   const keyIdsPath = path.join(stepsDir, '3_key_ids.json');
 
   if (!fs.existsSync(juicedPath)) {
-    return emitError(`找不到 ${juicedPath}，请先运行步骤 3.2`);
+    return emitError(`找不到 ${juicedPath}，请先运行步骤 5`);
   }
   if (!fs.existsSync(keyIdsPath)) {
     return emitError(`找不到 ${keyIdsPath}，请先运行步骤 3`);
@@ -81,7 +81,7 @@ async function main() {
       );
     }
 
-    const articlePath = path.join(stepsDir, '3.3_article.html');
+    const articlePath = path.join(stepsDir, '6_article.html');
     await fsPromises.writeFile(articlePath, result.html, 'utf8');
     log(`文章视图提取完成: ${articlePath} (${result.count} 个元素)`);
 

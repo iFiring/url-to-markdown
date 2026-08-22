@@ -1,6 +1,6 @@
 /**
- * 步骤 3.3 页面内提取函数。在浏览器 evaluate 中执行。
- * 从 3.2 纯内联视图（本文档）提取文章元素，新建一份 html：
+ * 步骤 6 页面内提取函数。在浏览器 evaluate 中执行。
+ * 从 5_juice_styles 纯内联视图（本文档）提取文章元素，新建一份 html：
  *  - titleIds / descriptionIds：元素本身（完整子树）
  *  - listFlowIds：遍历各容器 childNodes，元素子节点与非空白文本
  *    子节点按文档序交错迁入——裸文本没有 data-u2m-id，但可能是

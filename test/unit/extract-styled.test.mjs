@@ -60,7 +60,7 @@ test('extract_styled.mjs: 保留 key 子树+骨架链与属性，删噪声，bod
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
   assert.equal(out.removedCount, 4, '应删除 4 个噪声元素（8/9/10/11）');
-  assert.equal(out.styledExtract, path.join(stepsDir, '3.1_styled_extract.html'));
+  assert.equal(out.styledExtract, path.join(stepsDir, '4_styled_extract.html'));
 
   const html = fs.readFileSync(out.styledExtract, 'utf8');
 
@@ -106,7 +106,7 @@ test('extract_styled.mjs: key id 未命中时报 error 并列出缺失 id', asyn
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'error');
   assert.ok(out.reason.includes('99'), `reason 应含缺失 id: ${out.reason}`);
-  assert.ok(!fs.existsSync(path.join(tmpRoot, 'test-article', 'steps', '3.1_styled_extract.html')), '失败不应写产物');
+  assert.ok(!fs.existsSync(path.join(tmpRoot, 'test-article', 'steps', '4_styled_extract.html')), '失败不应写产物');
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 

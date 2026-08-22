@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // screenshot_trans.mjs <url-dir>
-// 步骤 3.5：占位符还原 + trans2img 截图。
-// 1) 纯 Node：读 3.4 骨架 + 2_long_text.json → 写出 3.5_resolved_skeleton.json
-//    （结构同 3.4，所有 {{LONG_TEXT_k[|suffix]}} 替换为真实文本，trans2img 条目保留）
-// 2) playwright 加载 3.3 → 注入占位符替换 → 逐元素 el.screenshot →
+// 步骤 8：占位符还原 + trans2img 截图。
+// 1) 纯 Node：读 7_skeleton.json + 2_long_text.json → 写出 8_resolved_skeleton.json
+//    （结构同 7，所有 {{LONG_TEXT_k[|suffix]}} 替换为真实文本，trans2img 条目保留）
+// 2) playwright 加载 6_article.html → 注入占位符替换 → 逐元素 el.screenshot →
 //    assets/trans/{id}.webp（2x 分辨率）
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
@@ -56,15 +56,15 @@ async function main() {
 
   const urlDir = resolveUrlDir(urlDirArg);
   const stepsDir = path.join(urlDir, 'steps');
-  const articlePath = path.join(stepsDir, '3.3_article.html');
-  const skeletonPath = path.join(stepsDir, '3.4_skeleton.json');
+  const articlePath = path.join(stepsDir, '6_article.html');
+  const skeletonPath = path.join(stepsDir, '7_skeleton.json');
   const longTextPath = path.join(stepsDir, '2_long_text.json');
 
   if (!fs.existsSync(articlePath)) {
-    return emitError(`找不到 ${articlePath}，请先运行步骤 3.3`);
+    return emitError(`找不到 ${articlePath}，请先运行步骤 6`);
   }
   if (!fs.existsSync(skeletonPath)) {
-    return emitError(`找不到 ${skeletonPath}，请先运行步骤 3.4`);
+    return emitError(`找不到 ${skeletonPath}，请先运行步骤 7`);
   }
   if (!fs.existsSync(longTextPath)) {
     return emitError(`找不到 ${longTextPath}，请先运行步骤 2`);
@@ -84,7 +84,7 @@ async function main() {
     resolvedSkeleton.push({ [key]: resolved });
   }
 
-  const resolvedPath = path.join(stepsDir, '3.5_resolved_skeleton.json');
+  const resolvedPath = path.join(stepsDir, '8_resolved_skeleton.json');
   await fsPromises.writeFile(resolvedPath, JSON.stringify(resolvedSkeleton, null, 2));
 
   if (undefinedRefs.size > 0) {
@@ -142,7 +142,7 @@ async function main() {
         await browser.close();
         browser = null;
         return emitError(
-          `trans id 在 3.3 DOM 中未命中: ${id}（骨架与视图不匹配，请重跑步骤 3.4）`,
+          `trans id 在 6_article DOM 中未命中: ${id}（骨架与视图不匹配，请重跑步骤 7）`,
           1
         );
       }

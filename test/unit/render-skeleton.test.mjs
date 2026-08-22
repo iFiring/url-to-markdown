@@ -43,7 +43,7 @@ function setup(name, { resolved = RESOLVED } = {}) {
   const stepsDir = path.join(urlDir, 'steps');
   fs.mkdirSync(stepsDir, { recursive: true });
   if (resolved !== null) {
-    fs.writeFileSync(path.join(stepsDir, '3.5_resolved_skeleton.json'), JSON.stringify(resolved));
+    fs.writeFileSync(path.join(stepsDir, '8_resolved_skeleton.json'), JSON.stringify(resolved));
   }
   return { tmpRoot, urlDir, stepsDir };
 }
@@ -56,7 +56,7 @@ test('render_skeleton.mjs: 缺前置文件时报 error', async () => {
   assert.equal(r.code, 1);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'error');
-  assert.ok(out.reason.includes('3.5'), `reason 应提示 3.5: ${out.reason}`);
+  assert.ok(out.reason.includes('步骤 8'), `reason 应提示步骤 8: ${out.reason}`);
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
@@ -69,7 +69,7 @@ test('render_skeleton.mjs: 全类型条目转换为 markdown', async () => {
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
 
-  const mdPath = path.join(stepsDir, '3.6_markdown.md');
+  const mdPath = path.join(stepsDir, '9_markdown.md');
   assert.equal(out.markdownPath, mdPath);
   assert.ok(fs.existsSync(mdPath), `产物应存在: ${mdPath}`);
 
@@ -105,7 +105,7 @@ test('render_skeleton.mjs: 空骨架输出空 markdown', async () => {
   assert.equal(out.status, 'ok');
   assert.equal(out.blocks, 0);
 
-  const mdPath = path.join(stepsDir, '3.6_markdown.md');
+  const mdPath = path.join(stepsDir, '9_markdown.md');
   const md = fs.readFileSync(mdPath, 'utf8');
   assert.equal(md.trim(), '', '空骨架应产出空 markdown');
 
@@ -120,6 +120,6 @@ test('render_skeleton.mjs: 相对路径 url-dir 正常解析', async () => {
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
-  assert.ok(fs.existsSync(path.join(stepsDir, '3.6_markdown.md')));
+  assert.ok(fs.existsSync(path.join(stepsDir, '9_markdown.md')));
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });

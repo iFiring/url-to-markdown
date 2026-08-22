@@ -1,5 +1,5 @@
 // page-resolve-placeholders.js
-// 步骤 3.5 页面脚本：遍历文档所有文本节点，把 {{LONG_TEXT_k}} / {{LONG_TEXT_k|suffix}}
+// 步骤 8 页面脚本：遍历文档所有文本节点，把 {{LONG_TEXT_k}} / {{LONG_TEXT_k|suffix}}
 // 占位符替换为 longTextMap[k] 里的真实文本。返回替换计数与未定义引用列表。
 function __u2mResolvePlaceholders(longTextMap) {
   const PH_RE = /\{\{LONG_TEXT_(\d+)(?:\|[^}]*)?\}\}/g;

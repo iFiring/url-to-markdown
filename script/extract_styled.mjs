@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // extract_styled.mjs <url-dir>
-// 步骤 3.1：样式视图裁剪。读 3_key_ids.json 与 2_clean_style_snapshot.html，
+// 步骤 4：样式视图裁剪。读 3_key_ids.json 与 2_clean_style_snapshot.html，
 // 保留三类 key 元素（titleIds/descriptionIds/listFlowIds）的完整子树与到
 // <body> 的祖先链（一字不动，含全部属性），删除其余 body 元素；
 // <head>（title + <style>）不动，body 分支里的 <style> 挪入 head 后再删分支。
-// 产物：steps/3.1_styled_extract.html
+// 产物：steps/4_styled_extract.html
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
@@ -81,7 +81,7 @@ async function main() {
       );
     }
 
-    const extractPath = path.join(stepsDir, '3.1_styled_extract.html');
+    const extractPath = path.join(stepsDir, '4_styled_extract.html');
     await fsPromises.writeFile(extractPath, result.html, 'utf8');
     log(`样式视图裁剪完成: ${extractPath} (删除 ${result.removed} 个元素)`);
 

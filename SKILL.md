@@ -12,7 +12,7 @@ description: "将 URL（网页）的主体内容转换成 Markdown；在需要�
 - 使用：把单个 URL 的正文转为 Markdown 文件
 - 不使用：批量爬取、站点镜像；登录态存于 IndexedDB / Service Worker 的站点
 
-## 操作手册（步骤 0-5）
+## 操作手册（步骤 0-9）
 
 本技能目录为 `<skill-root>`（SKILL.md 所在目录）。以下 `<url>` 均指用户给定的完整 URL。
 
@@ -110,7 +110,7 @@ node <skill-root>/script/clean_snapshot.mjs <url-dir>
 }
 ```
 
-### 步骤 3.1 · 样式视图裁剪
+### 步骤 4 · 样式视图裁剪
 
 ```bash
 node <skill-root>/script/extract_styled.mjs <url-dir>
@@ -124,34 +124,34 @@ node <skill-root>/script/extract_styled.mjs <url-dir>
 - **`<head>` 完全不动**（`<title>` + 全部 `<style>` 原地保留）；body 里即将删除的分支中若有 `<style>`，先挪入 `<head>` 再删分支，样式标签零丢失
 - **删除**：其余全部 body 元素（封面区块、推荐、营销等 step 3 排除的内容）
 
-产物：`steps/3.1_styled_extract.html`
+产物：`steps/4_styled_extract.html`
 
 | stdout status | 动作 |
 |---|---|
-| `ok` | 进入步骤 3.2。`removedCount` 为删除元素数 |
+| `ok` | 进入步骤 5。`removedCount` 为删除元素数 |
 | `error` | 按 `reason` 处理：key_ids 缺失→跑步骤 3；快照缺失→跑步骤 2；id 未命中 / listFlowIds 为空→重跑步骤 3 |
 
-### 步骤 3.2 · 样式内联（juice）
+### 步骤 5 · 样式内联（juice）
 
 ```bash
 node <skill-root>/script/compute_styles.mjs <url-dir>
 ```
 
-读取 `steps/3.1_styled_extract.html`，juice 按自身 CSS 级联引擎把 `<style>` 规则内联到元素的 style 属性并移除标签（字面声明值：不推导继承、不解析 `var()`；原有内联样式参与级联故保留），随后在浏览器里清理并删净（正文含字面 `class="..."` 文本也不会误伤）：
+读取 `steps/4_styled_extract.html`，juice 按自身 CSS 级联引擎把 `<style>` 规则内联到元素的 style 属性并移除标签（字面声明值：不推导继承、不解析 `var()`；原有内联样式参与级联故保留），随后在浏览器里清理并删净（正文含字面 `class="..."` 文本也不会误伤）：
 
 - **噪声声明删除**：`font-family`、`font-style`（任意值）、`-webkit-` 前缀属性、值为 `inherit` 的声明；清空后移除 style 属性。只动确有噪声的元素——无噪声的保持 juice 字面输出（被清理元素的声明经 CSSOM 重序列化，颜色归一为 rgb() 形式，语义等价）
 - **`<style>` 标签与 `class` 属性删净**
 
 终态：无 `<style>`、无 `class`，内联声明只留有意义的。
 
-产物：`steps/3.2_juice_styles.html`
+产物：`steps/5_juice_styles.html`
 
 | stdout status | 动作 |
 |---|---|
-| `ok` | 进入步骤 3.3。`styledCount` 为带内联样式的元素数 |
-| `error` | 3.1 产物缺失→跑步骤 3.1 |
+| `ok` | 进入步骤 6。`styledCount` 为带内联样式的元素数 |
+| `error` | 步骤 4 产物缺失→跑步骤 4 |
 
-### 步骤 3.3 · 文章视图提取
+### 步骤 6 · 文章视图提取
 
 ```bash
 node <skill-root>/script/extract_article.mjs <url-dir>
@@ -159,7 +159,7 @@ node <skill-root>/script/extract_article.mjs <url-dir>
 
 `<url-dir>` 为 `working/` 下的 URL 目录名（相对或绝对路径均可）。
 
-读取 `steps/3.2_juice_styles.html` 与 `steps/3_key_ids.json`，新建一份只含文章主体的 html，按**分组顺序**（标题 → 说明 → 正文块）把元素提取进新 `<body>`：
+读取 `steps/5_juice_styles.html` 与 `steps/3_key_ids.json`，新建一份只含文章主体的 html，按**分组顺序**（标题 → 说明 → 正文块）把元素提取进新 `<body>`：
 
 - `titleIds` / `descriptionIds`：**元素本身**（完整子树，属性与内容一字不动）
 - `listFlowIds`：遍历各容器子节点，**元素与非空白裸文本按文档序交错迁入**——裸文本没有 `data-u2m-id` 但可能是未包标签的正文，丢弃即内容损失；纯空白文本与注释不迁（容器本身与祖先骨架不入新 html）
@@ -167,16 +167,16 @@ node <skill-root>/script/extract_article.mjs <url-dir>
 - head：保留原文 `<title>`；`<html lang>` 照抄
 - 新 `<body>` 带阅读布局内联样式 `max-width: 768px; margin: 4rem auto`（限宽、水平居中）
 
-产物：`steps/3.3_article.html`
+产物：`steps/6_article.html`
 
 | stdout status | 动作 |
 |---|---|
-| `ok` | 进入步骤 3.4。`elementCount` 为提取的元素数 |
-| `error` | 按 `reason` 处理：3.2 产物缺失→跑步骤 3.2；key_ids 缺失→跑步骤 3；id 未命中 / listFlowIds 为空→重跑步骤 3 |
+| `ok` | 进入步骤 7。`elementCount` 为提取的元素数 |
+| `error` | 按 `reason` 处理：步骤 5 产物缺失→跑步骤 5；key_ids 缺失→跑步骤 3；id 未命中 / listFlowIds 为空→重跑步骤 3 |
 
-### 步骤 3.4 · markdown 骨架生成（LLM 步骤）
+### 步骤 7 · markdown 骨架生成（LLM 步骤）
 
-读取 `steps/3.3_article.html`。
+读取 `steps/6_article.html`。
 
 你的任务：把文章视图转换成一份 **markdown 骨架**——数组按文档序排列，每项一个单键对象，key 是语义标签，value 是该块的内容模板。长文本只引用占位编号、一字不抄，正文回填由后续脚本完成。
 
@@ -205,7 +205,7 @@ node <skill-root>/script/extract_article.mjs <url-dir>
 - 分派判定：按**模块标准**圈定——父元素带背景色/边框，子元素再带多级边框/背景色（卡片组、对比面板、图表、图解、带包装的代码块部件）→ 一律走 `trans2img`。外层 figure 容器不入标记范围，模块的 caption/脚注单独成 `p` 条目；仅裸代码块走 `code`。模块之外一律文本形态（优先扁平化）
 - 不虚构原文没有的信息
 
-将结果写入 `steps/3.4_skeleton.json`：
+将结果写入 `steps/7_skeleton.json`：
 
 ```json
 [
@@ -220,46 +220,46 @@ node <skill-root>/script/extract_article.mjs <url-dir>
 ]
 ```
 
-**后续**：步骤 3.5 对 `trans2img` 元素截图（含占位符还原）；回填脚本（尚未实现）读骨架 + `2_long_text.json` 生成最终 markdown。在回填路径端到端跑通前，步骤 4/5 旧路径暂保留可用。
+**后续**：步骤 8 对 `trans2img` 元素截图（含占位符还原）并写出 resolved skeleton；步骤 9 把骨架回填为最终 markdown。
 
-### 步骤 3.5 · 占位符还原 + trans2img 截图
+### 步骤 8 · 占位符还原 + trans2img 截图
 
 ```bash
 node <skill-root>/script/screenshot_trans.mjs <url-dir>
 ```
 
-读取 `steps/3.4_skeleton.json` + `steps/3.3_article.html` + `steps/2_long_text.json`。
+读取 `steps/7_skeleton.json` + `steps/6_article.html` + `steps/2_long_text.json`。
 
 你的任务：
-1. 把骨架里所有 `{{LONG_TEXT_k}}` / `{{LONG_TEXT_k|suffix}}` 替换为 `2_long_text.json` 的真实文本，写出与 3.4 同结构的 `steps/3.5_resolved_skeleton.json`
+1. 把骨架里所有 `{{LONG_TEXT_k}}` / `{{LONG_TEXT_k|suffix}}` 替换为 `2_long_text.json` 的真实文本，写出与步骤 7 同结构的 `steps/8_resolved_skeleton.json`
 2. 对其中 `trans2img` 标记的元素，在真实渲染状态下截图（子树内占位符已替换）
 
 脚本行为：
-1. 读骨架 + `2_long_text.json`，纯 Node 做占位符替换，写出 `steps/3.5_resolved_skeleton.json`（条目数、顺序、key 与 3.4 完全一致，trans2img 条目保留，value 全部为真实文本）
+1. 读骨架 + `2_long_text.json`，纯 Node 做占位符替换，写出 `steps/8_resolved_skeleton.json`（条目数、顺序、key 与步骤 7 完全一致，trans2img 条目保留，value 全部为真实文本）
 2. 若骨架中任一 value 引用了 `2_long_text.json` 未定义的编号 → 直接报 error
-3. 按文档序收集骨架中所有 `trans2img` 的 id；若为空：`skipped: "no_trans2img"`，resolved skeleton 已写出，直接进入步骤 4
-4. 用 playwright 加载 `3.3_article.html`（body 已设 `max-width: 768px`，即真实渲染宽度）
+3. 按文档序收集骨架中所有 `trans2img` 的 id；若为空：`skipped: "no_trans2img"`，resolved skeleton 已写出，直接进入步骤 9
+4. 用 playwright 加载 `6_article.html`（body 已设 `max-width: 768px`，即真实渲染宽度）
 5. 注入 `page-resolve-placeholders.js`：遍历全文档文本节点，把 `{{LONG_TEXT_k|...}}` / `{{LONG_TEXT_k}}` 替换为 `2_long_text.json` 里的原文（与 resolved skeleton 的还原结果一致，用于截图）
 6. 对每个 id 定位元素并调 `el.screenshot({type: 'webp'})` → `assets/trans/{id}.webp`
 
 产物：
-- `steps/3.5_resolved_skeleton.json`（必填，结构同 3.4，所有占位符已还原；下游回填脚本直接读它生成 markdown，无需再拼 `2_long_text.json`）
+- `steps/8_resolved_skeleton.json`（必填，结构同步骤 7，所有占位符已还原；下游回填脚本直接读它生成 markdown，无需再拼 `2_long_text.json`）
 - `assets/trans/{id}.webp`（每个 trans2img 一个截图，WebP 格式，2x 分辨率）
 
 | stdout status | 动作 |
 |---|---|
-| `ok` | 进入步骤 4（或后续回填）。`resolvedSkeleton` 为 resolved skeleton 路径；`count` 为截图数；`replaced` 为截图前的占位符替换数；`skipped: "no_trans2img"` 时只有 resolved skeleton |
-| `error` | 按 `reason` 处理：前置产物缺失→补跑对应步骤；id 在 DOM 未命中→重跑步骤 3.4；占位符引用未定义编号→检查步骤 2 |
+| `ok` | 进入步骤 9。`resolvedSkeleton` 为 resolved skeleton 路径；`count` 为截图数；`replaced` 为截图前的占位符替换数；`skipped: "no_trans2img"` 时只有 resolved skeleton |
+| `error` | 按 `reason` 处理：前置产物缺失→补跑对应步骤；id 在 DOM 未命中→重跑步骤 7；占位符引用未定义编号→检查步骤 2 |
 
-### 步骤 3.6 · 骨架回填为 Markdown
+### 步骤 9 · 骨架回填为 Markdown
 
 ```bash
 node <skill-root>/script/render_skeleton.mjs <url-dir>
 ```
 
-读取 `steps/3.5_resolved_skeleton.json`，按文档序把每条骨架条目转为 markdown 块，块与块之间以空行分隔。纯 Node，无浏览器依赖。
+读取 `steps/8_resolved_skeleton.json`，按文档序把每条骨架条目转为 markdown 块，块与块之间以空行分隔。纯 Node，无浏览器依赖。
 
-转换规则（块级语法由此脚本加，行内 markdown 已在 3.4 由 LLM 写好）：
+转换规则（块级语法由此脚本加，行内 markdown 已在步骤 7 由 LLM 写好）：
 
 | key | markdown 输出 |
 |---|---|
@@ -274,90 +274,12 @@ node <skill-root>/script/render_skeleton.mjs <url-dir>
 
 未知 key 静默跳过。空骨架输出空文件。
 
-产物：`steps/3.6_markdown.md`
+产物：`steps/9_markdown.md`
 
 | stdout status | 动作 |
 |---|---|
-| `ok` | 进入步骤 4（旧路径）或直接作为最终 markdown。`blocks` 为块数，`bytes` 为字节数 |
-| `error` | 按 `reason` 处理：前置缺失→补跑步骤 3.5 |
-
-### 步骤 4 · 分块
-
-> **旧路径**（读 1_snapshot 的分块转化流程）：3.4 骨架回填端到端跑通前暂保留；可不经 3.4，从步骤 3 完成后直接进入。
-
-```bash
-node <skill-root>/script/chunker.mjs <url-dir>
-```
-
-读取 `steps/3_key_ids.json` 和 `steps/1_snapshot.html`，在浏览器中按列表流遍历子元素，将内容分为三类块：
-
-| type | 条件 | needsLLM |
-|---|---|---|
-| `phrasing` | 纯行内元素（`<a>`/`<span>`/`<em>` 等 HTML Phrasing content 标签） | `false` |
-| `flow` | 单层块级元素（`<p>`/`<div>`/`<h1>`-`<h6>`/`<ul>`/`<ol>` 等，且子元素不含嵌套 Flow） | `false` |
-| `multiLayer` | 未知标签（`<svg>`/`<canvas>`/`<video>`/`<iframe>`/`<math>` 等）或含嵌套 Flow 的块级元素 | `true` |
-
-`multiLayer` 块会附带 `styledHtml`（带有效样式内联的 HTML 副本：白名单视觉属性的计算值，`var()` 已解析，与 UA 默认值及父元素继承值差分去重；剥离 class 与字体名，缩进空白折叠，pre 内容原样保留），供步骤 5 的 LLM 转化使用。
-
-产物：`steps/4_chunk_list.json`
-
-| stdout status | 动作 |
-|---|---|
-| `ok` | 进入步骤 5。`totalChunks` 为总块数，`llmChunks` 为需 LLM 处理的块数 |
-| `error` | 按 `reason` 处理：快照缺失→跑步骤 1；key_ids 缺失→跑步骤 3；其他→反馈给用户 |
-
-### 步骤 5 · 多层块转化（LLM 步骤）
-
-读取 `steps/4_chunk_list.json`，筛选 `needsLLM: true` 的块（即 `type: "multiLayer"` 的块）。
-
-你的任务：对每个 `multiLayer` 块，基于其 `styledHtml`（带有效内联样式的 HTML，仅含渲染有效的计算值）进行转化。每个块有两种转化路径：
-
-**路径 A：转化为 Phrasing 内容（优先）**
-
-将复杂嵌套结构扁平化为简洁的行内文本描述。保留语义信息，丢失布局细节。适用于：
-- 卡片式布局（标题+描述的卡片 → 用文字描述卡片内容）
-- 嵌套列表/表格的变体（→ 用简洁文本概括）
-- 装饰性布局容器（→ 提取其中的有意义文本）
-
-**路径 B：转化为 SVG 图片（兜底）**
-
-对于无法用文本充分表达的内容，生成语义等价的自包含 SVG。适用于：
-- 图表、数据可视化（柱状图、折线图、饼图等）
-- 复杂几何布局（信息图、流程图、组织结构图）
-- 纯视觉内容（图标组合、装饰性图形）
-
-**约束**：
-- **优先转化为 Phrasing**——只有图表/可视化/纯布局类内容才转 SVG
-- SVG 转化要求：生成自包含 SVG（含 `xmlns`、`viewBox`），不依赖外部资源（字体用系统字体栈，图片用占位矩形代替）
-- 每个块的转化**独立进行**，不跨块引用
-- 不修改或补充原文中不存在的信息
-- `phrasing` 和 `flow` 类型的块（`needsLLM: false`）不需要处理，直接跳过
-
-将结果写入 `steps/5_llm_chunk_list.json`：
-
-```json
-{
-  "chunks": [
-    {
-      "id": 3,
-      "originalType": "multiLayer",
-      "resultType": "phrasing",
-      "content": "扁平化后的文本描述..."
-    },
-    {
-      "id": 7,
-      "originalType": "multiLayer",
-      "resultType": "svg",
-      "content": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\">...</svg>"
-    }
-  ]
-}
-```
-
-- `id`：对应 `4_chunk_list.json` 中块的 `id`
-- `originalType`：固定为 `"multiLayer"`
-- `resultType`：`"phrasing"` 或 `"svg"`
-- `content`：转化后的内容（纯文本或完整 SVG 源码）
+| `ok` | 管线完成。`blocks` 为块数，`bytes` 为字节数；`9_markdown.md` 即最终 markdown |
+| `error` | 按 `reason` 处理：前置缺失→补跑步骤 8 |
 
 ## 常见错误处理
 
@@ -368,5 +290,5 @@ node <skill-root>/script/chunker.mjs <url-dir>
 | `snapshot` 报 `virtual_list` 但用户确信是普通长页 | 该站可能主动裁剪离屏 DOM（与虚拟列表同构，产出亦只是部分窗口），属已知边界；建议改用其他抓取方式 |
 | 页面加载报 `net::ERR_TUNNEL_CONNECTION_FAILED` / `ERR_PROXY_CONNECTION_FAILED` | 本机系统代理不可用或拒绝目标站：设 `U2M_PROXY=direct` 绕过系统代理，或 `U2M_PROXY=http://<host>:<port>` 显式指定可用代理后重跑 |
 | `clean_snapshot` 报找不到快照 | 先运行步骤 1 生成 `1_snapshot.html` |
-| `extract_article` 报找不到纯内联视图 | 先运行步骤 3.2 生成 `3.2_juice_styles.html` |
+| `extract_article` 报找不到纯内联视图 | 先运行步骤 5 生成 `5_juice_styles.html` |
 | `chunker` 报找不到 key_ids | 先运行步骤 3 生成 `3_key_ids.json` |

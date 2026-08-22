@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // render_skeleton.mjs <url-dir>
-// 步骤 3.6：把 steps/3.5_resolved_skeleton.json 转为 markdown 文档
-// steps/3.6_markdown.md。纯 Node，无浏览器依赖。
+// 步骤 9：把 steps/8_resolved_skeleton.json 转为 markdown 文档
+// steps/9_markdown.md。纯 Node，无浏览器依赖。
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
@@ -90,16 +90,16 @@ async function main() {
 
   const urlDir = resolveUrlDir(urlDirArg);
   const stepsDir = path.join(urlDir, 'steps');
-  const resolvedPath = path.join(stepsDir, '3.5_resolved_skeleton.json');
+  const resolvedPath = path.join(stepsDir, '8_resolved_skeleton.json');
 
   if (!fs.existsSync(resolvedPath)) {
-    return emitError(`找不到 ${resolvedPath}，请先运行步骤 3.5`, 1);
+    return emitError(`找不到 ${resolvedPath}，请先运行步骤 8`, 1);
   }
 
   const skeleton = JSON.parse(await fsPromises.readFile(resolvedPath, 'utf8'));
   const md = convertSkeleton(skeleton);
 
-  const outPath = path.join(stepsDir, '3.6_markdown.md');
+  const outPath = path.join(stepsDir, '9_markdown.md');
   await fsPromises.writeFile(outPath, md);
 
   log(`markdown 已生成: ${outPath}（${md.length} 字节）`);

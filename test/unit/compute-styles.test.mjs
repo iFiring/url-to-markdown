@@ -27,7 +27,7 @@ test('compute_styles.mjs: 无参数时输出 usage_error', async () => {
   assert.equal(JSON.parse(r.stdout).status, 'usage_error');
 });
 
-// 模拟步骤 3.1 产物：<style> 规则 + 原有内联样式（含噪声声明）+ class + 文本/非文本元素
+// 模拟步骤 4 产物：<style> 规则 + 原有内联样式（含噪声声明）+ class + 文本/非文本元素
 const EXTRACT = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>样式计算</title><style>.box{border:2px solid red;background-color:#f0f0f0}.plain{color:#333;font-weight:bold;font-family:Georgia}p{font-size:18px}</style></head><body><div class="box" style="margin:0;font-family:Arial,sans-serif;-webkit-font-smoothing:antialiased;font-style:normal;color:inherit" data-u2m-id="1"><p class="plain" data-u2m-id="2">文本</p><div data-u2m-id="3">默认文本</div><em style="font-style:italic" data-u2m-id="5">强调</em><span data-u2m-id="4"></span></div></body></html>`;
 
@@ -37,7 +37,7 @@ function setupTmp(name, { withExtract = true } = {}) {
   const stepsDir = path.join(urlDir, 'steps');
   fs.mkdirSync(stepsDir, { recursive: true });
   if (withExtract) {
-    fs.writeFileSync(path.join(stepsDir, '3.1_styled_extract.html'), EXTRACT);
+    fs.writeFileSync(path.join(stepsDir, '4_styled_extract.html'), EXTRACT);
   }
   return { tmpRoot, urlDir, stepsDir };
 }
@@ -52,11 +52,11 @@ test('compute_styles.mjs: juice 内联并删净 <style> 与 class，只产一份
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
-  assert.equal(out.juiceStyles, path.join(stepsDir, '3.2_juice_styles.html'));
+  assert.equal(out.juiceStyles, path.join(stepsDir, '5_juice_styles.html'));
   assert.equal(out.styledCount, 2, '带内联样式的元素应为 2 个（1/2）');
 
   // 计算版已移除：不再产出
-  assert.ok(!fs.existsSync(path.join(stepsDir, '3.2_computed_styles.html')), '不应再产出计算版文件');
+  assert.ok(!fs.existsSync(path.join(stepsDir, '5_computed_styles.html')), '不应再产出计算版文件');
   assert.equal(out.computedStyles, undefined, 'emit 不应再含 computedStyles 字段');
 
   const juiced = fs.readFileSync(out.juiceStyles, 'utf8');
@@ -84,7 +84,7 @@ test('compute_styles.mjs: juice 内联并删净 <style> 与 class，只产一份
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('compute_styles.mjs: 缺 3.1 产物时报 error 指路步骤 3.1', async () => {
+test('compute_styles.mjs: 缺步骤 4 产物时报 error 指路步骤 4', async () => {
   const { tmpRoot, urlDir } = setupTmp('miss', { withExtract: false });
   const script = path.resolve('script/compute_styles.mjs');
   const r = await runScript(process.execPath, [script, urlDir], {
@@ -94,6 +94,6 @@ test('compute_styles.mjs: 缺 3.1 产物时报 error 指路步骤 3.1', async ()
   assert.equal(r.code, 1);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'error');
-  assert.ok(out.reason.includes('步骤 3.1'), `reason 应指路步骤 3.1: ${out.reason}`);
+  assert.ok(out.reason.includes('步骤 4'), `reason 应指路步骤 4: ${out.reason}`);
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });

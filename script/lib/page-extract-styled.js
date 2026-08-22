@@ -1,5 +1,5 @@
 /**
- * 步骤 3.1 页面内裁剪函数。在浏览器 evaluate 中执行。
+ * 步骤 4 页面内裁剪函数。在浏览器 evaluate 中执行。
  * 基于 3_key_ids.json 的关键 ID，把带样式版快照裁剪为只含文章主体的样式视图：
  *   - key 元素（titleIds/descriptionIds/listFlowIds）的完整子树一字不动——
  *     标签、属性、后代、文本全部原样保留

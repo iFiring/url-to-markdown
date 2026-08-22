@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 // compute_styles.mjs <url-dir>
-// 步骤 3.2：样式内联（juice）。读 3.1_styled_extract.html，juice 按自身
+// 步骤 5：样式内联（juice）。读 4_styled_extract.html，juice 按自身
 // CSS 级联引擎把 <style> 规则内联到元素的 style 属性并移除标签
 // （字面声明值：不推导继承、不解析 var()；原有内联样式参与级联故保留），
 // 再在浏览器里删净残留 <style> 与全部 class 属性（page-finalize-inline.js）。
 // 终态：无 <style>、无 class，样式仅存于内联。
-// 产物：steps/3.2_juice_styles.html
+// 产物：steps/5_juice_styles.html
 // （getComputedStyle 计算版已按效果对比移除，只保留 juice 路径）
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
@@ -45,10 +45,10 @@ async function main() {
 
   const urlDir = resolveUrlDir(urlDirArg);
   const stepsDir = path.join(urlDir, 'steps');
-  const extractPath = path.join(stepsDir, '3.1_styled_extract.html');
+  const extractPath = path.join(stepsDir, '4_styled_extract.html');
 
   if (!fs.existsSync(extractPath)) {
-    return emitError(`找不到 ${extractPath}，请先运行步骤 3.1`);
+    return emitError(`找不到 ${extractPath}，请先运行步骤 4`);
   }
 
   const extractHtml = await fsPromises.readFile(extractPath, 'utf8');
@@ -65,7 +65,7 @@ async function main() {
     await page.setContent(juicedHtml, { waitUntil: 'domcontentloaded' });
     const final = await page.evaluate(`(${pageFinalizeFn})()`);
 
-    const juicePath = path.join(stepsDir, '3.2_juice_styles.html');
+    const juicePath = path.join(stepsDir, '5_juice_styles.html');
     await fsPromises.writeFile(juicePath, final.html, 'utf8');
     log(`样式内联完成: ${juicePath} (${final.styledCount} 个元素带样式)`);
 
