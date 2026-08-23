@@ -2,12 +2,15 @@
 /**
  * screenshot_trans.mjs —— 步骤 8：占位符还原 + 图片下载 + trans2img 截图。
  * 读 7_skeleton.json + 1_snapshot.html + 2_long_text.json，产出：
+ * 
  *   8_resolved_skeleton.json  结构同步骤 7，所有 {{LONG_TEXT_k[|suffix]}}
  *                             替换为真实文本（trans2img 条目保留）；img 条目
  *                             在下载成功后改写为本地相对路径并重写本文件
+ * 
  *   assets/images/<name>      骨架 img 条目的远端图片（见 lib/download_images.mjs
  *                             头注：优先 URL 文件名、冲突带编号、扩展名按
  *                             content-type、失败保留原 URL）
+ * 
  *   assets/trans/{id}.webp    每个 trans2img 元素一张截图（WebP，2x 分辨率）
  *
  * 用法:
@@ -36,6 +39,10 @@
  *      都是真实文本，无需任何页面内占位符还原
  *
  * stdout 输出（有且仅有一行 JSON，日志一律走 stderr）:
+ *   `resolvedSkeleton` 为 resolved skeleton 路径；
+ *   `count` 为截图数；`source` 为截图来源（`live` 全部来自重渲染 / `snapshot` 全部快照兜底 / `mixed` 混合——均无需处理）；
+ *   `images` 为下载成功数、`failedImages` 为失败 URL（其骨架条目保留原 URL，无需处理）；
+ *   `skipped: "no_trans2img"` 时无截图但图片下载照常；
  *   {"status":"ok","count":N,"screenshots":[...],"source":"live"|"snapshot"|"mixed",
  *    "images":I,"failedImages":[...],"resolvedSkeleton":"..."}   → 退出码 0
  *   {"status":"ok","skipped":"no_trans2img","images":I,"failedImages":[...],

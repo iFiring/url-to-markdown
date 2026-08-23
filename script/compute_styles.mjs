@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 /**
- * compute_styles.mjs —— 步骤 5：样式内联（juice）。读 4_styled_extract.html，
- * 产出 <url-dir>/5_juice_styles.html。终态：无 <style>、无 class，
+ * compute_styles.mjs —— 步骤 5：样式内联（juice）。
+ * 把 `4_styled_extract.html` 的 `<style>` 规则内联进元素 style 属性，
+ * 再按白名单只保留明显结构化的样式（border/outline/background/box-shadow、flex/grid 布局、overflow、transform）与 font-size/font-weight，
+ * 删净其余声明及残留 `<style>`/`class`，终态纯内联。
+ * 两轮处理细节见脚本头部注释。
  * 内联声明只留有意义的。
  *
  * 用法:

@@ -14,14 +14,14 @@ description: "将 URL（网页）的主体内容转换成 Markdown；在需要�
 
 ## 工作原则
 
-- 没有明确要求或流程需要的话，你不要去读脚本产物
-- 你自己负责 "步骤 3" 和 "步骤 7" 的语义化操作：
-  - 当你有权限调用子智能体（Sub-Agent）时，优先把任务交给子智能体
-  - 当任务完成后，你要负责审阅一次
+- 没有明确要求或流程需要的话，你**不要去读脚本的产物及其内容**，仅需确认执行了命令，产物存在即可
+- 你自己负责 "步骤 3" 和 "步骤 7" 的语义化操作：当你有权限调用子智能体（Sub-Agent）时，**优先把任务交给子智能体**
 
 ## 操作手册（步骤 0-9）
 
-本技能目录为 `<skill-root>`（SKILL.md 所在目录）。
+本技能工作目录为 `<skill-root>`（SKILL.md 所在目录）。
+
+- `<skill-root>` 为本技能目录
 
 - `<url>` 指用户给定的完整 URL（仅步骤 1）
 - `<url-path>` 由步骤 1 脚本通过 `url.replace(/[^A-Za-z0-9.-]/g, '_')` 自动创建
@@ -63,31 +63,29 @@ stderr 中的"警告"不阻断，可忽略。
 node <skill-root>/script/snapshot.mjs <url> [--timeout 300000] [--scroll-rounds 60]
 ```
 
-单条命令依次完成登录检测（需要时弹出 Screencast viewer 供人工登录）、渐进滚动、虚拟列表检测、全保真快照抓取（同源 iframe 合并、外部 CSS 内联、剥尽 JS、标记 `data-u2m-id`）。四阶段细节见脚本头部注释。
+单条命令依次完成登录检测（需要时弹出 Screencast viewer 供人工登录）、渐进滚动、虚拟列表检测、全保真快照抓取。
 
-产物：`1_snapshot.html`
+产物：`1_snapshot.html`（产物生成后，不要擅自读取内容）
 
 | stdout status | 动作 |
 |---|---|
-| `ok` | 进入步骤 2。`elements` 字段为标记元素数量 |
+| `ok` | 把 stdout 反馈给用户，进入步骤 2 |
 | `error`（reason=`virtual_list`） | 告知用户"该页面为虚拟列表，仅渲染部分内容，无法全文转化为 Markdown"，**终止** |
 | `error`（reason=`login_timeout`/`login_aborted`） | 询问用户是否重试登录；重试则再次运行本命令 |
 | `error`（其他） | 把 `reason` 反馈给用户并终止 |
 
-### 步骤 2 · 结构清洗
+### 步骤 2 · 用脚本清洗结构
 
 ```bash
 node <skill-root>/script/clean_snapshot.mjs <url-dir>
 ```
 
-打开 `1_snapshot.html` 单趟结构清洗（删噪声标签/控件、级联删空元素），长文本替换为占位符；清洗规则与占位阈值见脚本头部注释。
-
-产物：`2_clean_snapshot.html`（结构视图）、`2_clean_style_snapshot.html`（带样式版）、`2_long_text.json`（占位符原文映射）
+产物：`2_clean_snapshot.html`（结构视图）、`2_clean_style_snapshot.html`（带样式版）、`2_long_text.json`（占位符原文映射）；产物生成后，不要擅自读取内容
 
 | stdout status | 动作 |
 |---|---|
-| `ok` | 进入步骤 3。`longTextCount` 为占位符数量，`longText` 为恢复清单路径，`styledSnapshot` 为带样式版路径 |
-| `error` | 按 `reason` 处理：快照缺失→先跑步骤 1；其他→反馈给用户 |
+| `ok` | 把 stdout 反馈给用户，进入步骤 3 |
+| `error` | 把 `reason` 反馈给用户并终止 |
 
 ### 步骤 3 · 你负责关键 ID 识别
 
@@ -98,7 +96,7 @@ node <skill-root>/script/clean_snapshot.mjs <url-dir>
 3. **列表流**（`listFlowIds`）：文章主体区域的父容器 ID。列表流是包含多个子块（段落、图片、代码块等）的最外层容器，可能有多个
 
 **约束**：
-- **必须排除**菜单、导航、广告、推荐、视频等不属于文章核心内容的元素
+- **必须排除**菜单、导航、广告等不属于三类关键元素的元素
 - 不读语义内容——文本已被 `{{LONG_TEXT_k|…}}` 占位，你只能看到结构
 - 当标题或说明分块已经在列表流中，不要再找它们的 `data-u2m-id` 了
 - `listFlowIds` 是列表流**最外层父元素**的 `data-u2m-id`，不是子元素的
@@ -116,50 +114,46 @@ node <skill-root>/script/clean_snapshot.mjs <url-dir>
 }
 ```
 
-### 步骤 4 · 样式视图裁剪
+把 `3_key_ids.json` 反馈给用户，进入步骤 4
+
+### 步骤 4 · 用脚本裁剪 DOM
 
 ```bash
 node <skill-root>/script/extract_styled.mjs <url-dir>
 ```
 
-按 `3_key_ids.json` 裁剪 `2_clean_style_snapshot.html`：key 元素子树 + 到 `<body>` 的祖先链一字不动保留，其余 body 元素删除；`<head>` 与全部 `<style>` 保留。裁剪规则见脚本头部注释。
-
-产物：`4_styled_extract.html`
+产物：`4_styled_extract.html`（你自己不要去读脚本的产物内容，确认有即可）
 
 | stdout status | 动作 |
 |---|---|
-| `ok` | 进入步骤 5。`removedCount` 为删除元素数 |
-| `error` | 按 `reason` 处理：key_ids 缺失→跑步骤 3；快照缺失→跑步骤 2；id 未命中 / listFlowIds 为空→重跑步骤 3 |
+| `ok` | 把 stdout 反馈给用户，进入步骤 5。 |
+| `error` | 把 `reason` 反馈给用户并终止 |
 
-### 步骤 5 · 样式内联（juice）
+### 步骤 5 · 用脚本计算内联样式
 
 ```bash
 node <skill-root>/script/compute_styles.mjs <url-dir>
 ```
 
-把 `4_styled_extract.html` 的 `<style>` 规则内联进元素 style 属性，再按白名单只保留明显结构化的样式（border/outline/background/box-shadow、flex/grid 布局、overflow、transform）与 font-size/font-weight，删净其余声明及残留 `<style>`/`class`，终态纯内联。两轮处理细节见脚本头部注释。
-
-产物：`5_juice_styles.html`
+产物：`5_juice_styles.html`（你自己不要去读脚本的产物内容，确认有即可）
 
 | stdout status | 动作 |
 |---|---|
-| `ok` | 进入步骤 6。`styledCount` 为带内联样式的元素数 |
-| `error` | 步骤 4 产物缺失→跑步骤 4 |
+| `ok` | 把 stdout 反馈给用户，进入步骤 6。 |
+| `error` | 把 `reason` 反馈给用户并终止 |
 
-### 步骤 6 · 文章视图提取
+### 步骤 6 · 用脚本提取视图
 
 ```bash
 node <skill-root>/script/extract_article.mjs <url-dir>
 ```
 
-读 `5_juice_styles.html` 与 `3_key_ids.json`，按分组顺序（标题 → 说明 → 正文块）把 key 元素与列表流子节点迁入新 `<body>`（768px 居中阅读布局）。提取与去重规则见脚本头部注释。
-
-产物：`6_article.html`
+产物：`6_article.html`（你自己不要去读脚本的产物内容，确认有即可）
 
 | stdout status | 动作 |
 |---|---|
-| `ok` | 进入步骤 7。`elementCount` 为提取的元素数 |
-| `error` | 按 `reason` 处理：步骤 5 产物缺失→跑步骤 5；key_ids 缺失→跑步骤 3；id 未命中 / listFlowIds 为空→重跑步骤 3 |
+| `ok` | 把 stdout 反馈给用户，进入步骤进入步骤 7。|
+| `error` | 把 `reason` 反馈给用户并终止 |
 
 ### 步骤 7 · 你负责 markdown 骨架生成
 
@@ -214,37 +208,31 @@ node <skill-root>/script/extract_article.mjs <url-dir>
 ]
 ```
 
-**后续**：步骤 8 下载 `img` 条目图片、对 `trans2img` 元素截图（live 重渲染优先、快照兜底）并写出 resolved skeleton；步骤 9 把骨架回填为最终 markdown。
-
-### 步骤 8 · 占位符还原 + 图片下载 + trans2img 截图
+### 步骤 8 · 用脚本还原占位符 + 图片下载
 
 ```bash
 node <skill-root>/script/screenshot_trans.mjs <url-dir>
 ```
 
-读 `7_skeleton.json` + `1_snapshot.html` + `2_long_text.json`：先纯 Node 把骨架里所有 `{{LONG_TEXT_k}}` 替换为原文写出 resolved skeleton；再把 `img` 条目的远端图片下载到 `assets/images/`（优先 URL 文件名、冲突带编号），成功者把 resolved skeleton 的 img 值改写为本地路径；最后对 `trans2img` 标记的元素截图——**live 重渲染优先**：按快照 `<base>` 记录的 URL 重新渲染原页面（真实样式/图表/字体），重注入同一套标记脚本后两次渲染结构一致则 `data-u2m-id` 精确对位，与快照侧逐 id 签名严校验，全等才在 live 页截图；失配或重渲染不可达时在快照渲染页兜底。三轮处理细节见脚本头部注释。
-
-产物：`8_resolved_skeleton.json`（必填，结构同步骤 7，占位符已全部还原、下载成功的 img 已指向本地；步骤 9 直接读它，无需再拼 `2_long_text.json`）、`assets/images/<name>`（骨架 img 条目图片）、`assets/trans/{id}.webp`（每个 trans2img 一张，WebP，2x 分辨率）
+产物：`8_resolved_skeleton.json`（你自己不要去读脚本的产物内容，确认有即可）
 
 | stdout status | 动作 |
 |---|---|
-| `ok` | 进入步骤 9。`resolvedSkeleton` 为 resolved skeleton 路径；`count` 为截图数；`source` 为截图来源（`live` 全部来自重渲染 / `snapshot` 全部快照兜底 / `mixed` 混合——均无需处理）；`images` 为下载成功数、`failedImages` 为失败 URL（其骨架条目保留原 URL，无需处理）；`skipped: "no_trans2img"` 时无截图但图片下载照常 |
-| `error` | 按 `reason` 处理：前置产物缺失→补跑对应步骤；id 在快照未命中→重跑步骤 7；占位符引用未定义编号→检查步骤 2 |
+| `ok` | 把 stdout 反馈给用户，进入步骤 9。 |
+| `error` | 把 `reason` 反馈给用户并终止 |
 
-### 步骤 9 · 骨架回填为 Markdown
+### 步骤 9 · 用脚本将骨架转换为 Markdown
 
 ```bash
 node <skill-root>/script/render_skeleton.mjs <url-dir>
 ```
 
-读 `8_resolved_skeleton.json`，按文档序把每条骨架条目转为 markdown 块（块级语法由此脚本加，行内 markdown 已在步骤 7 写好），块间空行。各 key 的转换规则见脚本头部注释。纯 Node，无浏览器依赖。
-
-产物：`9_markdown.md`
+产物：`9_markdown.md`（你自己不要去读脚本的产物内容，确认有即可）
 
 | stdout status | 动作 |
 |---|---|
-| `ok` | 管线完成。`blocks` 为块数，`bytes` 为字节数；`9_markdown.md` 即最终 markdown |
-| `error` | 按 `reason` 处理：前置缺失→补跑步骤 8 |
+| `ok` | 把 stdout 反馈给用户，所有步骤完成 |
+| `error` | 把 `reason` 反馈给用户并终止 |
 
 ## 常见错误处理
 
