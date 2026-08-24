@@ -73,9 +73,19 @@ async function main() {
     return emitError(`找不到 ${extractPath}，请先运行步骤 4`);
   }
 
-  const extractHtml = await fsPromises.readFile(extractPath, 'utf8');
+  let extractHtml = await fsPromises.readFile(extractPath, 'utf8');
   const pageFinalizeFn = await readSharedScript('page-finalize-inline.js');
   debug(`读入 ${extractPath}（${extractHtml.length} 字节）`);
+
+  // 行内 style 属性里的引号实体（&quot; 等）会让 juice 崩溃：它以
+  // decodeEntities:false 载入文档（cheerio.js），属性值原样进入行内样式
+  // 的严格 postcss 解析（inline.js strict:true），& 开头的 token 报
+  // "Unknown word"。改写为 CSS 等价的单引号（双引号无法在双引号属性内
+  // 裸写）；未加引号的多词字体名本身是合法输入，无需处理。
+  extractHtml = extractHtml.replace(
+    /\bstyle="([^"]*)"/g,
+    (m, val) => `style="${val.replace(/&(quot|#0*34|#x0*22);/gi, "'")}"`
+  );
 
   // juice：Node 侧内联 <style> 规则并移除标签（class 稍后在浏览器删净）
   const juicedHtml = juice(extractHtml, { removeStyleTags: true });

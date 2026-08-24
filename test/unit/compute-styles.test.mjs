@@ -34,12 +34,12 @@ const EXTRACT = `<!DOCTYPE html>
 
 const URL = 'https://example.com/test-article';
 
-function setupTmp(name, { withExtract = true } = {}) {
+function setupTmp(name, { withExtract = true, extractHtml = EXTRACT } = {}) {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), `u2m-styles-${name}-`));
   const urlDir = path.join(tmpRoot, urlToDirName(URL));
   fs.mkdirSync(urlDir, { recursive: true });
   if (withExtract) {
-    fs.writeFileSync(path.join(urlDir, '4_styled_extract.html'), EXTRACT);
+    fs.writeFileSync(path.join(urlDir, '4_styled_extract.html'), extractHtml);
   }
   return { tmpRoot, urlDir };
 }
@@ -104,6 +104,37 @@ test('compute_styles.mjs: juice 内联并删净 <style> 与 class，只产一份
   assert.ok(!juiced.includes('inherit'), '值为 inherit 的声明应删除');
   // 只剩被删声明的元素：style 属性整体移除
   assert.ok(juiced.includes('<em data-u2m-id="5">'), 'em 仅 font-style，清空后不应残留 style 属性');
+
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+// 复现真实站点（微信公众号）踩到的坑：行内 style 属性里的引号以 &quot; 实体
+// 编码（font-family: Optima, &quot;Microsoft YaHei&quot;, serif），而文档含
+// <style> 标签时 juice 的 cheerio 载入不解码属性实体，实体原样进入行内样式
+// 的严格 postcss 解析（inline.js strict:true），& 开头的 token 报
+// "Unknown word Microsoft"。缺 <style> 标签时 cheerio 会解码实体、测不出
+// 来，故夹具必须带一个 <style>。修复：juice 前把属性值内的引号实体改写为
+// CSS 等价单引号。
+const ENTITY_EXTRACT = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>实体引号</title><style>body{transition:opacity .2s}</style></head><body style="font-family: Optima, &quot;Microsoft YaHei&quot;, serif; border: 1px solid black; margin: 10px"><div data-u2m-id="1">文本</div></body></html>`;
+
+test('compute_styles.mjs: 行内 style 属性含 &quot; 实体引号时不再崩溃', async () => {
+  const { tmpRoot } = setupTmp('entity', { extractHtml: ENTITY_EXTRACT });
+  const script = path.resolve('script/compute_styles.mjs');
+  const r = await runScript(process.execPath, [script, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+
+  const juiced = fs.readFileSync(out.juiceStyles, 'utf8');
+  // 同一属性的声明被正常解析：结构化 border 保留（元素经 CSSOM 重序列化，
+  // 颜色归一为 rgb() 形式，只断言结构部分），font-family 白名单外删除
+  assert.ok(juiced.includes('1px solid'), 'border 声明应保留');
+  assert.ok(!juiced.includes('font-family'), 'font-family 声明应删除');
+  assert.ok(!juiced.includes('&quot;'), '不应残留引号实体');
 
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
