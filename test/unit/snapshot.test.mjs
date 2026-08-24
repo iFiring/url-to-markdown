@@ -12,15 +12,22 @@ test('snapshot.mjs: 无参数时输出 usage_error', async () => {
   assert.equal(out.status, 'usage_error');
 });
 
+test('snapshot.mjs: 缺 --url 时输出 usage_error', async () => {
+  const r = await runScript(process.execPath, [script, '--timeout', '1000']);
+  assert.equal(r.code, 2);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'usage_error');
+});
+
 test('snapshot.mjs: --timeout 缺值时输出 usage_error', async () => {
-  const r = await runScript(process.execPath, [script, 'https://example.com', '--timeout']);
+  const r = await runScript(process.execPath, [script, '--url', 'https://example.com', '--timeout']);
   assert.equal(r.code, 2);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'usage_error');
 });
 
 test('snapshot.mjs: --scroll-rounds 非数字时报 usage_error', async () => {
-  const r = await runScript(process.execPath, [script, 'https://example.com', '--scroll-rounds', 'abc']);
+  const r = await runScript(process.execPath, [script, '--url', 'https://example.com', '--scroll-rounds', 'abc']);
   assert.equal(r.code, 2);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'usage_error');

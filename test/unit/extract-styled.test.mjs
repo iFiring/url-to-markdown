@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { runScript } from '../helpers/run-script.mjs';
+import { urlToDirName } from '../../script/lib/env.mjs';
 
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
 const pageScriptPath = path.resolve(thisDir, '../../script/lib/page-extract-styled.js');
@@ -31,9 +32,11 @@ test('extract_styled.mjs: 无参数时输出 usage_error', async () => {
 const STYLED_SNAPSHOT = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>测试页</title><style>.hero{color:red}</style></head><body><div class="main" data-u2m-id="1"><header class="hero" style="margin:0" data-u2m-id="2"><h1 data-u2m-id="3">标题</h1><p data-u2m-id="4">作者 日期</p></header><section class="content" style="padding:10px" data-u2m-id="5"><p data-u2m-id="6">段落一</p><div style="border:1px solid" data-u2m-id="7">图容器</div></section><aside class="noise" data-u2m-id="8"><style>.deep{color:blue}</style><p data-u2m-id="9">推荐阅读</p></aside></div><div class="ads" data-u2m-id="10"><p data-u2m-id="11">广告</p></div></body></html>`;
 
+const URL = 'https://example.com/test-article';
+
 function setupTmp(name, keyIds, { withSnapshot = true } = {}) {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), `u2m-extract-${name}-`));
-  const urlDir = path.join(tmpRoot, 'test-article');
+  const urlDir = path.join(tmpRoot, urlToDirName(URL));
   fs.mkdirSync(urlDir, { recursive: true });
   if (withSnapshot) {
     fs.writeFileSync(path.join(urlDir, '2_clean_style_snapshot.html'), STYLED_SNAPSHOT);
@@ -51,7 +54,7 @@ test('extract_styled.mjs: 保留 key 子树+骨架链与属性，删噪声，bod
     listFlowIds: [5],
   });
   const script = path.resolve('script/extract_styled.mjs');
-  const r = await runScript(process.execPath, [script, urlDir], {
+  const r = await runScript(process.execPath, [script, '--url', URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
@@ -97,7 +100,7 @@ test('extract_styled.mjs: 保留 key 子树+骨架链与属性，删噪声，bod
 test('extract_styled.mjs: key id 未命中时报 error 并列出缺失 id', async () => {
   const { tmpRoot, urlDir } = setupTmp('miss', { titleIds: [3], descriptionIds: [99], listFlowIds: [5] });
   const script = path.resolve('script/extract_styled.mjs');
-  const r = await runScript(process.execPath, [script, urlDir], {
+  const r = await runScript(process.execPath, [script, '--url', URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
@@ -112,7 +115,7 @@ test('extract_styled.mjs: key id 未命中时报 error 并列出缺失 id', asyn
 test('extract_styled.mjs: listFlowIds 为空时报 error', async () => {
   const { tmpRoot, urlDir } = setupTmp('empty', { titleIds: [3], descriptionIds: [], listFlowIds: [] });
   const script = path.resolve('script/extract_styled.mjs');
-  const r = await runScript(process.execPath, [script, urlDir], {
+  const r = await runScript(process.execPath, [script, '--url', URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
@@ -127,7 +130,7 @@ test('extract_styled.mjs: 缺快照 / 缺 key_ids 时报 error 并指路', async
   const script = path.resolve('script/extract_styled.mjs');
 
   const noSnapshot = setupTmp('nosnap', { titleIds: [3], listFlowIds: [5] }, { withSnapshot: false });
-  const r1 = await runScript(process.execPath, [script, noSnapshot.urlDir], {
+  const r1 = await runScript(process.execPath, [script, '--url', URL], {
     env: { U2M_WORKING_ROOT: noSnapshot.tmpRoot },
     timeoutMs: 30000,
   });
@@ -136,7 +139,7 @@ test('extract_styled.mjs: 缺快照 / 缺 key_ids 时报 error 并指路', async
   fs.rmSync(noSnapshot.tmpRoot, { recursive: true, force: true });
 
   const noKeyIds = setupTmp('nokey', null);
-  const r2 = await runScript(process.execPath, [script, noKeyIds.urlDir], {
+  const r2 = await runScript(process.execPath, [script, '--url', URL], {
     env: { U2M_WORKING_ROOT: noKeyIds.tmpRoot },
     timeoutMs: 30000,
   });

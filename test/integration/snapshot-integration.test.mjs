@@ -23,7 +23,7 @@ after(() => {
 
 test('snapshot.mjs: 静态文章页 → ok + 1_snapshot.html', async () => {
   const url = `${server.url}/static-article.html`;
-  const r = await runScript(process.execPath, [snapshotScript, url], {
+  const r = await runScript(process.execPath, [snapshotScript, '--url', url], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 60000,
   });
@@ -41,7 +41,7 @@ test('snapshot.mjs: 静态文章页 → ok + 1_snapshot.html', async () => {
 
 test('snapshot.mjs: 虚拟列表页 → error + virtual_list', async () => {
   const url = `${server.url}/virtual-list.html`;
-  const r = await runScript(process.execPath, [snapshotScript, url], {
+  const r = await runScript(process.execPath, [snapshotScript, '--url', url], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 60000,
   });
@@ -53,7 +53,7 @@ test('snapshot.mjs: 虚拟列表页 → error + virtual_list', async () => {
 
 test('snapshot.mjs: 标记 body 全部元素（排除纯文本修饰标签与 svg/math 内部）', async () => {
   const url = `${server.url}/inline-marking.html`;
-  const r = await runScript(process.execPath, [snapshotScript, url], {
+  const r = await runScript(process.execPath, [snapshotScript, '--url', url], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 60000,
   });

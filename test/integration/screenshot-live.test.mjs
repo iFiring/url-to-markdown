@@ -65,7 +65,7 @@ after(() => {
 
 test('步骤 8 live 重渲染：同内容两次渲染 id 对位 → source:"live"；翻版失配 → 自动兜底 "snapshot"', async () => {
   // ── 步骤 1：对 v1 页面抓快照 ──
-  const r1 = await runScript(process.execPath, [snapshotScript, server.url], {
+  const r1 = await runScript(process.execPath, [snapshotScript, '--url', server.url], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 90000,
   });
@@ -86,7 +86,7 @@ test('步骤 8 live 重渲染：同内容两次渲染 id 对位 → source:"live
   fs.writeFileSync(path.join(urlDir, '2_long_text.json'), '{}');
 
   // ── 步骤 8（v1：live 重渲染结构一致 → id 对位、签名全等）──
-  const r2 = await runScript(process.execPath, [transScript, urlDir], {
+  const r2 = await runScript(process.execPath, [transScript, '--url', server.url], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 90000,
   });
@@ -104,7 +104,7 @@ test('步骤 8 live 重渲染：同内容两次渲染 id 对位 → source:"live
 
   // ── 翻版 → 步骤 8（v2：id 平移 + 文本变更 → 严校验失配 → 快照兜底）──
   await server.flip();
-  const r3 = await runScript(process.execPath, [transScript, urlDir], {
+  const r3 = await runScript(process.execPath, [transScript, '--url', server.url], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 90000,
   });

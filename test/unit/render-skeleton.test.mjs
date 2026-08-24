@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { runScript } from '../helpers/run-script.mjs';
+import { urlToDirName } from '../../script/lib/env.mjs';
 
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
 const scriptPath = path.resolve(thisDir, '../../script/render_skeleton.mjs');
@@ -37,9 +38,11 @@ const RESOLVED = [
   { p: '结尾段落' },
 ];
 
+const URL = 'https://example.com/test-rskel';
+
 function setup(name, { resolved = RESOLVED } = {}) {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), `u2m-rskel-${name}-`));
-  const urlDir = path.join(tmpRoot, 'test-rskel');
+  const urlDir = path.join(tmpRoot, urlToDirName(URL));
   fs.mkdirSync(urlDir, { recursive: true });
   if (resolved !== null) {
     fs.writeFileSync(path.join(urlDir, '8_resolved_skeleton.json'), JSON.stringify(resolved));
@@ -49,7 +52,7 @@ function setup(name, { resolved = RESOLVED } = {}) {
 
 test('render_skeleton.mjs: 缺前置文件时报 error', async () => {
   const { tmpRoot, urlDir } = setup('missing', { resolved: null });
-  const r = await runScript(process.execPath, [scriptPath, urlDir], {
+  const r = await runScript(process.execPath, [scriptPath, '--url', URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
   });
   assert.equal(r.code, 1);
@@ -61,7 +64,7 @@ test('render_skeleton.mjs: 缺前置文件时报 error', async () => {
 
 test('render_skeleton.mjs: 全类型条目转换为 markdown', async () => {
   const { tmpRoot, urlDir } = setup('full');
-  const r = await runScript(process.execPath, [scriptPath, urlDir], {
+  const r = await runScript(process.execPath, [scriptPath, '--url', URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
   });
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
@@ -96,7 +99,7 @@ test('render_skeleton.mjs: 全类型条目转换为 markdown', async () => {
 
 test('render_skeleton.mjs: 空骨架输出空 markdown', async () => {
   const { tmpRoot, urlDir } = setup('empty', { resolved: [] });
-  const r = await runScript(process.execPath, [scriptPath, urlDir], {
+  const r = await runScript(process.execPath, [scriptPath, '--url', URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
   });
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
@@ -111,14 +114,3 @@ test('render_skeleton.mjs: 空骨架输出空 markdown', async () => {
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('render_skeleton.mjs: 相对路径 url-dir 正常解析', async () => {
-  const { tmpRoot, urlDir } = setup('relpath');
-  const r = await runScript(process.execPath, [scriptPath, 'test-rskel'], {
-    env: { U2M_WORKING_ROOT: tmpRoot },
-  });
-  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
-  assert.equal(out.status, 'ok');
-  assert.ok(fs.existsSync(path.join(urlDir, '9_markdown.md')));
-  fs.rmSync(tmpRoot, { recursive: true, force: true });
-});

@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { runScript } from '../helpers/run-script.mjs';
+import { urlToDirName } from '../../script/lib/env.mjs';
 
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
 const pageScriptPath = path.resolve(thisDir, '../../script/lib/page-extract-article.js');
@@ -32,9 +33,11 @@ test('extract_article.mjs: 无参数时输出 usage_error', async () => {
 const JUICED = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>测试文章</title></head><body><div data-u2m-id="10"><main data-u2m-id="11"><h1 style="font-size: 32px; font-weight: bold" data-u2m-id="1">标题</h1><div style="color: rgb(102, 102, 102)" data-u2m-id="2">作者</div><div style="color: rgb(102, 102, 102)" data-u2m-id="3">日期</div></main><div style="margin: 0" data-u2m-id="4"><p style="font-size: 18px" data-u2m-id="5">段落一</p><figure data-u2m-id="6"><img src="x.png" data-u2m-id="7"></figure><p data-u2m-id="8">段落二</p></div></div></body></html>`;
 
+const URL = 'https://example.com/test-article';
+
 function setupTmp(name, keyIds, { withJuiced = true } = {}) {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), `u2m-article-${name}-`));
-  const urlDir = path.join(tmpRoot, 'test-article');
+  const urlDir = path.join(tmpRoot, urlToDirName(URL));
   fs.mkdirSync(urlDir, { recursive: true });
   if (withJuiced) {
     fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), JUICED);
@@ -52,7 +55,7 @@ test('extract_article.mjs: 分组顺序提取进新 body，骨架与 flow 容器
     listFlowIds: [4],
   });
   const script = path.resolve('script/extract_article.mjs');
-  const r = await runScript(process.execPath, [script, urlDir], {
+  const r = await runScript(process.execPath, [script, '--url', URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
@@ -95,7 +98,7 @@ test('extract_article.mjs: 同一元素既是 description 又是 flow 子元素�
   const { tmpRoot, urlDir } = setupTmp('dup', { titleIds: [1], descriptionIds: [2], listFlowIds: [4] });
   fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), dup);
   const script = path.resolve('script/extract_article.mjs');
-  const r = await runScript(process.execPath, [script, urlDir], {
+  const r = await runScript(process.execPath, [script, '--url', URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
@@ -115,7 +118,7 @@ test('extract_article.mjs: flow 内未包标签的非空白文本按文档序迁
   const { tmpRoot, urlDir } = setupTmp('bare', { titleIds: [1], descriptionIds: [], listFlowIds: [4] });
   fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), bare);
   const script = path.resolve('script/extract_article.mjs');
-  const r = await runScript(process.execPath, [script, urlDir], {
+  const r = await runScript(process.execPath, [script, '--url', URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
@@ -137,7 +140,7 @@ test('extract_article.mjs: 纯空白文本与注释不迁入', async () => {
   const { tmpRoot, urlDir } = setupTmp('ws', { titleIds: [1], descriptionIds: [], listFlowIds: [4] });
   fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), ws);
   const script = path.resolve('script/extract_article.mjs');
-  const r = await runScript(process.execPath, [script, urlDir], {
+  const r = await runScript(process.execPath, [script, '--url', URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
@@ -156,7 +159,7 @@ test('extract_article.mjs: 纯空白文本与注释不迁入', async () => {
 test('extract_article.mjs: key id 未命中时报 error 并列出缺失 id', async () => {
   const { tmpRoot, urlDir } = setupTmp('miss', { titleIds: [1], descriptionIds: [99], listFlowIds: [4] });
   const script = path.resolve('script/extract_article.mjs');
-  const r = await runScript(process.execPath, [script, urlDir], {
+  const r = await runScript(process.execPath, [script, '--url', URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
@@ -171,7 +174,7 @@ test('extract_article.mjs: key id 未命中时报 error 并列出缺失 id', asy
 test('extract_article.mjs: listFlowIds 为空时报 error', async () => {
   const { tmpRoot, urlDir } = setupTmp('empty', { titleIds: [1], descriptionIds: [], listFlowIds: [] });
   const script = path.resolve('script/extract_article.mjs');
-  const r = await runScript(process.execPath, [script, urlDir], {
+  const r = await runScript(process.execPath, [script, '--url', URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
@@ -186,7 +189,7 @@ test('extract_article.mjs: 缺步骤 5 产物 / 缺 key_ids 时报 error 并指�
   const script = path.resolve('script/extract_article.mjs');
 
   const noJuiced = setupTmp('nojuice', { titleIds: [1], listFlowIds: [4] }, { withJuiced: false });
-  const r1 = await runScript(process.execPath, [script, noJuiced.urlDir], {
+  const r1 = await runScript(process.execPath, [script, '--url', URL], {
     env: { U2M_WORKING_ROOT: noJuiced.tmpRoot },
     timeoutMs: 30000,
   });
@@ -195,7 +198,7 @@ test('extract_article.mjs: 缺步骤 5 产物 / 缺 key_ids 时报 error 并指�
   fs.rmSync(noJuiced.tmpRoot, { recursive: true, force: true });
 
   const noKeyIds = setupTmp('nokey', null);
-  const r2 = await runScript(process.execPath, [script, noKeyIds.urlDir], {
+  const r2 = await runScript(process.execPath, [script, '--url', URL], {
     env: { U2M_WORKING_ROOT: noKeyIds.tmpRoot },
     timeoutMs: 30000,
   });

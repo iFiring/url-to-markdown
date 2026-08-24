@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { runScript } from '../helpers/run-script.mjs';
+import { urlToDirName } from '../../script/lib/env.mjs';
 
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
 const scriptPath = path.resolve(thisDir, '../../script/lib/page-clean-snapshot.js');
@@ -39,7 +40,8 @@ test('clean_snapshot.mjs: 无参数时输出 usage_error', async () => {
 test('clean_snapshot.mjs: 对 article-1 快照执行清洗', async () => {
   // 准备临时目录，手动放入一个测试快照
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-clean-'));
-  const urlDir = path.join(tmpRoot, 'test-article');
+  const url = 'https://example.com/test-article';
+  const urlDir = path.join(tmpRoot, urlToDirName(url));
   fs.mkdirSync(urlDir, { recursive: true });
 
   // 用 article-1.html 作为模拟快照
@@ -47,7 +49,7 @@ test('clean_snapshot.mjs: 对 article-1 快照执行清洗', async () => {
   fs.writeFileSync(path.join(urlDir, '1_snapshot.html'), fixture);
 
   const script = path.resolve('script/clean_snapshot.mjs');
-  const r = await runScript(process.execPath, [script, urlDir], {
+  const r = await runScript(process.execPath, [script, '--url', url], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
@@ -74,7 +76,8 @@ test('clean_snapshot.mjs: 对 article-1 快照执行清洗', async () => {
 
 test('clean_snapshot.mjs: 空元素级联删除，有内容的元素保留', async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-clean-empty-'));
-  const urlDir = path.join(tmpRoot, 'empty-article');
+  const url = 'https://example.com/empty-article';
+  const urlDir = path.join(tmpRoot, urlToDirName(url));
   fs.mkdirSync(urlDir, { recursive: true });
 
   const snapshot = `<!DOCTYPE html>
@@ -98,7 +101,7 @@ test('clean_snapshot.mjs: 空元素级联删除，有内容的元素保留', asy
   fs.writeFileSync(path.join(urlDir, '1_snapshot.html'), snapshot);
 
   const script = path.resolve('script/clean_snapshot.mjs');
-  const r = await runScript(process.execPath, [script, urlDir], {
+  const r = await runScript(process.execPath, [script, '--url', url], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
@@ -130,7 +133,8 @@ test('clean_snapshot.mjs: 删除 nav/footer/form 及 role 等价物，正文保�
   // 页面骨架标签（导航/页脚/表单）不属于文章正文，整体删除——含
   // role 伪装变体与 <article> 内嵌 footer；只含骨架标签的包装容器随之级联清除
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-clean-skel-'));
-  const urlDir = path.join(tmpRoot, 'skel-article');
+  const url = 'https://example.com/skel-article';
+  const urlDir = path.join(tmpRoot, urlToDirName(url));
   fs.mkdirSync(urlDir, { recursive: true });
 
   const snapshot = `<!DOCTYPE html>
@@ -149,7 +153,7 @@ test('clean_snapshot.mjs: 删除 nav/footer/form 及 role 等价物，正文保�
   fs.writeFileSync(path.join(urlDir, '1_snapshot.html'), snapshot);
 
   const script = path.resolve('script/clean_snapshot.mjs');
-  const r = await runScript(process.execPath, [script, urlDir], {
+  const r = await runScript(process.execPath, [script, '--url', url], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
@@ -188,7 +192,8 @@ test('clean_snapshot.mjs: 删除 video/audio 与残余表单控件，header/asid
   // 媒体播放器与 form 外残余控件（搜索框/下拉/对话框）不是文章正文；
   // header/aside 是正文结构（hero 含主标题、章节 header+aside 交替），必须保留
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-clean-media-'));
-  const urlDir = path.join(tmpRoot, 'media-article');
+  const url = 'https://example.com/media-article';
+  const urlDir = path.join(tmpRoot, urlToDirName(url));
   fs.mkdirSync(urlDir, { recursive: true });
 
   const snapshot = `<!DOCTYPE html>
@@ -209,7 +214,7 @@ test('clean_snapshot.mjs: 删除 video/audio 与残余表单控件，header/asid
   fs.writeFileSync(path.join(urlDir, '1_snapshot.html'), snapshot);
 
   const script = path.resolve('script/clean_snapshot.mjs');
-  const r = await runScript(process.execPath, [script, urlDir], {
+  const r = await runScript(process.execPath, [script, '--url', url], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
@@ -256,7 +261,8 @@ test('clean_snapshot.mjs: 表格结构整体保留（含空单元格），内部
   // 删掉后表格行列错位；article-1 实测丢过整个 <colgroup>+4 <col>。
   // 表格结构元素即使为空也保留；单元格内的按钮等噪声照删，留下空壳单元格。
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-clean-table-'));
-  const urlDir = path.join(tmpRoot, 'table-article');
+  const url = 'https://example.com/table-article';
+  const urlDir = path.join(tmpRoot, urlToDirName(url));
   fs.mkdirSync(urlDir, { recursive: true });
 
   const snapshot = `<!DOCTYPE html>
@@ -277,7 +283,7 @@ test('clean_snapshot.mjs: 表格结构整体保留（含空单元格），内部
   fs.writeFileSync(path.join(urlDir, '1_snapshot.html'), snapshot);
 
   const script = path.resolve('script/clean_snapshot.mjs');
-  const r = await runScript(process.execPath, [script, urlDir], {
+  const r = await runScript(process.execPath, [script, '--url', url], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
@@ -314,7 +320,8 @@ test('clean_snapshot.mjs: 纯空白文本节点（缩进）不占位', async () 
   // 回归：父元素开标签与子元素之间的缩进空白（>16 字符）曾被占位成
   // {{LONG_TEXT_k|N_CHARS}}，凭空给步骤 3 的 LLM 捏造"父子之间存在长文本"。
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-clean-ws-'));
-  const urlDir = path.join(tmpRoot, 'ws-article');
+  const url = 'https://example.com/ws-article';
+  const urlDir = path.join(tmpRoot, urlToDirName(url));
   fs.mkdirSync(urlDir, { recursive: true });
 
   // 21 字符的纯空白（换行+缩进）夹在父开标签与子元素之间；
@@ -329,7 +336,7 @@ test('clean_snapshot.mjs: 纯空白文本节点（缩进）不占位', async () 
   fs.writeFileSync(path.join(urlDir, '1_snapshot.html'), snapshot);
 
   const script = path.resolve('script/clean_snapshot.mjs');
-  const r = await runScript(process.execPath, [script, urlDir], {
+  const r = await runScript(process.execPath, [script, '--url', url], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
@@ -350,7 +357,8 @@ test('clean_snapshot.mjs: 纯空白文本节点（缩进）不占位', async () 
 
 test('clean_snapshot.mjs: 中英文分标准占位，并生成 2_long_text.json 恢复清单', async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-clean-lang-'));
-  const urlDir = path.join(tmpRoot, 'lang-article');
+  const url = 'https://example.com/lang-article';
+  const urlDir = path.join(tmpRoot, urlToDirName(url));
   fs.mkdirSync(urlDir, { recursive: true });
 
   const zhLong = '汉'.repeat(17); // 17 字 > 16 → 占位（_chars）
@@ -371,7 +379,7 @@ test('clean_snapshot.mjs: 中英文分标准占位，并生成 2_long_text.json 
   fs.writeFileSync(path.join(urlDir, '1_snapshot.html'), snapshot);
 
   const script = path.resolve('script/clean_snapshot.mjs');
-  const r = await runScript(process.execPath, [script, urlDir], {
+  const r = await runScript(process.execPath, [script, '--url', url], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
@@ -399,7 +407,8 @@ test('clean_snapshot.mjs: 中英文分标准占位，并生成 2_long_text.json 
 
 test('clean_snapshot.mjs: 带样式快照保留样式，SVG 瘦身为壳，占位符与清洗版严格一致', async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-clean-styled-'));
-  const urlDir = path.join(tmpRoot, 'styled-article');
+  const url = 'https://example.com/styled-article';
+  const urlDir = path.join(tmpRoot, urlToDirName(url));
   fs.mkdirSync(urlDir, { recursive: true });
 
   // HTML 长文本（应占位）+ SVG 内长文本与 body 内 <style> 长 CSS（不应占位，否则两版编号错位）
@@ -418,7 +427,7 @@ test('clean_snapshot.mjs: 带样式快照保留样式，SVG 瘦身为壳，占�
   fs.writeFileSync(path.join(urlDir, '1_snapshot.html'), snapshot);
 
   const script = path.resolve('script/clean_snapshot.mjs');
-  const r = await runScript(process.execPath, [script, urlDir], {
+  const r = await runScript(process.execPath, [script, '--url', url], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });

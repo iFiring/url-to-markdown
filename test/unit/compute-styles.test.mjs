@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { runScript } from '../helpers/run-script.mjs';
+import { urlToDirName } from '../../script/lib/env.mjs';
 
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
 const pageScriptPath = path.resolve(thisDir, '../../script/lib/page-finalize-inline.js');
@@ -31,9 +32,11 @@ test('compute_styles.mjs: 无参数时输出 usage_error', async () => {
 const EXTRACT = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>样式计算</title><style>.box{border:2px solid red;background-color:#f0f0f0;box-shadow:0 2px 4px rgba(0,0,0,.1);text-align:center;overflow-x:auto;overflow-wrap:break-word;transform:translateY(2px)}.plain{color:#333;font-weight:bold;font-family:Georgia;letter-spacing:1px;line-height:1.6}p{font-size:18px}</style></head><body><div class="box" style="margin:0;padding:10px;width:100%;box-sizing:border-box;position:relative;font-family:Arial,sans-serif;-webkit-font-smoothing:antialiased;font-style:normal;color:inherit" data-u2m-id="1"><p class="plain" data-u2m-id="2">文本</p><div style="display:flex;flex-direction:column;gap:8px;padding:12px" data-u2m-id="3">默认文本</div><em style="font-style:italic" data-u2m-id="5">强调</em><span style="color:#f00;background-color:#ffff00" data-u2m-id="4"></span></div></body></html>`;
 
+const URL = 'https://example.com/test-article';
+
 function setupTmp(name, { withExtract = true } = {}) {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), `u2m-styles-${name}-`));
-  const urlDir = path.join(tmpRoot, 'test-article');
+  const urlDir = path.join(tmpRoot, urlToDirName(URL));
   fs.mkdirSync(urlDir, { recursive: true });
   if (withExtract) {
     fs.writeFileSync(path.join(urlDir, '4_styled_extract.html'), EXTRACT);
@@ -44,7 +47,7 @@ function setupTmp(name, { withExtract = true } = {}) {
 test('compute_styles.mjs: juice 内联并删净 <style> 与 class，只产一份文件', async () => {
   const { tmpRoot, urlDir } = setupTmp('ok');
   const script = path.resolve('script/compute_styles.mjs');
-  const r = await runScript(process.execPath, [script, urlDir], {
+  const r = await runScript(process.execPath, [script, '--url', URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
@@ -108,7 +111,7 @@ test('compute_styles.mjs: juice 内联并删净 <style> 与 class，只产一份
 test('compute_styles.mjs: 缺步骤 4 产物时报 error 指路步骤 4', async () => {
   const { tmpRoot, urlDir } = setupTmp('miss', { withExtract: false });
   const script = path.resolve('script/compute_styles.mjs');
-  const r = await runScript(process.execPath, [script, urlDir], {
+  const r = await runScript(process.execPath, [script, '--url', URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
