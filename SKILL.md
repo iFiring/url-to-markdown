@@ -20,7 +20,7 @@ description: "将 URL（网页）的主体内容转换成 Markdown；在需要�
 
 - `<url>`：指用户给定的完整 URL；步骤 0 的必填参数
 - `<skill-root>`：本技能 SKILL.md 所在目录（**绝对路径**）；由步骤 0 生成
-- `<url-name>`：由步骤 0 通过 `url.replace(/[^A-Za-z0-9.-]/g, '_')` 生成
+- `<url-name>`：由步骤 0 通过 `replace(/[^A-Za-z0-9.-]/g, '_')` 生成（剥去 `http(s)://` 前缀）
 - `<url-working-path>`：当前 URL 的专属目录 `<skill-root>/working/<url-name>`；由步骤 0 生成；步骤 0 之后的产物都存放在此目录下
 
 本技能目录结构：

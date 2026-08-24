@@ -7,17 +7,23 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-test('urlToDirName: 非法字符转下划线，保留 [A-Za-z0-9.-]', () => {
-  assert.equal(urlToDirName('https://example.com/a?b=1'), 'https___example.com_a_b_1');
-  assert.equal(urlToDirName('http://127.0.0.1:8000/x.html#frag'), 'http___127.0.0.1_8000_x.html_frag');
-  assert.equal(urlToDirName('https://example.com/中文'), 'https___example.com___');
+test('urlToDirName: 剥 http(s):// 前缀（从域名开始），非法字符转下划线，保留 [A-Za-z0-9.-]', () => {
+  assert.equal(urlToDirName('https://example.com/a?b=1'), 'example.com_a_b_1');
+  assert.equal(urlToDirName('http://127.0.0.1:8000/x.html#frag'), '127.0.0.1_8000_x.html_frag');
+  assert.equal(urlToDirName('https://example.com/中文'), 'example.com___');
+  // 无协议前缀的输入原样净化
+  assert.equal(urlToDirName('example.com/a'), 'example.com_a');
+});
+
+test('urlToDirName: 同域名 http/https 派生同一目录名（视为同一站点）', () => {
+  assert.equal(urlToDirName('http://example.com/x'), urlToDirName('https://example.com/x'));
 });
 
 test('urlToDirName: 超 120 字符截断 + sha256 前 8 位后缀', () => {
-  const url = 'https://example.com/' + 'a'.repeat(101);
+  const url = 'https://example.com/' + 'a'.repeat(130);
   const name = urlToDirName(url);
   assert.equal(name.length, 128);
-  assert.ok(name.startsWith('https___example.com_' + 'a'.repeat(100)));
+  assert.ok(name.startsWith('example.com_' + 'a'.repeat(108)));
   const hash = crypto.createHash('sha256').update(url).digest('hex').slice(0, 8);
   assert.equal(name.slice(120), hash);
 });

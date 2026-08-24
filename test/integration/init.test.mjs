@@ -7,8 +7,8 @@ import os from 'node:os';
 import { runScript } from '../helpers/run-script.mjs';
 
 const URL = 'https://example.com/a?b=1';
-// 与 lib/env.mjs urlToDirName 一致：非 [A-Za-z0-9.-] → _
-const URL_NAME = 'https___example.com_a_b_1';
+// 与 lib/env.mjs urlToDirName 一致：剥 http(s):// 前缀，非 [A-Za-z0-9.-] → _
+const URL_NAME = 'example.com_a_b_1';
 let tmpRoot;
 
 before(() => {

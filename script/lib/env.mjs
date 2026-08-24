@@ -14,9 +14,13 @@ export function workingRoot() {
     : path.join(projectRoot(), 'working');
 }
 
-/** URL→目录名：非 [A-Za-z0-9.-] → _；>120 截断 + sha256(URL) 前 8 hex。 */
+/**
+ * URL→目录名：先剥 http(s):// 前缀（目录名从域名开始），
+ * 其余非 [A-Za-z0-9.-] → _；>120 截断 + sha256(原URL) 前 8 hex。
+ * 注意：同域名的 http/https 两版会派生同一目录（视为同一站点）。
+ */
 export function urlToDirName(url) {
-  const sanitized = url.replace(/[^A-Za-z0-9.-]/g, '_');
+  const sanitized = url.replace(/^https?:\/\//i, '').replace(/[^A-Za-z0-9.-]/g, '_');
   if (sanitized.length <= 120) return sanitized;
   const hash = crypto.createHash('sha256').update(url, 'utf8').digest('hex').slice(0, 8);
   return sanitized.slice(0, 120) + hash;
