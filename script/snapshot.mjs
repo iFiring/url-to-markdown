@@ -4,7 +4,7 @@
  * 阶段，产出全保真快照 <url-dir>/1_snapshot.html。
  *
  * 用法:
- *   node snapshot.mjs <url> [--timeout 300000] [--scroll-rounds 60]
+ *   node snapshot.mjs --url <url> [--timeout 300000] [--scroll-rounds 60]
  *
  * 四阶段（依次执行，共享同一浏览器上下文，避免重复启动开销）:
  *   1. 登录阶段（lib/snapshot-login.mjs）—— 六信号检测是否需要登录：
@@ -64,8 +64,8 @@ function parseArgs(argv) {
 async function main() {
   const args = parseArgs(process.argv);
   if (!args) return;
-  const url = args._[0];
-  if (!url || url.startsWith('--')) return usage('用法: snapshot.mjs <url> [--timeout ms] [--scroll-rounds n]');
+  const url = args.url;
+  if (!url) return usage('用法: snapshot.mjs --url <url> [--timeout ms] [--scroll-rounds n]');
 
   const timeout = Number(args.timeout ?? 300000);
   const scrollRounds = Number(args['scroll-rounds'] ?? 60);

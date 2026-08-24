@@ -2,11 +2,11 @@
 /**
  * render_skeleton.mjs —— 步骤 9：骨架回填为 Markdown。读
  * 8_resolved_skeleton.json，按文档序把每条骨架条目转为 markdown 块，
- * 块与块之间以空行分隔，产出 <url-dir>/9_markdown.md（最终产物）。
- * 纯 Node，无浏览器依赖。
+ * 块与块之间以空行分隔，产出 9_markdown.md（最终产物，写入该 URL 的
+ * 工作目录）。纯 Node，无浏览器依赖。
  *
  * 用法:
- *   node render_skeleton.mjs <url-dir>
+ *   node render_skeleton.mjs --url <url>
  *
  * 转换规则（块级语法由此脚本加，行内 markdown 已在步骤 7 写好）：
  *   h1-h6       "#" 前缀（数量 = 级别）
@@ -16,7 +16,7 @@
  *   code        "```{lang}" 围栏（lang 缺省时仅 "```"）
  *   img         ![]({url})
  *   table       value 原样（完整管线表已写好）
- *   trans2img   ![](assets/trans/{id}.webp)（相对 urlDir）
+ *   trans2img   ![](assets/trans/{id}.webp)（相对工作目录）
  *   未知 key 静默跳过；空骨架输出空文件
  *
  * stdout 输出（有且仅有一行 JSON，日志一律走 stderr）:
@@ -29,7 +29,7 @@ import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import { emit, emitError, usage, log, debug } from './lib/contract.mjs';
-import { workingRoot } from './lib/env.mjs';
+import { urlDir } from './lib/env.mjs';
 
 function parseArgs(argv) {
   const out = { _: [] };
@@ -43,12 +43,6 @@ function parseArgs(argv) {
     } else out._.push(a);
   }
   return out;
-}
-
-function resolveUrlDir(arg) {
-  if (!arg) return null;
-  if (path.isAbsolute(arg)) return arg;
-  return path.join(workingRoot(), arg);
 }
 
 // 单条骨架 → markdown 字符串。未知 key 返回 null（被主流程过滤）。
@@ -108,11 +102,11 @@ function convertSkeleton(skeleton) {
 async function main() {
   const args = parseArgs(process.argv);
   if (!args) return;
-  const urlDirArg = args._[0];
-  if (!urlDirArg) return usage('用法: render_skeleton.mjs <url-dir>');
+  const url = args.url;
+  if (!url) return usage('用法: render_skeleton.mjs --url <url>');
 
-  const urlDir = resolveUrlDir(urlDirArg);
-  const resolvedPath = path.join(urlDir, '8_resolved_skeleton.json');
+  const dir = urlDir(url);
+  const resolvedPath = path.join(dir, '8_resolved_skeleton.json');
 
   if (!fs.existsSync(resolvedPath)) {
     return emitError(`找不到 ${resolvedPath}，请先运行步骤 8`, 1);
@@ -122,7 +116,7 @@ async function main() {
   debug(`resolved skeleton ${skeleton.length} 条`);
   const md = convertSkeleton(skeleton);
 
-  const outPath = path.join(urlDir, '9_markdown.md');
+  const outPath = path.join(dir, '9_markdown.md');
   await fsPromises.writeFile(outPath, md);
 
   log(`markdown 已生成: ${outPath}（${md.length} 字节）`);

@@ -8,7 +8,7 @@
  * 内联声明只留有意义的。
  *
  * 用法:
- *   node compute_styles.mjs <url-dir>
+ *   node compute_styles.mjs --url <url>
  *
  * 两轮处理：
  *   1. juice（Node）：按自身 CSS 级联引擎把 <style> 规则内联到元素的
@@ -42,7 +42,7 @@ import path from 'node:path';
 import { chromium } from 'playwright';
 import juice from 'juice';
 import { emit, emitError, usage, log, debug } from './lib/contract.mjs';
-import { workingRoot } from './lib/env.mjs';
+import { urlDir } from './lib/env.mjs';
 import { readSharedScript } from './lib/placeholder.mjs';
 import { proxyLaunchOptions } from './lib/browser.mjs';
 
@@ -60,20 +60,14 @@ function parseArgs(argv) {
   return out;
 }
 
-function resolveUrlDir(arg) {
-  if (!arg) return null;
-  if (path.isAbsolute(arg)) return arg;  // 绝对路径直接使用（测试隔离用）
-  return path.join(workingRoot(), arg);
-}
-
 async function main() {
   const args = parseArgs(process.argv);
   if (!args) return;
-  const urlDirArg = args._[0];
-  if (!urlDirArg) return usage('用法: compute_styles.mjs <url-dir>');
+  const url = args.url;
+  if (!url) return usage('用法: compute_styles.mjs --url <url>');
 
-  const urlDir = resolveUrlDir(urlDirArg);
-  const extractPath = path.join(urlDir, '4_styled_extract.html');
+  const dir = urlDir(url);
+  const extractPath = path.join(dir, '4_styled_extract.html');
 
   if (!fs.existsSync(extractPath)) {
     return emitError(`找不到 ${extractPath}，请先运行步骤 4`);
@@ -95,7 +89,7 @@ async function main() {
     await page.setContent(juicedHtml, { waitUntil: 'domcontentloaded' });
     const final = await page.evaluate(`(${pageFinalizeFn})()`);
 
-    const juicePath = path.join(urlDir, '5_juice_styles.html');
+    const juicePath = path.join(dir, '5_juice_styles.html');
     await fsPromises.writeFile(juicePath, final.html, 'utf8');
     log(`样式内联完成: ${juicePath} (${final.styledCount} 个元素带样式)`);
 

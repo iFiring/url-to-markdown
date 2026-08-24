@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
  * extract_article.mjs —— 步骤 6：文章视图提取。读 5_juice_styles.html 与
- * 3_key_ids.json，新建一份只含文章主体的 html，产出 <url-dir>/6_article.html。
+ * 3_key_ids.json，新建一份只含文章主体的 html，产出 6_article.html
+ * （写入该 URL 的工作目录）。
  *
  * 用法:
- *   node extract_article.mjs <url-dir>
+ *   node extract_article.mjs --url <url>
  *
  * 提取规则（按分组顺序：标题 → 说明 → 正文块）：
  *   - titleIds / descriptionIds：元素本身（完整子树，属性与内容一字不动）
@@ -27,7 +28,7 @@ import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { emit, emitError, usage, log, debug } from './lib/contract.mjs';
-import { workingRoot } from './lib/env.mjs';
+import { urlDir } from './lib/env.mjs';
 import { readSharedScript } from './lib/placeholder.mjs';
 import { proxyLaunchOptions } from './lib/browser.mjs';
 
@@ -45,21 +46,15 @@ function parseArgs(argv) {
   return out;
 }
 
-function resolveUrlDir(arg) {
-  if (!arg) return null;
-  if (path.isAbsolute(arg)) return arg;  // 绝对路径直接使用（测试隔离用）
-  return path.join(workingRoot(), arg);
-}
-
 async function main() {
   const args = parseArgs(process.argv);
   if (!args) return;
-  const urlDirArg = args._[0];
-  if (!urlDirArg) return usage('用法: extract_article.mjs <url-dir>');
+  const url = args.url;
+  if (!url) return usage('用法: extract_article.mjs --url <url>');
 
-  const urlDir = resolveUrlDir(urlDirArg);
-  const juicedPath = path.join(urlDir, '5_juice_styles.html');
-  const keyIdsPath = path.join(urlDir, '3_key_ids.json');
+  const dir = urlDir(url);
+  const juicedPath = path.join(dir, '5_juice_styles.html');
+  const keyIdsPath = path.join(dir, '3_key_ids.json');
 
   if (!fs.existsSync(juicedPath)) {
     return emitError(`找不到 ${juicedPath}，请先运行步骤 5`);
@@ -98,7 +93,7 @@ async function main() {
       );
     }
 
-    const articlePath = path.join(urlDir, '6_article.html');
+    const articlePath = path.join(dir, '6_article.html');
     await fsPromises.writeFile(articlePath, result.html, 'utf8');
     log(`文章视图提取完成: ${articlePath} (${result.count} 个元素)`);
 

@@ -7,35 +7,32 @@ description: "将 URL（网页）的主体内容转换成 Markdown；在需要�
 
 打开网页（处理登录墙），把主体内容转换成干净的 Markdown。特殊元素按类型分派：能拿文本形态就拿文本形态（LaTeX 公式、Mermaid 源码、代码块），矢量次之（SVG 直接导出 / LLM 重建），像素截图兜底。
 
-## 何时使用 / 不使用
+## 何时使用
 
-- 使用：把单个 URL 的正文转为 Markdown 文件
-- 不使用：批量爬取、站点镜像；登录态存于 IndexedDB / Service Worker 的站点
+- 把单个 URL 的正文转为 Markdown 文件
 
 ## 工作原则
 
 - 没有明确要求或流程需要的话，你**不要去读脚本的产物及其内容**，仅需确认执行了命令，产物存在即可
 - 你自己负责 "步骤 3" 和 "步骤 7" 的语义化操作：当你有权限调用子智能体（Sub-Agent）时，**优先把任务交给子智能体**
 
-## 操作手册（步骤 0-9）
+## 核心参数
 
-本技能工作目录为 `<skill-root>`（SKILL.md 所在目录）。
+- `<url>`：指用户给定的完整 URL；步骤 0 的必填参数
+- `<skill-root>`：本技能 SKILL.md 所在目录（**绝对路径**）；由步骤 0 生成
+- `<url-name>`：由步骤 0 通过 `url.replace(/[^A-Za-z0-9.-]/g, '_')` 生成
+- `<url-working-path>`：当前 URL 的专属目录 `<skill-root>/working/<url-name>`；由步骤 0 生成；步骤 0 之后的产物都存放在此目录下
 
-- `<skill-root>` 为本技能目录
+本技能目录结构：
 
-- `<url>` 指用户给定的完整 URL（仅步骤 1）
-- `<url-path>` 由步骤 1 脚本通过 `url.replace(/[^A-Za-z0-9.-]/g, '_')` 自动创建
-- `<url-dir>` 为 URL 专属工作目录 `<skill-root>/working/<url-path>`，步骤 1 之后的产物都存放在此目录下
-
-**`<skill-root>`结构**
 ```
 SKILL.md                 # Skill 主体文件
 script/                  # 脚本
 package.json
 
 working/                 # 工作目录
-  cookies/               # 所有访问过 URL 的 cookie 公共存储目录
-  <url-path>/            # 步骤 1-9 的中间产物文件
+  cookies/               # 所有访问过 URL 的 cookie 公共存储目录；由步骤 1 生成
+  <url-name>/            # 当前 URL 的专属目录 `<skill-root>/working/<url-name>`
     assets/
       images/
       trans/
@@ -44,52 +41,70 @@ working/                 # 工作目录
     9_markdown.md 
 ``` 
 
-### 步骤 0 · 初始化环境（仅首次或环境变更时）
+## 操作手册（步骤 0-9）
+
+### 步骤 0 · 初始化执行环境和参数
 
 ```bash
-bash <skill-root>/script/init.sh
+bash <skill-root>/script/init.sh --url <url>
 ```
 
-| stdout status | 动作 |
+| stdout.status | 动作 |
 |---|---|
-| `ok` | 进入步骤 1 |
-| `error` | **终止全部流程**，把 `reason` 反馈给用户 |
+| `ok` | 拿到 `stdout`的 `skill-root` / `url-name` / `<url-working-path>`，作为**核心参数**，进入步骤 1 |
+| `error` | **终止全部流程**，把 `stdout.reason` 反馈给用户 |
 
-stderr 中的"警告"不阻断，可忽略。
+**stdout.status=ok 结构示例**
+```json
+{
+  "status": "ok",
+  "skill-root": "/root/path/to/skill",
+  "url-name": "_name_",
+  "url-working-path": "/root/path/to/skill/working/_name_"
+}
+```
 
 ### 步骤 1 · 快照下载
 
 ```bash
-node <skill-root>/script/snapshot.mjs <url> [--timeout 300000] [--scroll-rounds 60]
+node <skill-root>/script/snapshot.mjs --url <url> [--timeout 300000] [--scroll-rounds 60]
 ```
 
 单条命令依次完成登录检测（需要时弹出 Screencast viewer 供人工登录）、渐进滚动、虚拟列表检测、全保真快照抓取。
 
-产物：`1_snapshot.html`（产物生成后，不要擅自读取内容）
+产物：`<url-working-path>/1_snapshot.html`（产物生成后，不要擅自读取内容）
 
-| stdout status | 动作 |
+| stdout.status | 动作 |
 |---|---|
 | `ok` | 把 stdout 反馈给用户，进入步骤 2 |
 | `error`（reason=`virtual_list`） | 告知用户"该页面为虚拟列表，仅渲染部分内容，无法全文转化为 Markdown"，**终止** |
 | `error`（reason=`login_timeout`/`login_aborted`） | 询问用户是否重试登录；重试则再次运行本命令 |
-| `error`（其他） | 把 `reason` 反馈给用户并终止 |
+| `error`（其他） | 把 `stdout.reason` 反馈给用户并终止 |
 
 ### 步骤 2 · 用脚本清洗结构
 
 ```bash
-node <skill-root>/script/clean_snapshot.mjs <url-dir>
+node <skill-root>/script/clean_snapshot.mjs --url <url>
 ```
 
-产物：`2_clean_snapshot.html`（结构视图）、`2_clean_style_snapshot.html`（带样式版）、`2_long_text.json`（占位符原文映射）；产物生成后，不要擅自读取内容
+产物：
+```
+<url-working-path>/
+  2_clean_snapshot.html        # 结构视图
+  2_clean_style_snapshot.html  # 结构视图（带样式版）
+  2_long_text.json             # 占位符原文映射
+``` 
 
-| stdout status | 动作 |
+产物生成后，不要擅自读取内容
+
+| stdout.status | 动作 |
 |---|---|
 | `ok` | 把 stdout 反馈给用户，进入步骤 3 |
-| `error` | 把 `reason` 反馈给用户并终止 |
+| `error` | 把 `stdout.reason` 反馈给用户并终止 |
 
 ### 步骤 3 · 你负责关键 ID 识别
 
-读取 `2_clean_snapshot.html`。你的任务：这是**一篇文章**，仅根据 DOM 结构（元素层级、标签类型、嵌套深度）和长文本占位符（`{{LONG_TEXT_k|n_chars}}` / `{{LONG_TEXT_k|n_words}}`）分布，找到以下三类关键元素的 `data-u2m-id`：
+读取 `<url-working-path>/2_clean_snapshot.html`。你的任务：这是**一篇文章**，仅根据 DOM 结构（元素层级、标签类型、嵌套深度）和长文本占位符（`{{LONG_TEXT_k|n_chars}}` / `{{LONG_TEXT_k|n_words}}`）分布，找到以下三类关键元素的 `data-u2m-id`：
 
 1. **标题分块**（`titleIds`）：文章主标题对应的元素 ID。通常是层级最高的 `<h1>`-`<h3>` 或结构上处于列表流顶部的标题性容器
 2. **说明分块**（`descriptionIds`）：描述性元数据对应的元素 ID，如作者、日期、摘要、副标题等。可为空数组
@@ -104,7 +119,7 @@ node <skill-root>/script/clean_snapshot.mjs <url-dir>
 - 如果找不到明确的标题或说明元素，对应数组可为空
 - 列表流至少选一个——它是后续分块的根容器
 
-将结果写入 `3_key_ids.json`：
+将结果写入 `<url-working-path>/3_key_ids.json`：
 
 ```json
 {
@@ -119,45 +134,45 @@ node <skill-root>/script/clean_snapshot.mjs <url-dir>
 ### 步骤 4 · 用脚本裁剪 DOM
 
 ```bash
-node <skill-root>/script/extract_styled.mjs <url-dir>
+node <skill-root>/script/extract_styled.mjs --url <url>
 ```
 
-产物：`4_styled_extract.html`（你自己不要去读脚本的产物内容，确认有即可）
+产物：`<url-working-path>/4_styled_extract.html`（你自己不要去读脚本的产物内容，确认有即可）
 
-| stdout status | 动作 |
+| stdout.status | 动作 |
 |---|---|
 | `ok` | 把 stdout 反馈给用户，进入步骤 5。 |
-| `error` | 把 `reason` 反馈给用户并终止 |
+| `error` | 把 `stdout.reason` 反馈给用户并终止 |
 
 ### 步骤 5 · 用脚本计算内联样式
 
 ```bash
-node <skill-root>/script/compute_styles.mjs <url-dir>
+node <skill-root>/script/compute_styles.mjs --url <url>
 ```
 
-产物：`5_juice_styles.html`（你自己不要去读脚本的产物内容，确认有即可）
+产物：`<url-working-path>/5_juice_styles.html`（你自己不要去读脚本的产物内容，确认有即可）
 
-| stdout status | 动作 |
+| stdout.status | 动作 |
 |---|---|
 | `ok` | 把 stdout 反馈给用户，进入步骤 6。 |
-| `error` | 把 `reason` 反馈给用户并终止 |
+| `error` | 把 `stdout.reason` 反馈给用户并终止 |
 
 ### 步骤 6 · 用脚本提取视图
 
 ```bash
-node <skill-root>/script/extract_article.mjs <url-dir>
+node <skill-root>/script/extract_article.mjs --url <url>
 ```
 
-产物：`6_article.html`（你自己不要去读脚本的产物内容，确认有即可）
+产物：`<url-working-path>/6_article.html`（你自己不要去读脚本的产物内容，确认有即可）
 
-| stdout status | 动作 |
+| stdout.status | 动作 |
 |---|---|
-| `ok` | 把 stdout 反馈给用户，进入步骤进入步骤 7。|
-| `error` | 把 `reason` 反馈给用户并终止 |
+| `ok` | 把 stdout 反馈给用户，进入步骤 7。|
+| `error` | 把 `stdout.reason` 反馈给用户并终止 |
 
 ### 步骤 7 · 你负责 markdown 骨架生成
 
-读取 `6_article.html`。你的任务：把文章视图转换成一份 **markdown 骨架**——数组按文档序排列，每项一个单键对象，key 是语义标签，value 是该块的内容模板。长文本只引用占位编号、一字不抄，正文回填由后续脚本完成。
+读取 `<url-working-path>/6_article.html`。你的任务：把文章视图转换成一份 **markdown 骨架**——数组按文档序排列，每项一个单键对象，key 是语义标签，value 是该块的内容模板。长文本只引用占位编号、一字不抄，正文回填由后续脚本完成。
 
 **词汇表**：
 
@@ -193,7 +208,7 @@ node <skill-root>/script/extract_article.mjs <url-dir>
   - 模块之外一律文本形态（优先扁平化）
 - 不虚构原文没有的信息
 
-将结果写入 `7_skeleton.json`：
+将结果写入 `<url-working-path>/7_skeleton.json`：
 
 ```json
 [
@@ -211,28 +226,28 @@ node <skill-root>/script/extract_article.mjs <url-dir>
 ### 步骤 8 · 用脚本还原占位符 + 图片下载
 
 ```bash
-node <skill-root>/script/screenshot_trans.mjs <url-dir>
+node <skill-root>/script/screenshot_trans.mjs --url <url>
 ```
 
-产物：`8_resolved_skeleton.json`（你自己不要去读脚本的产物内容，确认有即可）
+产物：`<url-working-path>/8_resolved_skeleton.json`（你自己不要去读脚本的产物内容，确认有即可）
 
-| stdout status | 动作 |
+| stdout.status | 动作 |
 |---|---|
 | `ok` | 把 stdout 反馈给用户，进入步骤 9。 |
-| `error` | 把 `reason` 反馈给用户并终止 |
+| `error` | 把 `stdout.reason` 反馈给用户并终止 |
 
 ### 步骤 9 · 用脚本将骨架转换为 Markdown
 
 ```bash
-node <skill-root>/script/render_skeleton.mjs <url-dir>
+node <skill-root>/script/render_skeleton.mjs --url <url>
 ```
 
-产物：`9_markdown.md`（你自己不要去读脚本的产物内容，确认有即可）
+产物：`<url-working-path>/9_markdown.md`（你自己不要去读脚本的产物内容，确认有即可）
 
-| stdout status | 动作 |
+| stdout.status | 动作 |
 |---|---|
 | `ok` | 把 stdout 反馈给用户，所有步骤完成 |
-| `error` | 把 `reason` 反馈给用户并终止 |
+| `error` | 把 `stdout.reason` 反馈给用户并终止 |
 
 ## 常见错误处理
 

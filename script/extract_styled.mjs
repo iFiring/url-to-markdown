@@ -2,10 +2,10 @@
 /**
  * extract_styled.mjs —— 步骤 4：样式视图裁剪。读 3_key_ids.json 与
  * 2_clean_style_snapshot.html，裁剪出只含文章主体的带样式视图，
- * 产出 <url-dir>/4_styled_extract.html。
+ * 产出 4_styled_extract.html（写入该 URL 的工作目录）。
  *
  * 用法:
- *   node extract_styled.mjs <url-dir>
+ *   node extract_styled.mjs --url <url>
  *
  * 裁剪规则：
  *   - 完整保留（一字不动，含全部标签属性与样式属性）：三类 key 元素
@@ -26,7 +26,7 @@ import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { emit, emitError, usage, log, debug } from './lib/contract.mjs';
-import { workingRoot } from './lib/env.mjs';
+import { urlDir } from './lib/env.mjs';
 import { readSharedScript } from './lib/placeholder.mjs';
 import { proxyLaunchOptions } from './lib/browser.mjs';
 
@@ -44,21 +44,15 @@ function parseArgs(argv) {
   return out;
 }
 
-function resolveUrlDir(arg) {
-  if (!arg) return null;
-  if (path.isAbsolute(arg)) return arg;  // 绝对路径直接使用（测试隔离用）
-  return path.join(workingRoot(), arg);
-}
-
 async function main() {
   const args = parseArgs(process.argv);
   if (!args) return;
-  const urlDirArg = args._[0];
-  if (!urlDirArg) return usage('用法: extract_styled.mjs <url-dir>');
+  const url = args.url;
+  if (!url) return usage('用法: extract_styled.mjs --url <url>');
 
-  const urlDir = resolveUrlDir(urlDirArg);
-  const styledPath = path.join(urlDir, '2_clean_style_snapshot.html');
-  const keyIdsPath = path.join(urlDir, '3_key_ids.json');
+  const dir = urlDir(url);
+  const styledPath = path.join(dir, '2_clean_style_snapshot.html');
+  const keyIdsPath = path.join(dir, '3_key_ids.json');
 
   if (!fs.existsSync(styledPath)) {
     return emitError(`找不到 ${styledPath}，请先运行步骤 2`);
@@ -97,7 +91,7 @@ async function main() {
       );
     }
 
-    const extractPath = path.join(urlDir, '4_styled_extract.html');
+    const extractPath = path.join(dir, '4_styled_extract.html');
     await fsPromises.writeFile(extractPath, result.html, 'utf8');
     log(`样式视图裁剪完成: ${extractPath} (删除 ${result.removed} 个元素)`);
 

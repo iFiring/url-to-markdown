@@ -14,7 +14,7 @@
  *   assets/trans/{id}.webp    每个 trans2img 元素一张截图（WebP，2x 分辨率）
  *
  * 用法:
- *   node screenshot_trans.mjs <url-dir>
+ *   node screenshot_trans.mjs --url <url>
  *
  * 三轮处理：
  *   1. 纯 Node（playwright 之前）：读骨架 + 2_long_text.json 做占位符替换，
@@ -29,10 +29,10 @@
  *      failedImages、stderr 警告。仅此无 trans2img 时到此为止
  *   3. playwright · 截图（live 重渲染 + 严校验 + 快照兜底）：
  *      页 A 加载 file://1_snapshot.html——真实文本 + 全量内联样式，既是
- *      签名基准也是兜底截图源；从其 <base data-u2m-base> 读回原 URL 开
- *      页 B 重渲染（gotoSettled + 复用 snapshotScroll 渐进滚动触发懒加载 +
- *      重注入 page-prepare.js 重标记——data-u2m-id 按文档序编号是 prepare
- *      后 DOM 的纯函数，两次渲染结构一致则 id 精确对位）。两侧用同一
+ *      签名基准也是兜底截图源；直接用 --url 开页 B 重渲染（gotoSettled +
+ *      复用 snapshotScroll 渐进滚动触发懒加载 + 重注入 page-prepare.js
+ *      重标记——data-u2m-id 按文档序编号是 prepare 后 DOM 的纯函数，
+ *      两次渲染结构一致则 id 精确对位）。两侧用同一
  *      page-element-signature.js 对每个 trans2img id 计算签名，全等才在
  *      B 上截图，失配/B 侧缺失/live 整体失败（站点不可达等）在 A 上兜底。
  *      A 侧也未命中的 id → error（骨架与视图不匹配）。live 页与 1_snapshot
@@ -56,7 +56,7 @@ import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { emit, emitError, usage, log, debug } from './lib/contract.mjs';
-import { workingRoot, storageStatePath } from './lib/env.mjs';
+import { urlDir, storageStatePath } from './lib/env.mjs';
 import { readSharedScript } from './lib/placeholder.mjs';
 import { proxyLaunchOptions, gotoSettled } from './lib/browser.mjs';
 import { snapshotScroll } from './lib/snapshot-scroll.mjs';
@@ -74,12 +74,6 @@ function parseArgs(argv) {
     } else out._.push(a);
   }
   return out;
-}
-
-function resolveUrlDir(arg) {
-  if (!arg) return null;
-  if (path.isAbsolute(arg)) return arg;
-  return path.join(workingRoot(), arg);
 }
 
 // 把骨架条目里 value 中的 {{LONG_TEXT_k[|suffix]}} 替换为真实文本。
@@ -122,13 +116,13 @@ function sameSignature(a, b) {
 async function main() {
   const args = parseArgs(process.argv);
   if (!args) return;
-  const urlDirArg = args._[0];
-  if (!urlDirArg) return usage('用法: screenshot_trans.mjs <url-dir>');
+  const url = args.url;
+  if (!url) return usage('用法: screenshot_trans.mjs --url <url>');
 
-  const urlDir = resolveUrlDir(urlDirArg);
-  const snapshotPath = path.join(urlDir, '1_snapshot.html');
-  const skeletonPath = path.join(urlDir, '7_skeleton.json');
-  const longTextPath = path.join(urlDir, '2_long_text.json');
+  const dir = urlDir(url);
+  const snapshotPath = path.join(dir, '1_snapshot.html');
+  const skeletonPath = path.join(dir, '7_skeleton.json');
+  const longTextPath = path.join(dir, '2_long_text.json');
 
   if (!fs.existsSync(snapshotPath)) {
     return emitError(`找不到 ${snapshotPath}，请先运行步骤 1`);
@@ -154,7 +148,7 @@ async function main() {
     resolvedSkeleton.push({ [key]: resolved });
   }
 
-  const resolvedPath = path.join(urlDir, '8_resolved_skeleton.json');
+  const resolvedPath = path.join(dir, '8_resolved_skeleton.json');
   await fsPromises.writeFile(resolvedPath, JSON.stringify(resolvedSkeleton, null, 2));
 
   if (undefinedRefs.size > 0) {
@@ -205,7 +199,7 @@ async function main() {
     let images = 0;
     let failedImages = [];
     if (imgUrls.length > 0) {
-      const imagesDir = path.join(urlDir, 'assets', 'images');
+      const imagesDir = path.join(dir, 'assets', 'images');
       const { map, failed } = await downloadImages(context.request, imgUrls, imagesDir, { log });
       images = map.size;
       failedImages = failed.map((f) => f.url);
@@ -251,37 +245,28 @@ async function main() {
       );
     }
 
-    const pageUrl = await pageA.evaluate(() => {
-      const b = document.querySelector('base[data-u2m-base]');
-      return b ? b.href : null;
-    });
-
-    // ── 页 B：live 重渲染 → 渐进滚动 → 重标记 → 严校验 ──
+    // ── 页 B：live 重渲染（--url）→ 渐进滚动 → 重标记 → 严校验 ──
     let liveIds = [];
     let pageB = null;
-    if (pageUrl) {
-      try {
-        const tB = performance.now();
-        pageB = await context.newPage();
-        await gotoSettled(pageB, pageUrl, log);
-        await snapshotScroll(pageB, { log: debug });
-        await pageB.evaluate(`(${prepareFn})()`);
-        await pageB.evaluate(() => document.fonts.ready.then(() => true));
-        try { await pageB.waitForLoadState('networkidle', { timeout: 5000 }); } catch { /* 尽力等待 */ }
-        const sigB = await pageB.evaluate(`(${sigFn})(${JSON.stringify(transIds)})`);
-        liveIds = transIds.filter((id) => sameSignature(sigA[id], sigB[id]));
-        debug(`live 重渲染就绪 ${((performance.now() - tB) / 1000).toFixed(2)}s，签名命中 ${liveIds.length}/${transIds.length}`);
-      } catch (e) {
-        log(`live 重渲染失败，全部走快照兜底: ${e.message}`);
-        liveIds = [];
-        pageB = null;
-      }
-    } else {
-      log('快照缺 <base data-u2m-base>，无法重渲染，全部走快照兜底');
+    try {
+      const tB = performance.now();
+      pageB = await context.newPage();
+      await gotoSettled(pageB, url, log);
+      await snapshotScroll(pageB, { log: debug });
+      await pageB.evaluate(`(${prepareFn})()`);
+      await pageB.evaluate(() => document.fonts.ready.then(() => true));
+      try { await pageB.waitForLoadState('networkidle', { timeout: 5000 }); } catch { /* 尽力等待 */ }
+      const sigB = await pageB.evaluate(`(${sigFn})(${JSON.stringify(transIds)})`);
+      liveIds = transIds.filter((id) => sameSignature(sigA[id], sigB[id]));
+      debug(`live 重渲染就绪 ${((performance.now() - tB) / 1000).toFixed(2)}s，签名命中 ${liveIds.length}/${transIds.length}`);
+    } catch (e) {
+      log(`live 重渲染失败，全部走快照兜底: ${e.message}`);
+      liveIds = [];
+      pageB = null;
     }
 
     // ── 截图：live 命中在 B，失配/缺失在 A 兜底 ──
-    const transDir = path.join(urlDir, 'assets', 'trans');
+    const transDir = path.join(dir, 'assets', 'trans');
     fs.mkdirSync(transDir, { recursive: true });
 
     const screenshots = [];

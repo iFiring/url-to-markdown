@@ -7,7 +7,7 @@
  *   2_long_text.json             编号 → 原文映射，供后续流程恢复
  *
  * 用法:
- *   node clean_snapshot.mjs <url-dir>
+ *   node clean_snapshot.mjs --url <url>
  *
  * 共同清洗（两版一致；实现在 lib/page-clean-snapshot.js，按执行序编号 1-13）：
  *   【整体删除】与正文结构无关的噪声，连子树一起删：
@@ -50,7 +50,7 @@ import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { emit, emitError, usage, log, debug } from './lib/contract.mjs';
-import { workingRoot } from './lib/env.mjs';
+import { urlDir } from './lib/env.mjs';
 import { readSharedScript } from './lib/placeholder.mjs';
 import { proxyLaunchOptions } from './lib/browser.mjs';
 
@@ -68,20 +68,14 @@ function parseArgs(argv) {
   return out;
 }
 
-function resolveUrlDir(arg) {
-  if (!arg) return null;
-  if (path.isAbsolute(arg)) return arg;  // 绝对路径直接使用（测试隔离用）
-  return path.join(workingRoot(), arg);
-}
-
 async function main() {
   const args = parseArgs(process.argv);
   if (!args) return;
-  const urlDirArg = args._[0];
-  if (!urlDirArg) return usage('用法: clean_snapshot.mjs <url-dir>');
+  const url = args.url;
+  if (!url) return usage('用法: clean_snapshot.mjs --url <url>');
 
-  const urlDir = resolveUrlDir(urlDirArg);
-  const snapshotPath = path.join(urlDir, '1_snapshot.html');
+  const dir = urlDir(url);
+  const snapshotPath = path.join(dir, '1_snapshot.html');
 
   if (!fs.existsSync(snapshotPath)) {
     return emitError(`找不到 ${snapshotPath}，请先运行步骤 1`);
@@ -103,13 +97,13 @@ async function main() {
     const result = await page.evaluate(`(${pageCleanFn})()`);
 
     // 写盘
-    const cleanedPath = path.join(urlDir, '2_clean_snapshot.html');
+    const cleanedPath = path.join(dir, '2_clean_snapshot.html');
     await fsPromises.writeFile(cleanedPath, result.html, 'utf8');
     // 带样式版：保留 style 属性/<style>/完整 SVG，占位符与清洗版逐一对应
-    const styledPath = path.join(urlDir, '2_clean_style_snapshot.html');
+    const styledPath = path.join(dir, '2_clean_style_snapshot.html');
     await fsPromises.writeFile(styledPath, result.styledHtml, 'utf8');
     // 长文本恢复清单：占位编号 → 原文
-    const longTextPath = path.join(urlDir, '2_long_text.json');
+    const longTextPath = path.join(dir, '2_long_text.json');
     await fsPromises.writeFile(longTextPath, JSON.stringify(result.longTexts), 'utf8');
     log(`清洗完成: ${cleanedPath} (${result.longTextCount} 个长文本占位符)`);
 
