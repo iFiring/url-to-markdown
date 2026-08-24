@@ -66,16 +66,16 @@ working/                 # 运行时工作目录（gitignore，仅保留骨架�
 
 | 步骤 | 执行者 | 命令 | 产物 |
 |---|---|---|---|
-| 0 环境初始化 | 脚本 | `bash script/init.sh` | 环境就绪 |
-| 1 快照下载 | 脚本 | `node script/snapshot.mjs <url>` | `1_snapshot.html` |
-| 2 结构清洗 | 脚本 | `node script/clean_snapshot.mjs <url-dir>` | `2_clean_snapshot.html`、`2_clean_style_snapshot.html`、`2_long_text.json` |
+| 0 环境初始化 | 脚本 | `bash script/init.sh --url <url>` | 环境就绪；输出核心参数 `skill-root`/`url-name`/`url-working-path` 并创建工作目录 |
+| 1 快照下载 | 脚本 | `node script/snapshot.mjs --url <url>` | `1_snapshot.html` |
+| 2 结构清洗 | 脚本 | `node script/clean_snapshot.mjs --url <url>` | `2_clean_snapshot.html`、`2_clean_style_snapshot.html`、`2_long_text.json` |
 | 3 关键 ID 识别 | **agent** | 读 `2_clean_snapshot.html` | `3_key_ids.json` |
-| 4 样式视图裁剪 | 脚本 | `node script/extract_styled.mjs <url-dir>` | `4_styled_extract.html` |
-| 5 样式内联 | 脚本 | `node script/compute_styles.mjs <url-dir>` | `5_juice_styles.html` |
-| 6 文章视图提取 | 脚本 | `node script/extract_article.mjs <url-dir>` | `6_article.html` |
+| 4 样式视图裁剪 | 脚本 | `node script/extract_styled.mjs --url <url>` | `4_styled_extract.html` |
+| 5 样式内联 | 脚本 | `node script/compute_styles.mjs --url <url>` | `5_juice_styles.html` |
+| 6 文章视图提取 | 脚本 | `node script/extract_article.mjs --url <url>` | `6_article.html` |
 | 7 markdown 骨架 | **agent** | 读 `6_article.html` | `7_skeleton.json` |
-| 8 还原 + 下载 + 截图 | 脚本 | `node script/screenshot_trans.mjs <url-dir>` | `8_resolved_skeleton.json`、`assets/images/`、`assets/trans/` |
-| 9 骨架回填 | 脚本 | `node script/render_skeleton.mjs <url-dir>` | `9_markdown.md` |
+| 8 还原 + 下载 + 截图 | 脚本 | `node script/screenshot_trans.mjs --url <url>` | `8_resolved_skeleton.json`、`assets/images/`、`assets/trans/` |
+| 9 骨架回填 | 脚本 | `node script/render_skeleton.mjs --url <url>` | `9_markdown.md` |
 
 各步骤的 `status` 分支决策表、骨架词汇表与约束见 SKILL.md；各脚本的技术细节见对应脚本头部注释。
 
@@ -86,7 +86,8 @@ working/                 # 运行时工作目录（gitignore，仅保留骨架�
 - **登录态**：`working/cookies/storage_state.json` 是唯一全局登录态，仅步骤 1 的登录流程写入（cookie 按 name|domain|path 去重、localStorage 按 origin+name、读取时剔除过期）；转换脚本只读。需要人工登录时弹出 CDP Screencast viewer（无头 chromium → HTTP+WS 页面，JS/CSS 全内联）。
 - **虚拟列表检测**：仅渲染可见窗口的页面无法全文转化，步骤 1 命中即终止（`reason=virtual_list`），不写快照。
 - **长文本占位**：步骤 2 把长文本替换为 `{{LONG_TEXT_k|n_chars}}` / `{{LONG_TEXT_k|n_words}}`，agent 只见结构不见内容，步骤 8 机械还原——语义判断不携带全文，token 可控。
-- **trans2img live 重渲染截图**：`data-u2m-id` 按文档序编号是 prepare 后 DOM 的纯函数——步骤 8 按快照 `<base>` 记录的 URL 重渲染原页面并重注入同一套标记脚本，两次渲染结构一致则 id 精确对位；与快照侧逐 id 签名严校验（假阴性偏向，宁降级不出错图），失配或重渲染失败自动降级快照渲染兜底，`source` 字段如实标注来源。
+- **trans2img live 重渲染截图**：`data-u2m-id` 按文档序编号是 prepare 后 DOM 的纯函数——步骤 8 按 `--url` 参数重渲染原页面并重注入同一套标记脚本，两次渲染结构一致则 id 精确对位；与快照侧逐 id 签名严校验（假阴性偏向，宁降级不出错图），失配或重渲染失败自动降级快照渲染兜底，`source` 字段如实标注来源。
+- **核心参数单一事实源**：`<url-name>` 由 `lib/env.mjs urlToDirName(url)` 派生（非 `[A-Za-z0-9.-]` → `_`，超 120 字符截断 + sha256 前 8 位后缀）——步骤 0 的 init.sh 与步骤 1-9 的工作目录派生共用同一实现，保证两处目录名恒一致。
 
 ### 环境变量
 

@@ -1,10 +1,10 @@
 # 真实 URL 手动冒烟清单（不入自动测试）
 
-前置：`bash script/init.sh` 输出 ok。
+前置：`bash script/init.sh --url <文章URL>` 输出 ok（含核心参数 skill-root / url-name / url-working-path）。
 
 ## 1. 真实静态文章页
 
-1. `node script/snapshot.mjs <文章URL>` → 期望 `ok`（内部自动处理登录检测、滚动、虚拟列表检测、快照抓取）
+1. `node script/snapshot.mjs --url <文章URL>` → 期望 `ok`（内部自动处理登录检测、滚动、虚拟列表检测、快照抓取）
 2. 按 SKILL.md 步骤 2-5 继续（结构清洗 → LLM 识别 → LLM 分类 → 分派执行）
 3. 检查最终产物：正文完整、无导航/广告、图片引用有效
 
@@ -28,7 +28,7 @@
 
 ## 2. 真实登录墙页
 
-1. `node script/snapshot.mjs <登录页URL>` → viewer 弹出（内部 snapshot-login.mjs 检测到需登录）
+1. `node script/snapshot.mjs --url <登录页URL>` → viewer 弹出（内部 snapshot-login.mjs 检测到需登录）
 2. 在 viewer 中完成真实登录 → 点「✅ 登录完成」→ 脚本继续执行滚动、检测、快照
 3. 重跑同 URL → storageState 复用，无需再次登录
 4. 后续按 SKILL.md 步骤 2-5 继续
