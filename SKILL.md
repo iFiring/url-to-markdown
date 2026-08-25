@@ -104,71 +104,79 @@ node <skill-root>/script/clean_snapshot.mjs --url <url>
 
 ### 步骤 3 · 你负责关键 ID 识别
 
-#### 要求
-
-- **可调用子智能体时，优先把任务交给子智能体**
+**可调用子智能体时，优先把任务交给子智能体**
 
 #### 任务
 
-- 读取 `<url-working-path>/2_clean_snapshot.html`
+这是**一篇文章页面**， 读取 `<url-working-path>/2_clean_snapshot.html` 的 DOM 结构（元素层级、标签类型、class 名称）和长文本占位符（`{{LONG_TEXT_k|...}}`）分布，找到以下三类关键元素的 `data-u2m-id`：
 
-- 这是**一篇文章页面**，仅根据 `2_clean_snapshot.html` 的 DOM 结构（元素层级、标签类型、class 名称）和长文本占位符（`{{LONG_TEXT_k|n_chars}}` / `{{LONG_TEXT_k|n_words}}`）分布，找到以下三类关键元素的 `data-u2m-id`：
+  1. **列表流**（`listFlowIds`）：文章主体段落的父容器 ID。列表流是包含多个子块（段落、图片、代码块等）的最外层容器；可能有多个，但**至少有一个**
+  2. **标题分块**（`titleIds`）：文章主标题对应的元素 ID。通常是层级最高的 `<h1>`-`<h3>` 或结构上处于列表流顶部的标题性容器；可为空数组（在 `listFlowIds` 内）
+  3. **说明分块**（`descriptionIds`）：描述性元数据对应的元素 ID，如作者、日期、摘要、副标题等；可为空数组（在 `listFlowIds` 内；不存在）
+  4. **列表流噪音**（`listFlowDeleteIds`）：列表流的噪音：菜单、导航、广告、推荐；**必须确定不属于文章内容**，不确定不能带上
 
-  1. **标题分块**（`titleIds`）：文章主标题对应的元素 ID。通常是层级最高的 `<h1>`-`<h3>` 或结构上处于列表流顶部的标题性容器
-  2. **说明分块**（`descriptionIds`）：描述性元数据对应的元素 ID，如作者、日期、摘要、副标题等。可为空数组
-  3. **列表流**（`listFlowIds`）：文章主体区域的父容器 ID。列表流是包含多个子块（段落、图片、代码块等）的最外层容器，可能有多个
+**约束**
 
-- `data-u2m-hidden="N_chars"`（或 `N_chars,fixed`）标记：折叠的隐藏子树（模态/抽屉/折叠展开区/响应式隐藏）。根元素的 `data-u2m-id` 可正常引用——原文完整保留在带样式版，纳入 listFlowIds 即可还原全文；值是该子树的真实文本规模，可据此判断是否值得纳入
-- `<pre>` 内的 `code...`：代码块内容占位。完整代码在后续步骤保真，识别时把 pre 当作一个结构单元即可
-
-**约束**：
-- **必须排除**菜单、导航、广告等不属于三类关键元素的元素
-- 不读语义内容——文本已被 `{{LONG_TEXT_k|…}}` 占位，你只能看到结构
-- 当标题或说明分块已经在列表流中，不要再找它们的 `data-u2m-id` 了
-- `listFlowIds` 是列表流**最外层父元素**的 `data-u2m-id`，不是子元素的
-- 不选 `<body>` 或 `<html>`——它们的 ID 无意义
-- 如果找不到明确的标题或说明元素，对应数组可为空
-- 列表流至少选一个——它是后续分块的根容器
+  1. **必须排除**菜单、导航、广告等不属于三类关键元素的元素
+  2. `listFlowIds` 是列表流**最外层父元素**的 `data-u2m-id`
+  3. 不选 `<body>` 或 `<html>`——它们的 ID 无意义
+  4. `data-u2m-hidden="N_chars"`（或 `N_chars,fixed`）标记：折叠的隐藏子树（模态/抽屉/折叠展开区/响应式隐藏）。根元素的 `data-u2m-id` 可正常引用——原文完整保留在带样式版，纳入 listFlowIds 即可还原全文；值是该子树的真实文本规模，可据此判断是否值得纳入
+  5. `<pre>` 内的 `code...`：代码块内容占位。完整代码在后续步骤保真，识别时把 pre 当作一个结构单元即可
 
 
-- `2_clean_snapshot.html` 结构示例：
+**`2_clean_snapshot.html`结构示例**：
 
-> `data-u2m-id` 的生成是在 DOM 树中自上而下的，titleIds 和 descriptionIds 都在在 listFlowIds 之后则是内部，则不应该有值
+> `data-u2m-id` 的生成是在 DOM 树中自上而下自增的，所以通常只有两个情况：titleIds 或 descriptionIds 在 listFlowIds 里面，值更大，输出 JSON 里不应该有值；titleIds 或 descriptionIds 在 listFlowIds 前面，值更小。
 
 ```html
 <html>
-<body id="xxx" class="xxx">
+<body>
   <div data-u2m-id="1" class="xxx">
-    <p data-u2m-id="2">
-      <h1 data-u2m-id="3">Title...</h1>
-    </p>
+    <h1 data-u2m-id="2">
+      <!-- 全局唯一标题 listFlowIds[3] -->
+      <span data-u2m-id="3">Title...</span>
+    </h1>
   </div>
   <div data-u2m-id="4" class="xxx">
+
+    <!-- 列表流 listFlowIds[5] -->
     <section data-u2m-id="5" class="article">
+      <!-- descriptionIds:[6] 在 listFlowIds[5] 之内，JSON 不纳入 -->
       <div data-u2m-id="6">
-        <h2 data-u2m-id="7">... </h2>
-        <p data-u2m-id="8">... </p>
+        <h2 data-u2m-id="7">Author:</h2>
+        <span data-u2m-id="8">Name...</span>
       </div>
-      <div data-u2m-id="9">
-        <h2 data-u2m-id="10">... </h2>
-        <code data-u2m-id="11">... </code>
-      </div>
+      <!-- 列表流噪音 listFlowDeleteIds[9] -->
+      <div data-u2m-id="9" class="ad">Ad...</div>
+      <p data-u2m-id="10">
+        <h2 data-u2m-id="11">...</h2>
+        <code data-u2m-id="12">...</code>
+      </p>
     </section>
-    <div data-u2m-id="12" class="ad">Ad...</div>
-    <section data-u2m-id="13" class="article">...</section>
+    <div data-u2m-id="9" class="ad">Ad...</div>
+    <!-- 列表流 listFlowIds[13] -->
+    <section data-u2m-id="13" class="article">div.h1 / p.span / h2.span</section>
   </div>
 </body>
 </html>
 ```
 
-- 输出 `<url-working-path>/3_key_ids.json`，格式（按照示例 html）：
+**输出要求** 
+
+输出路径：`<url-working-path>/3_key_ids.json`
+
+输出结构：
+
 ```json
 {
   "titleIds": [3],
-  "descriptionIds": [0],
-  "listFlowIds": [5, 13]
+  "descriptionIds": [],
+  "listFlowIds": [5, 13],
+  "listFlowDeleteIds": [9]
 }
 ```
+
+#### 后续
 
 把 `3_key_ids.json` 反馈给用户，进入步骤 4
 
@@ -215,7 +223,9 @@ node <skill-root>/script/extract_article.mjs --url <url>
 
 **可调用子智能体时，优先把任务交给子智能体**
 
-读取 `<url-working-path>/6_article.html`。你的任务：把文章视图转换成一份 **markdown 骨架**——数组按文档序排列，每项一个单键对象，key 是语义标签，value 是该块的内容模板。长文本只引用占位编号、一字不抄，正文回填由后续脚本完成。
+#### 任务
+
+读取 HTML `<url-working-path>/6_article.html` 的 DOM 结构，把文章视图转换成一份 **markdown 骨架**——数组按文档序排列，每项一个单键对象，key 是语义标签，value 是该块的内容模板。长文本只引用占位编号、一字不抄，正文回填由后续脚本完成。
 
 **词汇表**：
 
@@ -231,12 +241,14 @@ node <skill-root>/script/extract_article.mjs --url <url>
 | `trans2img` | 元素 `data-u2m-id`：独立复杂视觉模块（背景色/边框父元素 + 多级边框/背景色子元素）——卡片组、对比面板、图表、图解、带包装的代码块部件等，后续步骤截图 |
 
 **value 写法**：
+
 - 长文本**只引用编号**：读到的 `{{LONG_TEXT_5|16_chars}} / {{LONG_TEXT_5|16_words}}` 写成 `{{LONG_TEXT_5}}`（不带后缀）
 - 短文本（未达长文本占位阈值）与 URL：照抄
-- 行内格式（`**粗体**`、`[文](url)`、`` `code` ``）由你写入 value
+- 行内格式（`**粗体**`、`[文](url)`、`` `code` ``）由你写入 value；删除代码左边的序号
 - key 是**语义判断**的结果：div 判成标题就写 `h2`，span 容器判成段落就写 `p`，不必与 DOM 标签一致
 
 **约束**：
+
 - 保持文档序、不重不漏——`trans2img` 标记子树**之外**的每个 `{{LONG_TEXT_k}}` 编号**恰好引用一次**（回填脚本按此机械校验）；标记子树内的占位符**不在骨架引用**——其文本由截图轮自行还原
 - 一个顶层元素可展开为多条（`figure` → `img` 条 + `figcaption` 的 `p` 条），也可收敛为一条（卡片 div → 单个 `p`）
 - 分派判定：**文本形态优先**——凡 markdown 语义可表达的内容不截图，**装饰不是截图理由**
@@ -251,12 +263,45 @@ node <skill-root>/script/extract_article.mjs --url <url>
   - 模块之外一律文本形态（优先扁平化）
 - 不虚构原文没有的信息
 
-将结果写入 `<url-working-path>/7_skeleton.json`：
+**结构示例**：
+
+```html
+<html>
+<body>
+  <div data-u2m-id="1" class="xxx">
+    <h1 data-u2m-id="2">
+      <span data-u2m-id="3">Title...</span>
+    </h1>
+  </div>
+  <div data-u2m-id="4" class="xxx">
+    <section data-u2m-id="5" class="article">
+      <div data-u2m-id="6">
+        <h2 data-u2m-id="7">Author:</h2>
+        <span data-u2m-id="8">Name...</span>
+      </div>
+      <div data-u2m-id="9" class="ad">Ad...</div>
+      <p data-u2m-id="10">
+        <h2 data-u2m-id="11">...</h2>
+        <code data-u2m-id="12">...</code>
+      </p>
+    </section>
+    <div data-u2m-id="9" class="ad">Ad...</div>
+    <section data-u2m-id="13" class="article">div.h1 / p.span / h2.span</section>
+  </div>
+</body>
+</html>
+```
+
+**输出要求** 
+
+输出路径：`<url-working-path>/7_skeleton.json`
+
+输出结构：
 
 ```json
 [
   {"h1": "{{LONG_TEXT_1}}"},
-  {"p": "作者：{{LONG_TEXT_2}} · 时间：{{LONG_TEXT_3}}"},
+  {"p": "作者：Name · 时间：1945/08/01"},
   {"img": "https://example.com/a/cover.png"},
   {"blockquote": "{{LONG_TEXT_4}}"},
   {"code": {"lang": "python", "content": "def hello():\n    print('hi')"}},
@@ -265,6 +310,10 @@ node <skill-root>/script/extract_article.mjs --url <url>
   {"trans2img": "518"}
 ]
 ```
+
+#### 后续
+
+进入步骤 8
 
 ### 步骤 8 · 用脚本还原占位符 + 图片下载
 
