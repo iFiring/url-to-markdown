@@ -2,7 +2,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { openPage } from '../../script/lib/browser.mjs';
+import { chromium } from 'playwright';
+import { openPage, realUserAgent } from '../../script/lib/browser.mjs';
 import { startFixtureServer } from '../helpers/fixture-server.mjs';
 import { writePixelPng } from '../helpers/assets.mjs';
 
@@ -92,6 +93,70 @@ test('openPage: U2M_PROXY=URL → 页面请求走该代理（absolute-form GET�
     await s?.close().catch(() => {});
     await proxy.close();
     await fx.close();
+  }
+});
+
+/** 回显请求头的哑服务器：GET / → JSON.stringify(req.headers)。 */
+function startHeaderEchoServer() {
+  const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(req.headers));
+  });
+  return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({
+    port: server.address().port,
+    close: () => new Promise((r) => server.close(r)),
+  })));
+}
+
+test('openPage: 去无头指纹——UA / sec-ch-ua / userAgentData / webdriver 全链路无 HeadlessChrome', async () => {
+  const echo = await startHeaderEchoServer();
+  let s;
+  try {
+    s = await openPage(`http://127.0.0.1:${echo.port}/`);
+    // 网络侧：导航请求实际发出的头
+    const headers = JSON.parse(await s.page.evaluate(() => document.body.textContent));
+    const ua = headers['user-agent'];
+    assert.ok(!/Headless/i.test(ua), `请求 UA 不应含无头特征: ${ua}`);
+    const ver = /Chrome\/(\d+)/.exec(ua)?.[1];
+    assert.ok(ver, `请求 UA 应含 Chrome 版本号: ${ua}`);
+    const chUa = headers['sec-ch-ua'];
+    assert.ok(chUa, '应发送 sec-ch-ua 头');
+    assert.ok(!chUa.includes('HeadlessChrome'), `sec-ch-ua 不应泄露无头令牌: ${chUa}`);
+    assert.ok(chUa.includes(`"Google Chrome";v="${ver}"`), `sec-ch-ua 应与 UA 版本一致: ${chUa}`);
+    assert.equal((chUa.match(/"Chromium"/g) || []).length, 1,
+      `sec-ch-ua 应恰好一份（未被浏览器自带值叠加）: ${chUa}`);
+    // 页面侧：JS 可见的指纹
+    const probe = await s.page.evaluate(() => ({
+      ua: navigator.userAgent,
+      webdriver: navigator.webdriver,
+      brands: (navigator.userAgentData?.brands || []).map((b) => b.brand),
+    }));
+    assert.ok(!/Headless/i.test(probe.ua), `navigator.userAgent 不应含无头特征: ${probe.ua}`);
+    assert.equal(probe.webdriver, false, `navigator.webdriver 应为 false（实际 ${probe.webdriver}）`);
+    assert.ok(!probe.brands.includes('HeadlessChrome'), `brands 不应含 HeadlessChrome: ${probe.brands}`);
+    assert.ok(probe.brands.includes('Google Chrome'), `brands 应含 Google Chrome: ${probe.brands}`);
+  } finally {
+    await s?.close().catch(() => {});
+    await echo.close();
+  }
+});
+
+test('realUserAgent: 无头 UA 去除 HeadlessChrome 特征（CDP 直读，逐字符一致）', async (t) => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const rawCtx = await browser.newContext(); // 取原始无头 UA 做对照
+    const raw = await (await rawCtx.newPage()).evaluate(() => navigator.userAgent);
+    if (!raw.includes('HeadlessChrome')) {
+      t.skip(`前置条件不满足：无头 UA 不含 HeadlessChrome（实际 ${raw}），replace 本应为 no-op`);
+      return;
+    }
+    const ua = await realUserAgent(browser);
+    assert.ok(!ua.includes('Headless'), `不应再含无头特征: ${ua}`);
+    assert.ok(/Chrome\/\d+/.test(ua), `应保留 Chrome 版本号: ${ua}`);
+    // 除 HeadlessChrome→Chrome 外逐字符一致
+    assert.equal(ua, raw.replace('HeadlessChrome/', 'Chrome/'));
+  } finally {
+    await browser.close().catch(() => {});
   }
 });
 
