@@ -9,6 +9,7 @@ import { urlToDirName } from '../../script/lib/env.mjs';
 
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
 const pageScriptPath = path.resolve(thisDir, '../../script/lib/page-finalize-inline.js');
+const scriptPath = path.resolve(thisDir, '../../script/compute_styles.mjs');
 
 test('page-finalize-inline.js: 文件存在且包含 __u2mFinalizeInline 函数', () => {
   const src = fs.readFileSync(pageScriptPath, 'utf8');
@@ -22,8 +23,7 @@ test('page-finalize-inline.js: 函数可被 evaluate 格式调用', () => {
 });
 
 test('compute_styles.mjs: 无参数时输出 usage_error', async () => {
-  const script = path.resolve('script/compute_styles.mjs');
-  const r = await runScript(process.execPath, [script]);
+  const r = await runScript(process.execPath, [scriptPath]);
   assert.equal(r.code, 2);
   assert.equal(JSON.parse(r.stdout).status, 'usage_error');
 });
@@ -46,8 +46,7 @@ function setupTmp(name, { withExtract = true, extractHtml = EXTRACT } = {}) {
 
 test('compute_styles.mjs: juice 内联并删净 <style> 与 class，只产一份文件', async () => {
   const { tmpRoot, urlDir } = setupTmp('ok');
-  const script = path.resolve('script/compute_styles.mjs');
-  const r = await runScript(process.execPath, [script, '--url', URL], {
+  const r = await runScript(process.execPath, [scriptPath, '--url', URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
@@ -113,15 +112,14 @@ test('compute_styles.mjs: juice 内联并删净 <style> 与 class，只产一份
 // <style> 标签时 juice 的 cheerio 载入不解码属性实体，实体原样进入行内样式
 // 的严格 postcss 解析（inline.js strict:true），& 开头的 token 报
 // "Unknown word Microsoft"。缺 <style> 标签时 cheerio 会解码实体、测不出
-// 来，故夹具必须带一个 <style>。修复：juice 前把属性值内的引号实体改写为
-// CSS 等价单引号。
+// 来，故夹具必须带一个 <style>。修复：juice decodeStyleAttributes 在解析
+// 层对 style 属性值做实体解码。
 const ENTITY_EXTRACT = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>实体引号</title><style>body{transition:opacity .2s}</style></head><body style="font-family: Optima, &quot;Microsoft YaHei&quot;, serif; border: 1px solid black; margin: 10px"><div data-u2m-id="1">文本</div></body></html>`;
 
 test('compute_styles.mjs: 行内 style 属性含 &quot; 实体引号时不再崩溃', async () => {
   const { tmpRoot } = setupTmp('entity', { extractHtml: ENTITY_EXTRACT });
-  const script = path.resolve('script/compute_styles.mjs');
-  const r = await runScript(process.execPath, [script, '--url', URL], {
+  const r = await runScript(process.execPath, [scriptPath, '--url', URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
@@ -139,10 +137,61 @@ test('compute_styles.mjs: 行内 style 属性含 &quot; 实体引号时不再崩
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
+// 引号混排的两个崩溃形状（正则把 &quot; 改写为 ' 的路线修不了）：
+// A. 值内已有字面单引号 + 实体双引号混排——改写后 'a'b' 同样崩 Unclosed
+//    string（url("…men's-tshirt.png") 一类，6de614b^ 能转、正则版反而崩）；
+// B. 实体双引号内含撇号（&quot;D'Nealian&quot;）——正则版修复前后都崩。
+// 正解：juice decodeStyleAttributes 在解析层解码实体，两种形状都是合法 CSS。
+const MIXED_QUOTE_EXTRACT = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>混排引号</title><style>body{transition:opacity .2s}</style></head><body style="font-family: 'a&quot;b', serif; border: 1px solid black; margin: 10px"><div style="font-family: &quot;D'Nealian&quot;, serif; outline: 1px solid blue" data-u2m-id="1">文本</div></body></html>`;
+
+test('compute_styles.mjs: 引号混排（字面单引号 × 实体双引号 × 实体内撇号）不再崩溃', async () => {
+  const { tmpRoot } = setupTmp('mixed-quote', { extractHtml: MIXED_QUOTE_EXTRACT });
+  const r = await runScript(process.execPath, [scriptPath, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+
+  const juiced = fs.readFileSync(out.juiceStyles, 'utf8');
+  // 两个元素的声明都正常解析：结构化样式保留，字体类（白名单外）删除
+  assert.ok(juiced.includes('1px solid'), 'body 的 border 声明应保留');
+  assert.ok(juiced.includes('outline'), 'div 的 outline 声明应保留');
+  assert.ok(!juiced.includes('font-family'), 'font-family 声明应删除');
+  assert.ok(!juiced.includes('&quot;'), '不应残留引号实体');
+
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+// -style 结尾的非 style 属性（data-style 等，真实 Webflow 页面存在）不得被
+// 实体解码波及——正则 \bstyle=" 会误配它们，把合法 JSON 破坏成 {'k':'v'}。
+const DATA_STYLE_EXTRACT = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>data-style</title><style>body{transition:opacity .2s}</style></head><body><div data-style="{&quot;theme&quot;:&quot;dark&quot;}" style="border: 1px solid black" data-u2m-id="1">文本</div></body></html>`;
+
+test('compute_styles.mjs: data-style 等后缀属性不被引号处理波及', async () => {
+  const { tmpRoot } = setupTmp('data-style', { extractHtml: DATA_STYLE_EXTRACT });
+  const r = await runScript(process.execPath, [scriptPath, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+
+  const juiced = fs.readFileSync(out.juiceStyles, 'utf8');
+  assert.ok(juiced.includes('1px solid'), 'style 属性的 border 应保留');
+  // data-style 原样存活：实体不被解码（outerHTML 序列化仍以 &quot; 表达）
+  assert.ok(juiced.includes('data-style='), 'data-style 属性应保留');
+  assert.ok(juiced.includes('&quot;theme&quot;'), 'data-style 值内的引号实体应原样保留');
+
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
 test('compute_styles.mjs: 缺步骤 4 产物时报 error 指路步骤 4', async () => {
   const { tmpRoot, urlDir } = setupTmp('miss', { withExtract: false });
-  const script = path.resolve('script/compute_styles.mjs');
-  const r = await runScript(process.execPath, [script, '--url', URL], {
+  const r = await runScript(process.execPath, [scriptPath, '--url', URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });

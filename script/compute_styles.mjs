@@ -10,10 +10,15 @@
  * 用法:
  *   node compute_styles.mjs --url <url>
  *
- * 两轮处理：
+ * 三段处理：
+ *   0. 字符串规范化（浏览器，lib/page-normalize-styles.js）：style 属性
+ *      字符串 token 重引为单引号 + 内层引号转义——juice 写回会把值内 "
+ *      无条件换成 '，引号混排形状（"D'Nealian"、'a"b'）会被改写成未闭合
+ *      字符串、吞掉同属性后续声明；DOM 圈选只碰 style 属性
  *   1. juice（Node）：按自身 CSS 级联引擎把 <style> 规则内联到元素的
  *      style 属性并移除标签——字面声明值：不推导继承、不解析 var()；
- *      原有内联样式参与级联故保留
+ *      原有内联样式参与级联故保留；decodeStyleAttributes 在解析层对
+ *      style 值做实体解码（&quot; 等引号实体原样进严格 postcss 会崩）
  *   2. 浏览器收尾（lib/page-finalize-inline.js）：
  *      - 白名单清理：只留明显结构化的样式——边框背景（border、
  *        outline、background、box-shadow）、flex 与 grid 布局（display、
@@ -75,27 +80,30 @@ async function main() {
 
   let extractHtml = await fsPromises.readFile(extractPath, 'utf8');
   const pageFinalizeFn = await readSharedScript('page-finalize-inline.js');
+  const normalizeFn = await readSharedScript('page-normalize-styles.js');
   debug(`读入 ${extractPath}（${extractHtml.length} 字节）`);
-
-  // 行内 style 属性里的引号实体（&quot; 等）会让 juice 崩溃：它以
-  // decodeEntities:false 载入文档（cheerio.js），属性值原样进入行内样式
-  // 的严格 postcss 解析（inline.js strict:true），& 开头的 token 报
-  // "Unknown word"。改写为 CSS 等价的单引号（双引号无法在双引号属性内
-  // 裸写）；未加引号的多词字体名本身是合法输入，无需处理。
-  extractHtml = extractHtml.replace(
-    /\bstyle="([^"]*)"/g,
-    (m, val) => `style="${val.replace(/&(quot|#0*34|#x0*22);/gi, "'")}"`
-  );
-
-  // juice：Node 侧内联 <style> 规则并移除标签（class 稍后在浏览器删净）
-  const juicedHtml = juice(extractHtml, { removeStyleTags: true });
-  debug(`juice 内联后 ${juicedHtml.length} 字节`);
 
   let browser;
   try {
     browser = await chromium.launch({ headless: true, ...proxyLaunchOptions() });
     const context = await newU2MContext(browser);
     const page = await context.newPage();
+
+    // 阶段一：style 属性字符串 token 规范化（机制与动机见
+    // page-normalize-styles.js 头注——juice 写回把值内 " 无条件换成 '，
+    // 引号混排形状会损毁后续声明；DOM 圈选只碰 style 属性）
+    await page.setContent(extractHtml, { waitUntil: 'domcontentloaded' });
+    extractHtml = await page.evaluate(`(${normalizeFn})()`);
+    debug(`字符串规范化后 ${extractHtml.length} 字节`);
+
+    // 阶段二：juice 内联 <style> 规则并移除标签（class 稍后在浏览器删净）。
+    // decodeStyleAttributes：juice 以 decodeEntities:false 载入文档（cheerio），
+    // style 值里的 &quot; 等引号实体原样进入严格 postcss 解析会崩（公众号
+    // 真实页面触发）；该选项在解析层对 style 属性值做实体解码
+    const juicedHtml = juice(extractHtml, { removeStyleTags: true, decodeStyleAttributes: true });
+    debug(`juice 内联后 ${juicedHtml.length} 字节`);
+
+    // 阶段三：白名单清场（page-finalize-inline.js）
     await page.setContent(juicedHtml, { waitUntil: 'domcontentloaded' });
     const final = await page.evaluate(`(${pageFinalizeFn})()`);
 
