@@ -125,19 +125,68 @@ test('openPage: 去无头指纹——UA / sec-ch-ua / userAgentData / webdriver 
     assert.ok(chUa.includes(`"Google Chrome";v="${ver}"`), `sec-ch-ua 应与 UA 版本一致: ${chUa}`);
     assert.equal((chUa.match(/"Chromium"/g) || []).length, 1,
       `sec-ch-ua 应恰好一份（未被浏览器自带值叠加）: ${chUa}`);
+    // 平台归一：UA 钉 macOS（公众号风控按平台打分，Linux 判机器人），提示头对齐
+    assert.ok(ua.includes('Macintosh; Intel Mac OS X'), `请求 UA 应为 macOS 平台: ${ua}`);
+    assert.equal(headers['sec-ch-ua-platform'], '"macOS"',
+      `sec-ch-ua-platform 应钉 macOS（实际 ${headers['sec-ch-ua-platform']}）`);
+    assert.equal(headers['sec-ch-ua-mobile'], '?0', '桌面平台 sec-ch-ua-mobile 应为 ?0');
     // 页面侧：JS 可见的指纹
     const probe = await s.page.evaluate(() => ({
       ua: navigator.userAgent,
       webdriver: navigator.webdriver,
+      platform: navigator.platform,
+      uaPlatform: navigator.userAgentData?.platform,
       brands: (navigator.userAgentData?.brands || []).map((b) => b.brand),
     }));
     assert.ok(!/Headless/i.test(probe.ua), `navigator.userAgent 不应含无头特征: ${probe.ua}`);
     assert.equal(probe.webdriver, false, `navigator.webdriver 应为 false（实际 ${probe.webdriver}）`);
+    assert.equal(probe.platform, 'MacIntel', `navigator.platform 应为 MacIntel（实际 ${probe.platform}）`);
+    assert.equal(probe.uaPlatform, 'macOS', `userAgentData.platform 应为 macOS（实际 ${probe.uaPlatform}）`);
     assert.ok(!probe.brands.includes('HeadlessChrome'), `brands 不应含 HeadlessChrome: ${probe.brands}`);
     assert.ok(probe.brands.includes('Google Chrome'), `brands 应含 Google Chrome: ${probe.brands}`);
   } finally {
     await s?.close().catch(() => {});
     await echo.close();
+  }
+});
+
+// 重定向指纹完整性：Playwright 的 extraHTTPHeaders 不跟随重定向——实测第
+// 2 跳起浏览器按默认无头元数据重新生成 sec-ch-ua（HeadlessChrome 泄露给
+// 落地页请求；route.continue({headers}) 也覆盖不了客户端提示头）。修复：
+// 每页 CDP Emulation.setUserAgentOverride 带 userAgentMetadata，浏览器原生
+// 生成路径对每一跳生效。
+test('openPage: 重定向每一跳的 sec-ch-ua 也不泄露 HeadlessChrome', async () => {
+  const seen = [];
+  const chain = http.createServer((req, res) => {
+    seen.push({
+      url: req.url,
+      ua: req.headers['user-agent'] || '',
+      ch: req.headers['sec-ch-ua'] || '',
+      chp: req.headers['sec-ch-ua-platform'] || '',
+    });
+    if (req.url === '/redir1') { res.writeHead(302, { Location: '/redir2' }); return res.end(); }
+    if (req.url === '/redir2') { res.writeHead(302, { Location: '/echo' }); return res.end(); }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(req.headers));
+  });
+  await new Promise((r) => chain.listen(0, '127.0.0.1', r));
+  let s;
+  try {
+    s = await openPage(`http://127.0.0.1:${chain.address().port}/redir1`);
+    assert.equal(seen.length, 3, `应恰好三跳: ${seen.map((h) => h.url).join(' → ')}`);
+    for (const h of seen) {
+      assert.ok(!/Headless/i.test(h.ch), `${h.url} 的 sec-ch-ua 不应泄露无头品牌: ${h.ch}`);
+      assert.ok(h.ch.includes('Google Chrome'), `${h.url} 的 sec-ch-ua 应含 Google Chrome: ${h.ch}`);
+      // 恰好一份——CDP 元数据与 extraHTTPHeaders 不得叠加
+      assert.equal((h.ch.match(/"Google Chrome"/g) || []).length, 1,
+        `${h.url} 的 sec-ch-ua 不应叠加重复: ${h.ch}`);
+      assert.ok(h.ua.includes('Macintosh; Intel Mac OS X'), `${h.url} 的 UA 应为 macOS 平台: ${h.ua}`);
+      assert.equal(h.chp, '"macOS"', `${h.url} 的 sec-ch-ua-platform 应为 macOS: ${h.chp}`);
+    }
+  } finally {
+    await s?.close().catch(() => {});
+    chain.closeAllConnections();
+    await new Promise((r) => chain.close(r));
   }
 });
 

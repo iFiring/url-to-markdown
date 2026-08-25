@@ -16,6 +16,15 @@ export function debug(...parts) {
   console.error(`[dbg +${((performance.now() - t0) / 1000).toFixed(2)}s]`, ...parts);
 }
 
+/**
+ * 调试日志（无前缀版）：U2M_DEBUG 非空时原样输出。[net] 逐请求头这类
+ * 成组行加时间前缀只是干扰项，裸行便于 grep 与整段粘贴。
+ */
+export function debugRaw(...parts) {
+  if (!process.env.U2M_DEBUG) return;
+  console.error(...parts);
+}
+
 /** stdout 输出单行 JSON 后退出。写回调里 exit，保证管道场景不截断。 */
 export function emit(result, code = 0) {
   const line = JSON.stringify(result) + '\n';

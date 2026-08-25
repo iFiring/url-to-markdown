@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
-import { debug } from './contract.mjs';
+import { debug, debugRaw } from './contract.mjs';
 
 export const EMPTY_STATE = { cookies: [], origins: [] };
 
@@ -82,16 +82,34 @@ export async function realUserAgent(browser) {
 }
 
 /**
+ * UA 平台归一：把宿主平台（Linux/Windows 等）的 UA 重写为主流 macOS 桌面 Chrome。
+ * 为什么：真实公众号风控按 UA 平台打分——Linux 桌面 Chrome（X11; Linux x86_64）
+ * 在真实用户群占比极低，实测步骤 1 直接被跳人工验证，macOS 则正常放行。
+ * Chrome 版本号逐字沿用真实浏览器（与 sec-ch-ua 品牌版本、真实引擎能力同源）；
+ * 已是 macOS 则原样返回；解析不出版本号的怪 UA 原样透传不恶化。
+ */
+export function macUserAgent(rawUa) {
+  if (rawUa.includes('Macintosh')) return rawUa;
+  const ver = /Chrome\/([\d.]+)/.exec(rawUa)?.[1];
+  if (!ver) return rawUa;
+  return `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${ver} Safari/537.36`;
+}
+
+/**
  * 隐身 initScript：抹掉页面脚本可见的剩余无头令牌（网络侧 UA/sec-ch-ua 由
- * newU2MContext 的 context 选项覆盖，这里只管 navigator）。
- * - navigator.webdriver → false（无头默认 true，JS 门禁常用判据）
+ * newU2MContext 的 context 选项 + CDP userAgentMetadata 覆盖，这里只管
+ * navigator）。CDP 元数据是主路（原生驱动 brands/platform）；本补丁是兜底
+ * ——页面脚本若赶在元数据落地前就读取，或元数据发送失败，仍不泄露。
+ * - navigator.webdriver → false（无头默认 true，JS 门禁常用判据；元数据管不到）
+ * - navigator.platform → MacIntel、userAgentData 平台 → macOS：与网络侧
+ *   钉死的 macOS UA 对齐（宿主为 Linux 时原生残留与 UA 自相矛盾）
  * - userAgentData.brands / getHighEntropyValues 的 HeadlessChrome →
- *   Google Chrome：Playwright setUserAgentOverride 不携带 UA-CH 元数据，
- *   brands 仍是浏览器默认无头品牌集
+ *   Google Chrome（元数据生效时为 no-op，值已正确）
  */
 const STEALTH_INIT = `
 try {
   Object.defineProperty(Navigator.prototype, 'webdriver', { get: () => false, configurable: true });
+  Object.defineProperty(Navigator.prototype, 'platform', { get: () => 'MacIntel', configurable: true });
   const ud = navigator.userAgentData;
   if (ud) {
     // 注意：navigator.userAgentData 每次访问返回新包装对象，补丁必须打在原型上
@@ -103,12 +121,20 @@ try {
       const origBrands = brandsDesc.get;
       Object.defineProperty(proto, 'brands', { get() { return fix(origBrands.call(this)); }, configurable: true });
     }
+    const platDesc = Object.getOwnPropertyDescriptor(proto, 'platform');
+    if (platDesc?.get) {
+      Object.defineProperty(proto, 'platform', { get() { return 'macOS'; }, configurable: true });
+    }
     const origHigh = proto.getHighEntropyValues;
     if (typeof origHigh === 'function') {
       proto.getHighEntropyValues = async function (hints) {
         const r = await origHigh.call(this, hints);
         if (Array.isArray(r.brands)) r.brands = fix(r.brands);
         if (Array.isArray(r.brandList)) r.brandList = fix(r.brandList);
+        // 高熵平台提示与钉死的 macOS 对齐（宿主为 Linux 时会返回内核版本号）
+        if (typeof r.platform === 'string') r.platform = 'macOS';
+        if (typeof r.platformVersion === 'string') r.platformVersion = '15.0.0';
+        if (typeof r.osVersion === 'string') r.osVersion = '15.0.0';
         return r;
       };
     }
@@ -117,11 +143,62 @@ try {
 `;
 
 /**
+ * [net] 页面级网络日志（U2M_DEBUG）：只记「打开的页面」——主 frame 的
+ * document 导航，含重定向每一跳与登录跳转；子资源（图片/XHR/iframe 文档）
+ * 一概不记（量大且指纹与首页同源）。
+ * 响应到达时一次性成块打印（请求首行 + 请求头 > 前缀 + 状态行 + 响应头
+ * < 前缀）：导航的响应事件按跳序到达，块序即跳序；若拆成请求/响应两个
+ * 事件各自打印，响应事件会迟到半跳、相邻块交错难读。headersArray 保留
+ * 原始大小写与发送顺序，且含 Cookie（headers() 会略去安全相关头）——响应
+ * 时点取请求头还能拿到完整集（拦截时点只有部分）。
+ * 夭折导航（无响应）由 requestfailed 补：请求块 + x 失败行。
+ */
+function attachNetLog(context) {
+  const isPageNav = (req) =>
+    req.isNavigationRequest() && !req.frame()?.parentFrame();
+  const reqBlock = async (req) => {
+    const flags = ['document', 'nav'];
+    const from = req.redirectedFrom();
+    if (from) flags.push(`← ${from.url()}`);
+    const lines = [`[net] ${req.method()} ${req.url()} (${flags.join(', ')})`];
+    for (const { name, value } of await req.headersArray()) {
+      lines.push(`[net] >  ${name}: ${value}`);
+    }
+    return lines;
+  };
+  context.on('response', async (resp) => {
+    if (!isPageNav(resp.request())) return;
+    try {
+      const lines = await reqBlock(resp.request());
+      const statusText = resp.statusText() ? ` ${resp.statusText()}` : '';
+      lines.push(`[net] <  ${resp.status()}${statusText}`);
+      for (const { name, value } of await resp.headersArray()) {
+        lines.push(`[net] <  ${name}: ${value}`);
+      }
+      for (const l of lines) debugRaw(l);
+    } catch { /* 日志尽力而为，不影响请求 */ }
+  });
+  context.on('requestfailed', async (req) => {
+    if (!isPageNav(req)) return;
+    try {
+      const lines = await reqBlock(req);
+      lines.push(`[net] x  ${req.failure()?.errorText ?? 'failed'}`);
+      for (const l of lines) debugRaw(l);
+    } catch {
+      debugRaw(`[net] x  ${req.url()} ${req.failure()?.errorText ?? 'failed'}`);
+    }
+  });
+}
+
+/**
  * U2M 统一上下文工厂：所有上下文一律从这里创建，指纹与拦截策略只维护一处。
- * - UA 去无头 + sec-ch-ua 头与 UA 版本对齐——只设 userAgent 选项时浏览器仍按
- *   默认无头元数据发 sec-ch-ua（HeadlessChrome 品牌），查客户端提示的站点照样拦
+ * - UA 去无头 + 平台归一为 macOS（Linux 宿主原生 UA 被公众号风控判机器人，
+ *   见 macUserAgent）+ sec-ch-ua 头与 UA 版本对齐——只设 userAgent 选项时
+ *   浏览器仍按默认无头元数据发 sec-ch-ua（HeadlessChrome 品牌），查客户端
+ *   提示的站点照样拦
  * - bypassCSP：严格 CSP 站点会拦 addScriptTag/页面内 eval 注入
- * - route-abort media；先注入隐身 initScript，再注入调用方脚本
+ * - route-abort media；U2M_DEBUG=1 时挂 attachNetLog（页面级请求/响应头）；
+ *   先注入隐身 initScript，再注入调用方脚本
  * file:// 渲染阶段同样走工厂：不出网时这些覆盖是 no-op，但免去"哪天真要出网
  * 才发现裸上下文退回无头指纹"的隐形约定。
  */
@@ -131,20 +208,51 @@ export async function newU2MContext(browser, {
   storageState,
   initScripts = [],
 } = {}) {
-  const ua = await realUserAgent(browser);
+  const ua = macUserAgent(await realUserAgent(browser));
   const ver = /Chrome\/(\d+)/.exec(ua)?.[1];
   const ctxOpts = {
     viewport,
     bypassCSP: true,
     userAgent: ua,
-    // 与 UA 版本一致的品牌集（真 Chrome 的 Google Chrome + GREASE + Chromium）
-    extraHTTPHeaders: { 'sec-ch-ua': `"Google Chrome";v="${ver}", "Chromium";v="${ver}", "Not=A?Brand";v="99"` },
+    // 与 UA 版本一致的品牌集（真 Chrome 的 Google Chrome + GREASE + Chromium）；
+    // 平台提示钉死 macOS——与归一后的 UA 对齐（Linux 宿主原生会发 "Linux"）
+    extraHTTPHeaders: {
+      'sec-ch-ua': `"Google Chrome";v="${ver}", "Chromium";v="${ver}", "Not=A?Brand";v="99"`,
+      'sec-ch-ua-mobile': '?0',
+      'sec-ch-ua-platform': '"macOS"',
+    },
   };
   if (deviceScaleFactor !== undefined) ctxOpts.deviceScaleFactor = deviceScaleFactor;
   if (storageState) ctxOpts.storageState = storageState;
   const context = await browser.newContext(ctxOpts);
+  // CDP 元数据兜重定向：extraHTTPHeaders 只对首跳生效——实测第 2 跳起浏览器
+  // 按默认无头元数据重新生成 sec-ch-ua（HeadlessChrome 泄露给重定向落地页，
+  // route.continue({headers}) 也压不过客户端提示头）。每页
+  // setUserAgentOverride 带 userAgentMetadata：浏览器原生 UA-CH 生成路径，
+  // 对每一跳与页面侧 navigator.userAgentData 同时生效。context 的 userAgent/
+  // extraHTTPHeaders 保留为首跳的无竞态底线（两者值一致，不叠加）。
+  const fullVer = /Chrome\/([\d.]+)/.exec(ua)?.[1] ?? '';
+  const brands = [
+    { brand: 'Google Chrome', version: ver },
+    { brand: 'Chromium', version: ver },
+    { brand: 'Not=A?Brand', version: '99' },
+  ];
+  context.on('page', (page) => {
+    context.newCDPSession(page)
+      .then((cdp) => cdp.send('Emulation.setUserAgentOverride', {
+        userAgent: ua,
+        userAgentMetadata: {
+          brands, fullVersionList: brands,
+          fullVersion: fullVer,
+          platform: 'macOS', platformVersion: '15.0.0',
+          architecture: 'x86', model: '', mobile: false, bitness: '64', wow64: false,
+        },
+      }))
+      .catch(() => { /* 尽力而为，不阻塞页面 */ });
+  });
   await context.route('**/*', (route) =>
     route.request().resourceType() === 'media' ? route.abort() : route.continue());
+  if (process.env.U2M_DEBUG) attachNetLog(context);
   await context.addInitScript({ content: STEALTH_INIT });
   for (const script of initScripts) await context.addInitScript({ content: script });
   return context;

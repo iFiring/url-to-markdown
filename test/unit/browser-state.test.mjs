@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { pruneExpired, mergeStorageState, readStorageState, writeStorageState } from '../../script/lib/browser.mjs';
+import { pruneExpired, mergeStorageState, readStorageState, writeStorageState, macUserAgent } from '../../script/lib/browser.mjs';
 
 const cookie = (over) => ({ name: 'a', value: '1', domain: '.x.com', path: '/', expires: -1, httpOnly: false, secure: false, sameSite: 'Lax', ...over });
 
@@ -38,4 +38,20 @@ test('read/write 往返；缺失文件返回空态', async () => {
   assert.equal(back.cookies[0].name, 'a');
   const empty = await readStorageState(path.join(dir, 'nope.json'));
   assert.deepEqual(empty, { cookies: [], origins: [] });
+});
+
+// UA 平台归一（真实公众号风控按 UA 平台打分：Linux 桌面 Chrome 判机器人、
+// macOS 正常放行——实测证据），Linux 宿主的无头 UA 必须重写为 macOS。
+test('macUserAgent: Linux 无头 UA 归一为 macOS Chrome，版本号逐字沿用', () => {
+  const linux = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.34 Safari/537.36';
+  const out = macUserAgent(linux);
+  assert.ok(out.startsWith('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '), `应为 macOS UA: ${out}`);
+  assert.ok(out.includes('Chrome/151.0.7922.34'), `Chrome 版本号应逐字沿用: ${out}`);
+  assert.ok(!out.includes('Linux') && !out.includes('X11'), `不应残留 Linux 平台令牌: ${out}`);
+});
+
+test('macUserAgent: macOS UA 原样返回；无法解析版本时原样透传', () => {
+  const mac = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.34 Safari/537.36';
+  assert.equal(macUserAgent(mac), mac, '已是 macOS 应原样返回');
+  assert.equal(macUserAgent('Mozilla/5.0'), 'Mozilla/5.0', '无 Chrome 版本号的原样透传');
 });

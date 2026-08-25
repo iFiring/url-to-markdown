@@ -20,7 +20,9 @@ node --test test/integration/render.test.mjs
 npx playwright install chromium                  # 浏览器缓存
 
 # 本地调试日志：U2M_DEBUG=1 时各 CLI 向 stderr 输出 [dbg +N.NNs] 前缀的
-# 调试行（阶段耗时、输入输出字节数、登录检测六信号命中、滚动轮次、逐图下载），
+# 调试行（阶段耗时、输入输出字节数、登录检测六信号命中、滚动轮次、逐图下载、
+# [net] 打开页面（主 frame document 导航，含重定向/登录跳转每一跳）的请求头与
+# 响应头（裸行无前缀；子资源不记），反爬诊断用，见 lib/browser.mjs），
 # 不设则静默——stdout 单行 JSON 契约不受影响
 U2M_DEBUG=1 node script/snapshot.mjs --url <url>
 ```
