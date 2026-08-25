@@ -13,14 +13,15 @@
  *   其中 14-19 为清洗版六规则瘦身、仅作用于清洗版）：
  *   【整体删除】与正文结构无关的噪声，连子树一起删：
  *     - 文档级噪声：link / meta / base（title 保留，作步骤 3 识别线索）
- *     - 按钮类控件：button、[role="button"]、按钮型 input[type=button|submit|reset]
  *     - 页面骨架：nav / footer / form 及 role="navigation"/"contentinfo"/"form"
  *       等价物（article 内嵌 footer 同删）
  *     - 媒体播放器：video / audio（子元素 source / track 随之删除）
  *     - 残余表单控件与模态框：input / select / textarea / label / dialog
- *       （form 外的搜索框等 UI 控件兜底；script / noscript / template 已在
- *       步骤 1 的 page-prepare.js 删除，此处不重复）
- *   【正文保留】header / aside 属正文结构（hero 主标题、章节交替），不删
+ *       （form 外的搜索框等 UI 控件兜底，按钮型 input 亦在此列；
+ *       script / noscript / template 已在步骤 1 的 page-prepare.js 删除，此处不重复）
+ *   【正文保留】header / aside 属正文结构（hero 主标题、章节交替），不删；
+ *     button / [role="button"] 同样保留（2026-08-25 起不删：FAQ 折叠头 /
+ *     CTA / 卡片式 role=button 常是内容载体，整删会误伤正文，交步骤 3 判断）
  *   【级联删除】空元素：子树内既无非空白文本、也无白名单元素的空壳；
  *     后序单趟判定，子空则父亦空，自然级联到任意深度；置于各类删除之后，
  *     只含噪声的容器随之清除

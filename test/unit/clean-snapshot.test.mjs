@@ -288,7 +288,7 @@ test('clean_snapshot.mjs: 删除 video/audio 与残余表单控件，header/asid
 test('clean_snapshot.mjs: 表格结构整体保留（含空单元格），内部噪声仍删', async () => {
   // 回归：空 <td>/<th>/<tr>/<col> 不在 KEEP_EMPTY 白名单时会被空元素级联删除，
   // 删掉后表格行列错位；article-1 实测丢过整个 <colgroup>+4 <col>。
-  // 表格结构元素即使为空也保留；单元格内的按钮等噪声照删，留下空壳单元格。
+  // 表格结构元素即使为空也保留；单元格内的按钮自 2026-08-25 起保留不删。
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-clean-table-'));
   const url = 'https://example.com/table-article';
   const urlDir = path.join(tmpRoot, urlToDirName(url));
@@ -334,15 +334,52 @@ test('clean_snapshot.mjs: 表格结构整体保留（含空单元格），内部
   assert.equal((cleaned.match(/<tr[\s>]/g) || []).length, 3, 'tr 数量应为 3（不丢空行）');
   assert.equal((cleaned.match(/<col[\s>]/g) || []).length, 2, 'col 数量应为 2');
 
-  // 单元格内的按钮噪声照删，但留下空壳 td（不破坏列对齐）
-  assert.ok(!/<button[\s>]/.test(cleaned), '单元格内的 button 仍应删除');
-  assert.ok(!cleaned.includes('data-u2m-id="15"'), 'button 元素应删除');
+  // 单元格内的按钮不再删除（2026-08-25 起按钮保留），单元格天然保有内容
+  assert.ok(cleaned.includes('data-u2m-id="15"'), '单元格内的 button 应保留');
+  assert.ok(/<button[^>]*>按钮</.test(cleaned), 'button 文本应保留');
 
   // 表格外的正文与级联行为不受影响
   assert.ok(cleaned.includes('data-u2m-id="17"'), '表格外正文必须保留');
   assert.ok(cleaned.includes('正文段落'), '正文文本必须保留');
 
   fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test('clean_snapshot.mjs: 按钮保留——button 与 role="button" 两版都不再删除', async () => {
+  // 2026-08-25 起按钮不再整删：FAQ 折叠头 / CTA / 卡片式 role=button 常是
+  // 内容载体，整删或按字数取舍都会误伤正文——一律保留，交步骤 3 语义判断。
+  const r = await runClean(`<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div id="root" data-u2m-id="1">
+    <button data-u2m-id="2">复制</button>
+    <button data-u2m-id="3">View complete API reference</button>
+    <div role="button" data-u2m-id="4">展开全部章节内容</div>
+    <a role="button" data-u2m-id="5">复制链接</a>
+    <button data-u2m-id="6"></button>
+    <input type="button" value="按钮型 input" data-u2m-id="7">
+    <nav data-u2m-id="8"><button data-u2m-id="9">导航内按钮</button></nav>
+    <p data-u2m-id="10">正文段落</p>
+  </div>
+</body></html>`, 'button-keep');
+
+  for (const [id, what] of [
+    ['2', '短文本 button'], ['3', '长文本 button'],
+    ['4', 'role=button div'], ['5', 'role=button a'],
+  ]) {
+    assert.ok(r.cleaned.includes(`data-u2m-id="${id}"`), `${what} 清洗版应保留`);
+    assert.ok(r.styled.includes(`data-u2m-id="${id}"`), `${what} 带样式版应保留`);
+  }
+  assert.ok(r.cleaned.includes('展开全部章节内容'), 'role=button 文本清洗版可见');
+  // 空按钮无任何内容，仍被空元素级联删除
+  assert.ok(!r.cleaned.includes('data-u2m-id="6"'), '空按钮应被空元素级联删除');
+  // 按钮型 input 仍随表单控件删除（无子内容，value 文本极罕为正文）
+  assert.ok(!r.cleaned.includes('data-u2m-id="7"'), '按钮型 input 仍删除');
+  // nav 整删不变——nav 内按钮随之消失
+  assert.ok(!r.cleaned.includes('data-u2m-id="8"'), 'nav 仍整删');
+  assert.ok(!r.cleaned.includes('data-u2m-id="9"'), 'nav 内按钮随 nav 删除');
+  assert.ok(r.cleaned.includes('正文段落'), '正文不受影响');
+  r.cleanup();
 });
 
 test('clean_snapshot.mjs: 纯空白文本节点（缩进）不占位', async () => {

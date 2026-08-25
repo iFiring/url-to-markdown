@@ -31,14 +31,11 @@ function __u2mCleanSnapshot(cfg) {
     bases[i].parentNode.removeChild(bases[i]);
   }
 
-  // 4. 删除按钮类控件：<button>、role="button"（含 div/span/a 伪装）、
-  //    input 按钮。交互 UI 与正文结构无关，整体删除
-  var btns = document.querySelectorAll(
-    'button, [role="button"], input[type="button"], input[type="submit"], input[type="reset"]'
-  );
-  for (var i = btns.length - 1; i >= 0; i--) {
-    btns[i].parentNode.removeChild(btns[i]);
-  }
+  // 4. 按钮类控件保留（2026-08-25 起）：button 与 [role="button"]（div/span/a
+  //    伪装）不再删除——FAQ 折叠头、CTA、卡片式 role=button 常是内容载体，
+  //    整删或按字数取舍都会误伤正文，一律保留交步骤 3 语义判断。按钮型
+  //    input[type=button|submit|reset] 仍随步骤 7 的表单控件删除（无子内容，
+  //    value 文本极罕为正文）。
 
   // 5. 删除页面骨架标签：<nav>/<footer>/<form> 及其 role 等价物——
   //    导航/页脚/表单不属于文章正文（<article> 内嵌 footer 同样删除）；
@@ -69,11 +66,11 @@ function __u2mCleanSnapshot(cfg) {
   //    级联：后序单趟——判定基于子树的真实内容，子空则父亦空，自然级联到任意深度。
   //    内容元素（img/br/svg/pre/h1-h6 等）本身即内容，即使无子节点也保留；
   //    含文本的 span/div 等天然不空，不受影响。置于各类噪声删除
-  //    （按钮/骨架/媒体/控件）之后，只含噪声的容器随之级联清除。
+  //    （骨架/媒体/控件）之后，只含噪声的容器随之级联清除。
   //    video/audio/input 等已在前序步骤整体删除，不再列入白名单。
   //    表格结构元素（table/tr/td/col 等）即使为空也保留——删掉空单元格/
-  //    空行/列定义会让行列错位，破坏表格整体显示；单元格内的噪声（按钮等）
-  //    照删，留下空壳单元格。
+  //    空行/列定义会让行列错位，破坏表格整体显示；单元格内的噪声照删，
+  //    留下空壳单元格（按钮自 2026-08-25 起保留，见步骤 4）。
   var KEEP_EMPTY = {
     IMG: 1, IFRAME: 1, CANVAS: 1, OBJECT: 1, EMBED: 1,
     SOURCE: 1, PICTURE: 1,
