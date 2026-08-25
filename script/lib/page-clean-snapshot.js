@@ -271,6 +271,36 @@ function __u2mCleanSnapshot(cfg) {
     host.appendChild(document.createTextNode('code...'));
   }
 
+  // 17. R4 astro 包装解包（仅清洗版）：astro-island/astro-slot 是框架脚手架标签，
+  //     子元素原样上提，包装自身属性（含其 data-u2m-id）弃置——清洗版不可见即
+  //     不可引用，语义与 R6 折叠一致。带样式版保留（步骤 6 取子树不受影响）。
+  var wraps = document.querySelectorAll('astro-island, astro-slot');
+  for (var i = wraps.length - 1; i >= 0; i--) {
+    var wrap = wraps[i];
+    while (wrap.firstChild) wrap.parentNode.insertBefore(wrap.firstChild, wrap);
+    wrap.parentNode.removeChild(wrap);
+  }
+
+  // 18. R5 保守空白压缩（仅清洗版）：删纯空白文本节点，当且仅当前后兄弟都不是
+  //     行内文本敏感节点（非空白文本或行内元素）——行内相邻节点间的空白承载
+  //     词间分隔，保留。pre 内部已被 R1 清空，天然不涉及。
+  var INLINE_TAGS = { A: 1, SPAN: 1, CODE: 1, STRONG: 1, EM: 1, B: 1, I: 1, U: 1, S: 1,
+    MARK: 1, SMALL: 1, SUB: 1, SUP: 1, ABBR: 1, CITE: 1, Q: 1, KBD: 1, SAMP: 1, TIME: 1, IMG: 1, BR: 1 };
+  function inlineSensitive(node) {
+    if (!node) return false;
+    if (node.nodeType === 3) return node.textContent.trim() !== '';
+    return node.nodeType === 1 && INLINE_TAGS[node.tagName.toUpperCase()] === 1;
+  }
+  var wsWalker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+  var wsNodes = [];
+  var wn;
+  while ((wn = wsWalker.nextNode())) {
+    if (wn.textContent.trim() === '' && !inlineSensitive(wn.previousSibling) && !inlineSensitive(wn.nextSibling)) {
+      wsNodes.push(wn);
+    }
+  }
+  for (var i = 0; i < wsNodes.length; i++) wsNodes[i].parentNode.removeChild(wsNodes[i]);
+
   return {
     html: '<!DOCTYPE html>\n' + document.documentElement.outerHTML,
     styledHtml: styledHtml,

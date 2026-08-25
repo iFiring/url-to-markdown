@@ -557,3 +557,33 @@ test('R1: pre 内容替换为 code...——token span 全删，pre/code 壳与 i
     assert.ok(styled.includes('shiki-token') && styled.includes('import'), '带样式版完整保留代码');
   } finally { cleanup(); }
 });
+
+test('R4+R5: astro 包装解包；安全位置空白删除、行内间空白保留', async () => {
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-u2m-id="1">
+    <astro-island data-u2m-id="2" component-url="/x.js"><p data-u2m-id="3">岛内容</p></astro-island>
+    <astro-slot data-u2m-id="4"><span data-u2m-id="5">槽内容</span></astro-slot>
+    <div data-u2m-id="6">
+      <p data-u2m-id="7">a</p>
+      <p data-u2m-id="8">b</p>
+    </div>
+    <p data-u2m-id="9">x <a data-u2m-id="10" href="/y">链接</a> z</p>
+  </div>
+</body></html>`;
+  const { cleaned, styled, cleanup } = await runClean(snapshot, 'r4r5');
+  try {
+    assert.ok(!/<astro-island[\s>]/.test(cleaned) && !/<astro-slot[\s>]/.test(cleaned), 'astro 包装应解包');
+    assert.ok(!cleaned.includes('data-u2m-id="2"') && !cleaned.includes('data-u2m-id="4"'), '包装自身 id 随包装弃置');
+    assert.ok(cleaned.includes('data-u2m-id="3"') && cleaned.includes('岛内容'), '子元素上提保留');
+    assert.ok(cleaned.includes('data-u2m-id="5"') && cleaned.includes('槽内容'), 'slot 子元素上提保留');
+    // 块级元素之间的换行缩进删除
+    const block = cleaned.match(/<div data-u2m-id="6">([\s\S]*?)<\/div>/)[1];
+    assert.ok(!/\n\s/.test(block), `块级间空白应删除: ${JSON.stringify(block)}`);
+    // 行内相邻文本/元素之间的空白保留
+    const inline = cleaned.match(/<p data-u2m-id="9">([\s\S]*?)<\/p>/)[1];
+    assert.ok(inline.includes('x <a') && inline.includes('> z'), `行内间空白应保留: ${JSON.stringify(inline)}`);
+    assert.ok(styled.includes('<astro-island'), '带样式版不受影响');
+  } finally { cleanup(); }
+});
