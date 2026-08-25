@@ -10,6 +10,28 @@ import { urlToDirName } from '../../script/lib/env.mjs';
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
 const scriptPath = path.resolve(thisDir, '../../script/lib/page-clean-snapshot.js');
 
+/** 瘦身规则测试基座：手写 1_snapshot 夹具 → 子进程跑真 clean_snapshot.mjs → 读回两版产物。 */
+async function runClean(snapshot, urlPath = 'slim-article', env = {}) {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-clean-slim-'));
+  const url = `https://example.com/${urlPath}`;
+  const dir = path.join(tmpRoot, urlToDirName(url));
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, '1_snapshot.html'), snapshot);
+  const r = await runScript(process.execPath, [path.resolve('script/clean_snapshot.mjs'), '--url', url], {
+    env: { ...env, U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 60000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  return {
+    out,
+    cleaned: fs.readFileSync(out.cleanedSnapshot, 'utf8'),
+    styled: fs.readFileSync(out.styledSnapshot, 'utf8'),
+    stderr: r.stderr,
+    cleanup: () => fs.rmSync(tmpRoot, { recursive: true, force: true }),
+  };
+}
+
 function runInBrowser(html, fnSrc) {
   // 用 node 模拟浏览器环境：使用 jsdom 或直接字符串处理验证
   // 这里验证函数源码是否合法
@@ -469,4 +491,29 @@ test('clean_snapshot.mjs: 带样式快照保留样式，SVG 瘦身为壳，占�
   assert.deepEqual(longTexts, { 1: htmlLong }, '恢复清单应仅含 HTML 长文本');
 
   fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test('R2: class 噪声过滤——工具/哈希 token 剥除，语义 token 保留，带样式版不受影响', async () => {
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-u2m-id="1">
+    <section data-u2m-id="2" class="article flex px-4 astro-3ef6ksr2 h-[30rem] text-xs hover:bg-x md:flex">正文内容</section>
+    <div data-u2m-id="3" class="page-header btn-primary expn-content shiki">语义类元素</div>
+    <div data-u2m-id="4" class="flex px-4 rounded">全是噪声</div>
+  </div>
+</body></html>`;
+  const { cleaned, styled, cleanup } = await runClean(snapshot, 'r2-class');
+  try {
+    const sec = cleaned.match(/<section[^>]*>/)[0];
+    assert.ok(sec.includes('class="article"'), `语义 token article 应保留: ${sec}`);
+    assert.ok(!/(flex|px-4|astro-|30rem|text-xs|hover:|md:)/.test(sec), `噪声 token 应剥除: ${sec}`);
+    const keep = cleaned.match(/<div data-u2m-id="3"[^>]*>/)[0];
+    for (const tok of ['page-header', 'btn-primary', 'expn-content', 'shiki']) {
+      assert.ok(keep.includes(tok), `两词 kebab 语义 token ${tok} 应保留: ${keep}`);
+    }
+    assert.ok(!/<div data-u2m-id="4"[^>]*class=/.test(cleaned), '全噪声 class 应连同属性删除');
+    // 带样式版不受影响（硬约束）
+    assert.ok(styled.includes('astro-3ef6ksr2') && styled.includes('h-[30rem]'), '带样式版保留原始 class');
+  } finally { cleanup(); }
 });

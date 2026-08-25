@@ -6,6 +6,7 @@
  *                 （仅留 id/class/data-u2m-id），其余与清洗版一致
  * 两版共享同一套结构清洗与长文本占位，占位符编号逐一对应；
  * 占位跳过 svg/style 子树文本（两版都会删除 SVG 内容与 <style>，若占位会产生孤儿编号）。
+ * clean-only 段新增 R1-R6 瘦身规则，见各步骤注释与 spec。
  */
 function __u2mCleanSnapshot(cfg) {
   cfg = cfg || {};
@@ -203,6 +204,40 @@ function __u2mCleanSnapshot(cfg) {
   var styles = document.querySelectorAll('style');
   for (var i = styles.length - 1; i >= 0; i--) {
     styles[i].parentNode.removeChild(styles[i]);
+  }
+
+  // 14. R2 class 噪声过滤（仅清洗版）：class 值按空白切 token，剥工具/哈希 token、
+  //     留语义 token。原则：拿不准保留——漏删只费字节，误删语义 token（步骤 3 的
+  //     正式识别线索）才伤识别。带样式版不动。
+  var HASH_PREFIX_RE = /^(?:astro|css|sc|jsx|chakra|emotion|styled|mui|next|module)-[-0-9a-zA-Z]+$/;
+  function isHashSuffix(s) {
+    return s.length >= 5 && /^[0-9a-zA-Z]+$/.test(s) && /[0-9]/.test(s) && /[a-zA-Z]/.test(s);
+  }
+  var UTILITY_RES = [
+    /^(?:[mp][trblxy]?)-.+$/, /^-(?:[mp][trblxy]?)-.+$/,
+    /^(?:w|h|min-w|min-h|max-w|max-h|size|basis|top|bottom|left|right|inset|z|order|gap|gap-x|gap-y|grow|shrink|flex|grid-cols|grid-rows|col-span|col-start|col-end|row-span|row-start|row-end)-.+$/,
+    /^(?:flex|grid|block|inline|inline-block|inline-flex|hidden|table|contents|flow-root|list-item|isolate)$/,
+    /^(?:relative|absolute|fixed|sticky|static)$/,
+    /^(?:items|justify|self|content|place|place-items|place-content|place-self|align)-.+$/,
+    /^(?:rounded|shadow|opacity|ring|outline|divide|space)-?.*$/,
+    /^(?:text|bg|border|from|to|via)-.+$/,
+    /^(?:font|leading|tracking|indent|line-clamp|aspect|object|will-change|fill|stroke|transition|duration|ease|delay|animate|transform|scale|translate|rotate|origin|skew|pointer-events|cursor|select|resize|whitespace|break|overscroll|scroll|snap)-?.*$/,
+    /^(?:uppercase|lowercase|capitalize|underline|overline|line-through|truncate|antialiased|italic|visible|invisible|collapse|sr-only|not-sr-only)$/,
+  ];
+  function isClassNoise(tok) {
+    if (tok.indexOf(':') !== -1 || tok.indexOf('[') !== -1 || tok.indexOf(']') !== -1) return true; // 变体前缀/任意值
+    if (HASH_PREFIX_RE.test(tok)) return true;
+    var dash = tok.lastIndexOf('-');
+    if (dash !== -1 && isHashSuffix(tok.slice(dash + 1)) && /^[a-z][a-z0-9-]*$/i.test(tok.slice(0, dash))) return true;
+    for (var i = 0; i < UTILITY_RES.length; i++) if (UTILITY_RES[i].test(tok)) return true;
+    return false;
+  }
+  var withClass = document.querySelectorAll('[class]');
+  for (var i = 0; i < withClass.length; i++) {
+    var el = withClass[i];
+    var kept = el.getAttribute('class').split(/\s+/).filter(function (t) { return t && !isClassNoise(t); });
+    if (kept.length) el.setAttribute('class', kept.join(' '));
+    else el.removeAttribute('class');
   }
 
   return {
