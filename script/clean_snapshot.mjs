@@ -115,6 +115,9 @@ async function main() {
       debug(`juice 内联 ${((performance.now() - t0) / 1000).toFixed(2)}s（${juiced.length} 字节）`);
       const page2 = await context.newPage();
       try {
+        // 页 2 只读 style 属性，文档由 setContent 提供——子资源全 abort，不出网
+        // （原为每跑一次步骤 2 向原站重拉一轮图片）
+        await page2.route('**/*', (route) => route.abort());
         await page2.setContent(juiced, { waitUntil: 'domcontentloaded' });
         const detect = await page2.evaluate(`(${hiddenFn})()`);
         // 雪崩护栏：juiced DOM 上折叠后可见文本占比 <5% 且折叠前文本充足（≥2000

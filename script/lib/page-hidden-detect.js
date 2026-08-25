@@ -6,6 +6,8 @@
  *     ⟺ 自身或任一祖先声明为 none；该子树不可被后代翻案，记录后停止下钻。
  *   - HTML hidden 属性 = 显式 display:none（其 UA/preflight 规则如
  *     [hidden]:where(...) juice 无法内联，故在检测器侧直接认定）。
+ *   - @media 规则 juice 不内联 → 响应式隐藏子树（xl:hidden 等）检测不到、
+ *     按可见保留（安全方向）。
  *   - visibility 继承，后代可 visibility:visible 重新可见 → 有效值 = 自身显式
  *     声明，否则沿用父级有效值；visibility:hidden 顶层记录后继续下钻找翻案后代。
  *   - 顶层隐藏子树：有效隐藏且父级上下文未隐藏——折叠只打在最外层。

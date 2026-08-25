@@ -688,6 +688,32 @@ test('R6: HTML hidden 属性按显式 display:none 折叠——无 style 属性/
   } finally { cleanup(); }
 });
 
+test('R6 边界钉住: @media 响应式隐藏不折叠——juice 不内联媒体查询，按可见保留', async () => {
+  // 钉当前行为——@media 不内联故响应式隐藏不折叠（安全方向：多保留不误删）。
+  // juice 对 @media 规则（removeStyleTags:true 下含媒体查询的 <style> 原样
+  // 保留）从不把声明写进 style 属性，__u2mDetectHidden 静态读不到
+  // display:none；xl:hidden/lg:hidden 类响应式隐藏同此边界（spec §6 用例 5）
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title>
+<style>@media (min-width: 1280px) { .resp{display:none} }</style>
+</head>
+<body>
+  <div data-u2m-id="1">
+    <div data-u2m-id="2" class="resp"><p data-u2m-id="3">响应式隐藏内容</p></div>
+    <p data-u2m-id="4">正文段落</p>
+  </div>
+</body></html>`;
+  const { cleaned, styled, cleanup } = await runClean(snapshot, 'r6-media-pin');
+  try {
+    const resp = cleaned.match(/<div data-u2m-id="2"[^>]*>/)[0];
+    assert.ok(!/data-u2m-hidden/.test(resp), `@media 隐藏不应折叠: ${resp}`);
+    assert.ok(!/data-u2m-hidden="/.test(cleaned), '全程不应产生折叠标记');
+    assert.ok(cleaned.includes('响应式隐藏内容') && cleaned.includes('data-u2m-id="3"'), '内容按可见保留在清洗版');
+    assert.ok(cleaned.includes('正文段落'), '可见正文保留');
+    assert.ok(styled.includes('响应式隐藏内容'), '带样式版保留');
+  } finally { cleanup(); }
+});
+
 test('护栏: 折叠后可见文本 <5% 且总量充足 → 放弃折叠并告警；visibility 翻案语义', async () => {
   const gated = '门'.repeat(2100); // 折叠区 2100 字
   const visLong = '外'.repeat(60);
