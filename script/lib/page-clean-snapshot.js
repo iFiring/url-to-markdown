@@ -254,6 +254,23 @@ function __u2mCleanSnapshot(cfg) {
     }
   }
 
+  // 16. R1 pre 内容替换（仅清洗版）：代码块对结构识别只是一个单元，内容全文在
+  //     带样式版保真（步骤 7 于 6_article 写进骨架）。首个 code 壳保留（含
+  //     data-language），其余子元素删除；行内 <code> 是句子成分，不动。
+  var pres = document.querySelectorAll('pre');
+  for (var i = 0; i < pres.length; i++) {
+    var pre = pres[i];
+    var codeShell = null;
+    var nodes = Array.prototype.slice.call(pre.childNodes);
+    for (var j = 0; j < nodes.length; j++) {
+      if (!codeShell && nodes[j].nodeType === 1 && nodes[j].tagName === 'CODE') { codeShell = nodes[j]; continue; }
+      pre.removeChild(nodes[j]);
+    }
+    var host = codeShell || pre;
+    while (host.firstChild) host.removeChild(host.firstChild);
+    host.appendChild(document.createTextNode('code...'));
+  }
+
   return {
     html: '<!DOCTYPE html>\n' + document.documentElement.outerHTML,
     styledHtml: styledHtml,

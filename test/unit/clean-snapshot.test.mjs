@@ -537,3 +537,23 @@ test('R3: data-* 白名单——噪声 data 属性删除，data-u2m-id/data-lang
     assert.ok(styled.includes('data-1p-ignore'), '带样式版不受影响');
   } finally { cleanup(); }
 });
+
+test('R1: pre 内容替换为 code...——token span 全删，pre/code 壳与 id/language 保留，行内 code 不动', async () => {
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-u2m-id="1">
+    <pre data-u2m-id="2" class="shiki" tabindex="0"><code data-u2m-id="3" data-language="javascript"><span data-u2m-id="4" class="syntax-highlighter-line"><span data-u2m-id="5" class="shiki-token">import</span><span data-u2m-id="6" class="shiki-token"> OpenAI </span></span></code></pre>
+    <p data-u2m-id="7">行内 <code data-u2m-id="8">client.create()</code> 代码</p>
+  </div>
+</body></html>`;
+  const { cleaned, styled, cleanup } = await runClean(snapshot, 'r1-pre');
+  try {
+    assert.ok(/<pre[^>]*data-u2m-id="2"[^>]*>[\s\S]*?<code[^>]*data-u2m-id="3"[^>]*>code\.\.\.<\/code><\/pre>/.test(cleaned), `pre/code 壳应保留且内容为 code...: ${cleaned.match(/<pre[\s\S]*?<\/pre>/)?.[0]}`);
+    assert.ok(!cleaned.includes('shiki-token') || !/<span[^>]*class="shiki-token"/.test(cleaned), 'token span 应删除');
+    assert.ok(!cleaned.includes('data-u2m-id="4"') && !cleaned.includes('data-u2m-id="5"'), 'pre 内部 id 随内容删除');
+    assert.ok(cleaned.includes('data-language="javascript"'), 'data-language 保留');
+    assert.ok(cleaned.includes('<code data-u2m-id="8">client.create()</code>'), '行内 code 不动');
+    assert.ok(styled.includes('shiki-token') && styled.includes('import'), '带样式版完整保留代码');
+  } finally { cleanup(); }
+});
