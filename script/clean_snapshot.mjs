@@ -52,7 +52,7 @@ import { chromium } from 'playwright';
 import { emit, emitError, usage, log, debug } from './lib/contract.mjs';
 import { urlDir } from './lib/env.mjs';
 import { readSharedScript } from './lib/placeholder.mjs';
-import { proxyLaunchOptions } from './lib/browser.mjs';
+import { proxyLaunchOptions, newU2MContext } from './lib/browser.mjs';
 
 function parseArgs(argv) {
   const out = { _: [] };
@@ -87,7 +87,7 @@ async function main() {
   let browser;
   try {
     browser = await chromium.launch({ headless: true, ...proxyLaunchOptions() });
-    const context = await browser.newContext({ bypassCSP: true });
+    const context = await newU2MContext(browser);
     const page = await context.newPage();
 
     // 打开快照文件

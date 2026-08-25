@@ -58,7 +58,7 @@ import { chromium } from 'playwright';
 import { emit, emitError, usage, log, debug } from './lib/contract.mjs';
 import { urlDir, storageStatePath } from './lib/env.mjs';
 import { readSharedScript } from './lib/placeholder.mjs';
-import { proxyLaunchOptions, gotoSettled } from './lib/browser.mjs';
+import { proxyLaunchOptions, gotoSettled, newU2MContext } from './lib/browser.mjs';
 import { snapshotScroll } from './lib/snapshot-scroll.mjs';
 import { downloadImages } from './lib/download_images.mjs';
 
@@ -182,18 +182,14 @@ async function main() {
   let browser;
   try {
     browser = await chromium.launch({ headless: true, ...proxyLaunchOptions() });
-    // storageState 存在则注入：live 重渲染与图片 CDN 常与页面同登录态
-    const ctxOpts = {
-      viewport: { width: 1280, height: 3000 },
-      deviceScaleFactor: 2, // 原生 2x 截图
-      bypassCSP: true,
-    };
+    // storageState 存在则注入：live 重渲染与图片 CDN 常与页面同登录态；
+    // deviceScaleFactor 2 → 原生 2x 截图；UA/指纹门禁由 newU2MContext 统一处理
     const ssPath = storageStatePath();
-    if (fs.existsSync(ssPath)) ctxOpts.storageState = ssPath;
-    const context = await browser.newContext(ctxOpts);
-    await context.route('**/*', (route) =>
-      route.request().resourceType() === 'media' ? route.abort() : route.continue());
-    await context.addInitScript({ content: pageInitSrc });
+    const context = await newU2MContext(browser, {
+      deviceScaleFactor: 2,
+      storageState: fs.existsSync(ssPath) ? ssPath : undefined,
+      initScripts: [pageInitSrc],
+    });
 
     // ── 图片下载：成功条目把 resolved skeleton 改写为本地相对路径后重写文件 ──
     let images = 0;
