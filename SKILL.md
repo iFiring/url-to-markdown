@@ -104,13 +104,22 @@ node <skill-root>/script/clean_snapshot.mjs --url <url>
 
 ### 步骤 3 · 你负责关键 ID 识别
 
-**有子智能体时优先把任务交给子智能体**
+#### 要求
 
-读取 `<url-working-path>/2_clean_snapshot.html`。你的任务：这是**一篇文章**，仅根据 DOM 结构（元素层级、标签类型、嵌套深度）和长文本占位符（`{{LONG_TEXT_k|n_chars}}` / `{{LONG_TEXT_k|n_words}}`）分布，找到以下三类关键元素的 `data-u2m-id`：
+- **可调用子智能体时，优先把任务交给子智能体**
 
-1. **标题分块**（`titleIds`）：文章主标题对应的元素 ID。通常是层级最高的 `<h1>`-`<h3>` 或结构上处于列表流顶部的标题性容器
-2. **说明分块**（`descriptionIds`）：描述性元数据对应的元素 ID，如作者、日期、摘要、副标题等。可为空数组
-3. **列表流**（`listFlowIds`）：文章主体区域的父容器 ID。列表流是包含多个子块（段落、图片、代码块等）的最外层容器，可能有多个
+#### 任务
+
+- 读取 `<url-working-path>/2_clean_snapshot.html`
+
+- 这是**一篇文章页面**，仅根据 `2_clean_snapshot.html` 的 DOM 结构（元素层级、标签类型、class 名称）和长文本占位符（`{{LONG_TEXT_k|n_chars}}` / `{{LONG_TEXT_k|n_words}}`）分布，找到以下三类关键元素的 `data-u2m-id`：
+
+  1. **标题分块**（`titleIds`）：文章主标题对应的元素 ID。通常是层级最高的 `<h1>`-`<h3>` 或结构上处于列表流顶部的标题性容器
+  2. **说明分块**（`descriptionIds`）：描述性元数据对应的元素 ID，如作者、日期、摘要、副标题等。可为空数组
+  3. **列表流**（`listFlowIds`）：文章主体区域的父容器 ID。列表流是包含多个子块（段落、图片、代码块等）的最外层容器，可能有多个
+
+- `data-u2m-hidden="N_chars"`（或 `N_chars,fixed`）标记：折叠的隐藏子树（模态/抽屉/折叠展开区/响应式隐藏）。根元素的 `data-u2m-id` 可正常引用——原文完整保留在带样式版，纳入 listFlowIds 即可还原全文；值是该子树的真实文本规模，可据此判断是否值得纳入
+- `<pre>` 内的 `code...`：代码块内容占位。完整代码在后续步骤保真，识别时把 pre 当作一个结构单元即可
 
 **约束**：
 - **必须排除**菜单、导航、广告等不属于三类关键元素的元素
@@ -121,13 +130,43 @@ node <skill-root>/script/clean_snapshot.mjs --url <url>
 - 如果找不到明确的标题或说明元素，对应数组可为空
 - 列表流至少选一个——它是后续分块的根容器
 
-将结果写入 `<url-working-path>/3_key_ids.json`：
 
+- `2_clean_snapshot.html` 结构示例：
+
+> `data-u2m-id` 的生成是在 DOM 树中自上而下的，titleIds 和 descriptionIds 都在在 listFlowIds 之后则是内部，则不应该有值
+
+```html
+<html>
+<body id="xxx" class="xxx">
+  <div data-u2m-id="1" class="xxx">
+    <p data-u2m-id="2">
+      <h1 data-u2m-id="3">Title...</h1>
+    </p>
+  </div>
+  <div data-u2m-id="4" class="xxx">
+    <section data-u2m-id="5" class="article">
+      <div data-u2m-id="6">
+        <h2 data-u2m-id="7">... </h2>
+        <p data-u2m-id="8">... </p>
+      </div>
+      <div data-u2m-id="9">
+        <h2 data-u2m-id="10">... </h2>
+        <code data-u2m-id="11">... </code>
+      </div>
+    </section>
+    <div data-u2m-id="12" class="ad">Ad...</div>
+    <section data-u2m-id="13" class="article">...</section>
+  </div>
+</body>
+</html>
+```
+
+- 输出 `<url-working-path>/3_key_ids.json`，格式（按照示例 html）：
 ```json
 {
-  "titleIds": [1],
-  "descriptionIds": [2, 3],
-  "listFlowIds": [4, 5]
+  "titleIds": [3],
+  "descriptionIds": [0],
+  "listFlowIds": [5, 13]
 }
 ```
 
@@ -174,7 +213,7 @@ node <skill-root>/script/extract_article.mjs --url <url>
 
 ### 步骤 7 · 你负责 markdown 骨架生成
 
-**有子智能体时优先把任务交给子智能体**
+**可调用子智能体时，优先把任务交给子智能体**
 
 读取 `<url-working-path>/6_article.html`。你的任务：把文章视图转换成一份 **markdown 骨架**——数组按文档序排列，每项一个单键对象，key 是语义标签，value 是该块的内容模板。长文本只引用占位编号、一字不抄，正文回填由后续脚本完成。
 

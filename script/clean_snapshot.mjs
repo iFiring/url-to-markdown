@@ -9,7 +9,8 @@
  * 用法:
  *   node clean_snapshot.mjs --url <url>
  *
- * 共同清洗（两版一致；实现在 lib/page-clean-snapshot.js，按执行序编号 1-13）：
+ * 共同清洗（两版一致；实现在 lib/page-clean-snapshot.js，按执行序编号 1-19，
+ *   其中 14-19 为清洗版六规则瘦身、仅作用于清洗版）：
  *   【整体删除】与正文结构无关的噪声，连子树一起删：
  *     - 文档级噪声：link / meta / base（title 保留，作步骤 3 识别线索）
  *     - 按钮类控件：button、[role="button"]、按钮型 input[type=button|submit|reset]
@@ -33,6 +34,13 @@
  *   - 带样式版：保留 style 属性与 <style> 标签，SVG 瘦身为壳
  *     （仅留 id/class/data-u2m-id）
  *   - 清洗版：删 style 属性与 <style> 标签，SVG 剥成裸 <svg></svg> 壳
+ *
+ * 清洗版六规则瘦身（步骤 14-19，仅清洗版；带样式版与步骤 4-9 不受影响）：
+ *   R2 class 噪声过滤、R3 data-* 白名单、R1 pre→code...、R4 astro 解包、
+ *   R5 保守空白压缩、R6 隐藏子树折叠为 data-u2m-hidden 标记（统一折叠不删除，
+ *   根元素 data-u2m-id 仍可引用）。R6 隐藏判定走 juice 级联检测管线四阶段
+ *   （A 规范化 → B juice 内联 → C 页内检测 → D 清洗，任一失败降级为不折叠），
+ *   另有雪崩护栏：折叠后可见文本占比过低时放弃折叠并告警。
  *
  * 长文本占位（两版编号逐一对应；纯空白文本与 svg/style 子树文本不占位）：
  *   中文（含汉字）字符数 > 16 → {{LONG_TEXT_k|n_chars}}
