@@ -108,12 +108,12 @@ node <skill-root>/script/clean_snapshot.mjs --url <url>
 
 #### 任务
 
-这是**一篇文章页面**， 读取 `<url-working-path>/2_clean_snapshot.html` 的 DOM 结构（元素层级、标签类型、class 名称）和长文本占位符（`{{LONG_TEXT_k|...}}`）分布，找到以下三类关键元素的 `data-u2m-id`：
+这是**一篇文章页面**， 读取 `<url-working-path>/2_clean_snapshot.html` 的 DOM 结构（元素层级、标签类型、class 名称）和长文本占位符（`{{LONG_TEXT_k|...}}`）分布，找到以下三类关键元素与列表流噪音的 `data-u2m-id`：
 
   1. **列表流**（`listFlowIds`）：文章主体段落的父容器 ID。列表流是包含多个子块（段落、图片、代码块等）的最外层容器；可能有多个，但**至少有一个**
   2. **标题分块**（`titleIds`）：文章主标题对应的元素 ID。通常是层级最高的 `<h1>`-`<h3>` 或结构上处于列表流顶部的标题性容器；可为空数组（在 `listFlowIds` 内）
   3. **说明分块**（`descriptionIds`）：描述性元数据对应的元素 ID，如作者、日期、摘要、副标题等；可为空数组（在 `listFlowIds` 内；不存在）
-  4. **列表流噪音**（`listFlowDeleteIds`）：列表流的噪音：菜单、导航、广告、推荐；**必须确定不属于文章内容**，不确定不能带上
+  4. **列表流噪音**（`listFlowDeleteIds`）：列表流**之内**的噪音：菜单、导航、广告、推荐，步骤 6 提取时整棵剔除；**必须确定不属于文章内容**，不确定不能带上。列表流之外的噪音无需标记（不在任何 key 元素子树内，步骤 4 自然裁掉）
 
 **约束**
 
@@ -133,7 +133,7 @@ node <skill-root>/script/clean_snapshot.mjs --url <url>
 <body>
   <div data-u2m-id="1" class="xxx">
     <h1 data-u2m-id="2">
-      <!-- 全局唯一标题 listFlowIds[3] -->
+      <!-- 全局唯一标题 titleIds[3] -->
       <span data-u2m-id="3">Title...</span>
     </h1>
   </div>
@@ -146,16 +146,19 @@ node <skill-root>/script/clean_snapshot.mjs --url <url>
         <h2 data-u2m-id="7">Author:</h2>
         <span data-u2m-id="8">Name...</span>
       </div>
-      <!-- 列表流噪音 listFlowDeleteIds[9] -->
+      <!-- 列表流噪音 listFlowDeleteIds[9]：列表流之内 → 必须标记 -->
       <div data-u2m-id="9" class="ad">Ad...</div>
       <p data-u2m-id="10">
         <h2 data-u2m-id="11">...</h2>
         <code data-u2m-id="12">...</code>
       </p>
     </section>
-    <div data-u2m-id="9" class="ad">Ad...</div>
+    <!-- 列表流之外的广告无需标记——不在任何 key 元素子树内，步骤 4 自然裁掉 -->
     <!-- 列表流 listFlowIds[13] -->
-    <section data-u2m-id="13" class="article">div.h1 / p.span / h2.span</section>
+    <section data-u2m-id="13" class="article">
+      <div data-u2m-id="14"><h1 data-u2m-id="15">Section...</h1></div>
+      <p data-u2m-id="16"><span data-u2m-id="17">...</span></p>
+    </section>
   </div>
 </body>
 </html>
@@ -267,27 +270,19 @@ node <skill-root>/script/extract_article.mjs --url <url>
 
 ```html
 <html>
-<body>
-  <div data-u2m-id="1" class="xxx">
-    <h1 data-u2m-id="2">
-      <span data-u2m-id="3">Title...</span>
-    </h1>
+<head><title>...</title></head>
+<body style="max-width: 768px; margin: 4rem auto">
+  <span data-u2m-id="3">Title...</span>
+  <div data-u2m-id="6">
+    <h2 data-u2m-id="7">Author:</h2>
+    <span data-u2m-id="8">Name...</span>
   </div>
-  <div data-u2m-id="4" class="xxx">
-    <section data-u2m-id="5" class="article">
-      <div data-u2m-id="6">
-        <h2 data-u2m-id="7">Author:</h2>
-        <span data-u2m-id="8">Name...</span>
-      </div>
-      <div data-u2m-id="9" class="ad">Ad...</div>
-      <p data-u2m-id="10">
-        <h2 data-u2m-id="11">...</h2>
-        <code data-u2m-id="12">...</code>
-      </p>
-    </section>
-    <div data-u2m-id="9" class="ad">Ad...</div>
-    <section data-u2m-id="13" class="article">div.h1 / p.span / h2.span</section>
-  </div>
+  <p data-u2m-id="10">
+    <h2 data-u2m-id="11">...</h2>
+    <code data-u2m-id="12">...</code>
+  </p>
+  <div data-u2m-id="14"><h1 data-u2m-id="15">Section...</h1></div>
+  <p data-u2m-id="16"><span data-u2m-id="17">...</span></p>
 </body>
 </html>
 ```

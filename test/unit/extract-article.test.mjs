@@ -156,6 +156,55 @@ test('extract_article.mjs: 纯空白文本与注释不迁入', async () => {
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
+test('extract_article.mjs: listFlowDeleteIds 噪音为 flow 直接子元素时剔除', async () => {
+  const noise = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>噪音</title></head><body><h1 data-u2m-id="1">标题</h1><div data-u2m-id="4"><p data-u2m-id="5">段落</p><div class="ad" data-u2m-id="9">广告</div><p data-u2m-id="10">尾段</p></div></body></html>`;
+  const { tmpRoot, urlDir } = setupTmp('del-child', { titleIds: [1], descriptionIds: [], listFlowIds: [4], listFlowDeleteIds: [9] });
+  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), noise);
+  const script = path.resolve('script/extract_article.mjs');
+  const r = await runScript(process.execPath, [script, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+  assert.equal(out.elementCount, 3, '应提取 3 个元素（h1/p5/p10），噪音已剔');
+  assert.equal(out.removedNoiseCount, 1, '应报告剔除 1 个噪音');
+
+  const html = fs.readFileSync(out.article, 'utf8');
+  assert.ok(!html.includes('data-u2m-id="9"'), '噪音元素应不入文章视图');
+  assert.ok(!html.includes('广告'), '噪音内容应不入文章视图');
+  assert.ok(html.includes('<p data-u2m-id="5">段落</p>'), '噪音前的正文应保留');
+  assert.ok(html.includes('<p data-u2m-id="10">尾段</p>'), '噪音后的正文应保留');
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test('extract_article.mjs: 噪音嵌在迁移子元素内部时整棵剔除、外层保留', async () => {
+  const nested = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>嵌套噪音</title></head><body><h1 data-u2m-id="1">标题</h1><div data-u2m-id="4"><section data-u2m-id="5"><p data-u2m-id="6">正文</p><div class="ad" data-u2m-id="9">广告<em data-u2m-id="99">词</em></div></section></div></body></html>`;
+  const { tmpRoot, urlDir } = setupTmp('del-nested', { titleIds: [1], descriptionIds: [], listFlowIds: [4], listFlowDeleteIds: [9] });
+  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), nested);
+  const script = path.resolve('script/extract_article.mjs');
+  const r = await runScript(process.execPath, [script, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+  assert.equal(out.elementCount, 2, '应提取 2 个元素（h1/section5），孙代噪音不计数');
+  assert.equal(out.removedNoiseCount, 1);
+
+  const html = fs.readFileSync(out.article, 'utf8');
+  assert.ok(html.includes('<section data-u2m-id="5">'), '噪音的外层容器应保留');
+  assert.ok(html.includes('<p data-u2m-id="6">正文</p>'), '噪音兄弟正文应保留');
+  assert.ok(!html.includes('data-u2m-id="9"'), '噪音子树根应剔除');
+  assert.ok(!html.includes('data-u2m-id="99"'), '噪音后代应整棵剔除');
+  assert.ok(!html.includes('广告'), '噪音内容应剔除');
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
 test('extract_article.mjs: key id 未命中时报 error 并列出缺失 id', async () => {
   const { tmpRoot, urlDir } = setupTmp('miss', { titleIds: [1], descriptionIds: [99], listFlowIds: [4] });
   const script = path.resolve('script/extract_article.mjs');
@@ -168,6 +217,36 @@ test('extract_article.mjs: key id 未命中时报 error 并列出缺失 id', asy
   assert.equal(out.status, 'error');
   assert.ok(out.reason.includes('99'), `reason 应含缺失 id: ${out.reason}`);
   assert.ok(!fs.existsSync(path.join(tmpRoot, 'test-article', '6_article.html')), '失败不应写产物');
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test('extract_article.mjs: listFlowDeleteIds 未命中时报 error 且不写产物', async () => {
+  const { tmpRoot, urlDir } = setupTmp('del-miss', { titleIds: [1], descriptionIds: [], listFlowIds: [4], listFlowDeleteIds: [99] });
+  const script = path.resolve('script/extract_article.mjs');
+  const r = await runScript(process.execPath, [script, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 1);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'error');
+  assert.ok(out.reason.includes('99'), `reason 应含缺失 id: ${out.reason}`);
+  assert.ok(!fs.existsSync(path.join(urlDir, '6_article.html')), '失败不应写产物');
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test('extract_article.mjs: listFlowDeleteIds 与 key id 重叠时报 error', async () => {
+  const { tmpRoot } = setupTmp('del-overlap', { titleIds: [1], descriptionIds: [], listFlowIds: [4], listFlowDeleteIds: [1] });
+  const script = path.resolve('script/extract_article.mjs');
+  const r = await runScript(process.execPath, [script, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 1);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'error');
+  assert.ok(out.reason.includes('listFlowDeleteIds'), `reason 应指向 listFlowDeleteIds: ${out.reason}`);
+  assert.ok(out.reason.includes('重叠'), `reason 应说明重叠: ${out.reason}`);
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 

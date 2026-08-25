@@ -12,13 +12,15 @@
  *   - listFlowIds：遍历各容器子节点，元素与非空白裸文本按文档序交错迁入
  *     ——裸文本没有 data-u2m-id 但可能是未包标签的正文，丢弃即内容损失；
  *     纯空白文本与注释不迁；flow 容器本身与祖先骨架不入新 html
+ *   - listFlowDeleteIds：列表流噪音（菜单/导航/广告/推荐），迁移完成后
+ *     按 id 在新 body 里整棵剔除（不限深度）；与 key id 重叠或未命中报 error
  *   - 去重：同一元素被指名两次（如 description 同时是 flow 子元素）只出现一次
  *   - head：保留原文 <title>；<html lang> 照抄
  *   - 新 <body> 带阅读布局内联样式 max-width: 768px; margin: 4rem auto
  *     （限宽、水平居中）
  *
  * stdout 输出（有且仅有一行 JSON，日志一律走 stderr）:
- *   {"status":"ok","article":"...","elementCount":N}  → 退出码 0
+ *   {"status":"ok","article":"...","elementCount":N,"removedNoiseCount":M} → 0
  *   {"status":"error","reason":"..."}                 → 1
  *
  * 退出码: 0 成功；1 失败；2 参数错误。
@@ -67,7 +69,21 @@ async function main() {
   if (!Array.isArray(keyIds.listFlowIds) || keyIds.listFlowIds.length === 0) {
     return emitError('listFlowIds 为空（步骤 3 要求至少选一个列表流），请重跑步骤 3');
   }
-  debug(`key_ids: title=${keyIds.titleIds?.length ?? 0} desc=${keyIds.descriptionIds?.length ?? 0} flow=${keyIds.listFlowIds.length}`);
+  // 噪音 id 与 key id 重叠是自相矛盾的输入（同一元素既是标题/说明/列表流
+  // 又是噪音）——提前拦截，防止步骤 6 把 key 元素静默剔掉
+  const keyIdSet = new Set([
+    ...(keyIds.titleIds || []),
+    ...(keyIds.descriptionIds || []),
+    ...keyIds.listFlowIds,
+  ]);
+  const deleteIds = Array.isArray(keyIds.listFlowDeleteIds) ? keyIds.listFlowDeleteIds : [];
+  const overlap = deleteIds.filter((id) => keyIdSet.has(id));
+  if (overlap.length > 0) {
+    return emitError(
+      `listFlowDeleteIds 与 key id 重叠: ${overlap.join(', ')}（同一元素不能既是关键元素又是噪音，请重跑步骤 3）`
+    );
+  }
+  debug(`key_ids: title=${keyIds.titleIds?.length ?? 0} desc=${keyIds.descriptionIds?.length ?? 0} flow=${keyIds.listFlowIds.length} delete=${deleteIds.length}`);
 
   const pageExtractFn = await readSharedScript('page-extract-article.js');
 
@@ -95,7 +111,7 @@ async function main() {
 
     const articlePath = path.join(dir, '6_article.html');
     await fsPromises.writeFile(articlePath, result.html, 'utf8');
-    log(`文章视图提取完成: ${articlePath} (${result.count} 个元素)`);
+    log(`文章视图提取完成: ${articlePath} (${result.count} 个元素, 剔除噪音 ${result.removedNoise} 个)`);
 
     // 先关浏览器再 emit
     await context.close();
@@ -105,6 +121,7 @@ async function main() {
       status: 'ok',
       article: articlePath,
       elementCount: result.count,
+      removedNoiseCount: result.removedNoise,
     });
   } catch (e) {
     await browser?.close().catch(() => {});
