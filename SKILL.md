@@ -104,6 +104,8 @@ node <skill-root>/script/clean_snapshot.mjs --url <url>
 
 ### 步骤 3 · 你负责关键 ID 识别
 
+**有子智能体时优先把任务交给子智能体**
+
 读取 `<url-working-path>/2_clean_snapshot.html`。你的任务：这是**一篇文章**，仅根据 DOM 结构（元素层级、标签类型、嵌套深度）和长文本占位符（`{{LONG_TEXT_k|n_chars}}` / `{{LONG_TEXT_k|n_words}}`）分布，找到以下三类关键元素的 `data-u2m-id`：
 
 1. **标题分块**（`titleIds`）：文章主标题对应的元素 ID。通常是层级最高的 `<h1>`-`<h3>` 或结构上处于列表流顶部的标题性容器
@@ -171,6 +173,8 @@ node <skill-root>/script/extract_article.mjs --url <url>
 | `error` | 把 `stdout.reason` 反馈给用户并终止 |
 
 ### 步骤 7 · 你负责 markdown 骨架生成
+
+**有子智能体时优先把任务交给子智能体**
 
 读取 `<url-working-path>/6_article.html`。你的任务：把文章视图转换成一份 **markdown 骨架**——数组按文档序排列，每项一个单键对象，key 是语义标签，value 是该块的内容模板。长文本只引用占位编号、一字不抄，正文回填由后续脚本完成。
 
