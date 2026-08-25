@@ -517,3 +517,23 @@ test('R2: class 噪声过滤——工具/哈希 token 剥除，语义 token 保�
     assert.ok(styled.includes('astro-3ef6ksr2') && styled.includes('h-[30rem]'), '带样式版保留原始 class');
   } finally { cleanup(); }
 });
+
+test('R3: data-* 白名单——噪声 data 属性删除，data-u2m-id/data-language 保留', async () => {
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-u2m-id="1">
+    <div data-u2m-id="2" data-1p-ignore="true" data-copy-ignore="true" data-syntax-highlighter-id="_r104R_9dd_" tabindex="0" data-language="javascript" aria-label="x">正文</div>
+  </div>
+</body></html>`;
+  const { cleaned, styled, cleanup } = await runClean(snapshot, 'r3-data');
+  try {
+    const div = cleaned.match(/<div data-u2m-id="2"[^>]*>/)[0];
+    assert.ok(!div.includes('data-1p-ignore'), '噪声 data 属性应删除');
+    assert.ok(!div.includes('data-copy-ignore'), '噪声 data 属性应删除');
+    assert.ok(!div.includes('data-syntax-highlighter-id'), '噪声 data 属性应删除');
+    assert.ok(div.includes('data-language="javascript"'), 'data-language 应保留');
+    assert.ok(div.includes('data-u2m-id="2"') && div.includes('aria-label'), 'data-u2m-id 与 aria 保留');
+    assert.ok(styled.includes('data-1p-ignore'), '带样式版不受影响');
+  } finally { cleanup(); }
+});

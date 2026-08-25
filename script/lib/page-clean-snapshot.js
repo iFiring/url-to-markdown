@@ -240,6 +240,20 @@ function __u2mCleanSnapshot(cfg) {
     else el.removeAttribute('class');
   }
 
+  // 15. R3 data-* 白名单（仅清洗版）：清洗版只留 data-u2m-id / data-language /
+  //     data-u2m-hidden（R6 折叠标记）；其余 data-* 全是埋点/框架噪声。
+  var DATA_KEEP = { 'data-u2m-id': 1, 'data-language': 1, 'data-u2m-hidden': 1 };
+  var allEls = document.querySelectorAll('*');
+  for (var i = 0; i < allEls.length; i++) {
+    var el2 = allEls[i];
+    var names = [];
+    for (var j = 0; j < el2.attributes.length; j++) names.push(el2.attributes[j].name);
+    for (var j = 0; j < names.length; j++) {
+      var nm = names[j].toLowerCase();
+      if (nm.indexOf('data-') === 0 && !DATA_KEEP[nm]) el2.removeAttribute(names[j]);
+    }
+  }
+
   return {
     html: '<!DOCTYPE html>\n' + document.documentElement.outerHTML,
     styledHtml: styledHtml,
