@@ -660,3 +660,51 @@ test('R6: display:none !important 同样折叠——行内 style 属性的 !impo
     assert.ok(Object.values(longTexts).includes(hardLong), '恢复清单含硬隐藏区原文');
   } finally { cleanup(); }
 });
+
+test('护栏: 折叠后可见文本 <5% 且总量充足 → 放弃折叠并告警；visibility 翻案语义', async () => {
+  const gated = '门'.repeat(2100); // 折叠区 2100 字
+  const visLong = '外'.repeat(60);
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title>
+<style>.gate{display:none}.vis{visibility:hidden}.reshow{visibility:visible}</style>
+</head>
+<body>
+  <div data-u2m-id="1">
+    <div data-u2m-id="2" class="gate"><p data-u2m-id="3">${gated}</p></div>
+    <p data-u2m-id="4">${visLong}</p>
+    <div data-u2m-id="5" class="vis">可见性隐藏祖先<span data-u2m-id="6" class="reshow">翻案后代</span></div>
+  </div>
+</body></html>`;
+  const { cleaned, stderr, cleanup } = await runClean(snapshot, 'r6-guard', { U2M_DEBUG: '1' });
+  try {
+    // 可见文本 ≈ 60 字 vs 折叠 2100 字 → 护栏触发：内容原样保留在清洗版
+    // The gated content should be preserved as a placeholder (not folded away)
+    assert.ok(cleaned.includes('{{LONG_TEXT'), '护栏触发后折叠区内容应作为占位符保留');
+    assert.ok(cleaned.includes('|2100_chars}}'), '应保留折叠区长文本占位符');
+    assert.ok(!/data-u2m-hidden="/.test(cleaned), '不应产生折叠标记');
+    assert.ok(stderr.includes('护栏') || stderr.includes('雪崩'), `stderr 应含护栏告警: ${stderr.slice(-300)}`);
+  } finally { cleanup(); }
+});
+
+test('R6 语义: visibility:hidden 顶层折叠、visible 后代翻案仅入带样式版（已知边界）', async () => {
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title>
+<style>.vis{visibility:hidden}</style>
+</head>
+<body>
+  <div data-u2m-id="1">
+    <div data-u2m-id="5" class="vis">可见性隐藏祖先<span data-u2m-id="6" style="visibility:visible">翻案后代</span></div>
+    <p data-u2m-id="7">正文正文正文正文正文正文正文正文正文正文正文正文</p>
+  </div>
+</body></html>`;
+  const { cleaned, styled, cleanup } = await runClean(snapshot, 'r6-vis');
+  try {
+    // .vis 顶层折叠：标记存在、文本消失（翻案后代随根折叠——spec 已记边界）
+    const root = cleaned.match(/<div data-u2m-id="5"[^>]*>/)[0];
+    assert.ok(/data-u2m-hidden="\d+_chars"/.test(root), `visibility 顶层应折叠: ${root}`);
+    assert.ok(!cleaned.includes('可见性隐藏祖先'), '折叠根文本应消失');
+    // 带样式版完整
+    assert.ok(styled.includes('翻案后代') && styled.includes('可见性隐藏祖先'), '带样式版完整保留');
+  } finally { cleanup(); }
+});
+

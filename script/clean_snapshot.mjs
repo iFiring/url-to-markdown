@@ -109,8 +109,16 @@ async function main() {
       try {
         await page2.setContent(juiced, { waitUntil: 'domcontentloaded' });
         const detect = await page2.evaluate(`(${hiddenFn})()`);
-        hidden = detect.items;
-        debug(`[clean] 检测到 ${hidden.length} 个隐藏子树`);
+        // 雪崩护栏：juiced DOM 上折叠后可见文本占比 <5% 且折叠前文本充足（≥2000
+        // 非空白字符）→ 本轮放弃折叠（整页被 cookie 墙 display:none 类极端页面）
+        const visibleChars = detect.totalChars - detect.hiddenChars;
+        if (detect.totalChars >= 2000 && visibleChars < detect.totalChars * 0.05) {
+          debug(`[clean] 雪崩护栏：折叠后可见文本 ${visibleChars}/${detect.totalChars} 字符，放弃折叠`);
+          hidden = [];
+        } else {
+          hidden = detect.items;
+          debug(`[clean] 检测到 ${hidden.length} 个隐藏子树`);
+        }
       } finally {
         await page2.close();
       }
