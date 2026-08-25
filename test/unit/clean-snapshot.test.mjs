@@ -9,6 +9,7 @@ import { urlToDirName } from '../../script/lib/env.mjs';
 
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
 const scriptPath = path.resolve(thisDir, '../../script/lib/page-clean-snapshot.js');
+const hiddenDetectPath = path.resolve(thisDir, '../../script/lib/page-hidden-detect.js');
 
 /** 瘦身规则测试基座：手写 1_snapshot 夹具 → 子进程跑真 clean_snapshot.mjs → 读回两版产物。 */
 async function runClean(snapshot, urlPath = 'slim-article', env = {}) {
@@ -49,6 +50,12 @@ test('page-clean-snapshot.js: 函数可被 evaluate 格式调用', () => {
   const src = fs.readFileSync(scriptPath, 'utf8');
   const wrapped = `(${src})()`;
   assert.doesNotThrow(() => new Function('return ' + wrapped));
+});
+
+test('page-hidden-detect.js: 文件存在且 __u2mDetectHidden 可被 evaluate 格式调用', () => {
+  const src = fs.readFileSync(hiddenDetectPath, 'utf8');
+  assert.ok(src.includes('function __u2mDetectHidden'), '应定义 __u2mDetectHidden');
+  assert.doesNotThrow(() => new Function('return (' + src + ')()'));
 });
 
 test('clean_snapshot.mjs: 无参数时输出 usage_error', async () => {
@@ -585,5 +592,42 @@ test('R4+R5: astro 包装解包；安全位置空白删除、行内间空白保�
     const inline = cleaned.match(/<p data-u2m-id="9">([\s\S]*?)<\/p>/)[1];
     assert.ok(inline.includes('x <a') && inline.includes('> z'), `行内间空白应保留: ${JSON.stringify(inline)}`);
     assert.ok(styled.includes('<astro-island'), '带样式版不受影响');
+  } finally { cleanup(); }
+});
+
+test('R6: juice 隐藏折叠——fixed 模态与流内 expander 折成标记，var() 按可见，带样式版/占位清单完整', async () => {
+  const hiddenLong = '这是一段藏在折叠区里的超长中文文本内容，用来验证占位符只在带样式版出现。'; // >16 字 → 占位
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title>
+<style>.modal{display:none;position:fixed}.expn{display:none}.keepvar{display:var(--x)}</style>
+</head>
+<body>
+  <div data-u2m-id="1">
+    <div data-u2m-id="2" class="modal"><p data-u2m-id="3">模态内容模态内容</p></div>
+    <div data-u2m-id="4" class="expn"><p data-u2m-id="5">${hiddenLong}</p></div>
+    <div data-u2m-id="6" class="keepvar">按可见处理</div>
+    <p data-u2m-id="7">正文段落</p>
+  </div>
+</body></html>`;
+  const { out, cleaned, styled, cleanup } = await runClean(snapshot, 'r6-hidden');
+  try {
+    // 折叠标记：fixed 带 ,fixed 后缀，流内不带
+    const modal = cleaned.match(/<div data-u2m-id="2"[^>]*>/)[0];
+    assert.ok(/data-u2m-hidden="\d+_chars,fixed"/.test(modal), `模态应折成 fixed 标记: ${modal}`);
+    const expn = cleaned.match(/<div data-u2m-id="4"[^>]*>/)[0];
+    assert.ok(/data-u2m-hidden="\d+_chars"/.test(expn) && !/fixed/.test(expn), `expander 应折成无 fixed 标记: ${expn}`);
+    // 子树内容与内部 id 从清洗版消失
+    assert.ok(!cleaned.includes('模态内容') && !cleaned.includes('data-u2m-id="3"') && !cleaned.includes('data-u2m-id="5"'), '折叠子树内容应消失');
+    // var() 不可解析 → 按可见处理
+    assert.ok(cleaned.includes('按可见处理') && cleaned.includes('data-u2m-id="6"'), 'var() 值按可见保留');
+    assert.ok(cleaned.includes('正文段落'), '可见正文保留');
+    // 带样式版完整保真
+    assert.ok(styled.includes('模态内容') && styled.includes('data-u2m-id="3"'), '带样式版模态内容完整');
+    assert.ok(styled.includes('{{LONG_TEXT_'), '带样式版含折叠区长文本占位符');
+    // 占位符语义分叉：清洗版折叠区占位符消失，但 2_long_text.json 完整
+    assert.ok(!cleaned.includes('{{LONG_TEXT_'), '清洗版不应含折叠区长文本占位符');
+    const longTexts = JSON.parse(fs.readFileSync(out.longText, 'utf8'));
+    assert.ok(Object.values(longTexts).includes(hiddenLong), '恢复清单含折叠区原文');
+    assert.equal(out.longTextCount, 1, '折叠区长文本仍计数占位');
   } finally { cleanup(); }
 });

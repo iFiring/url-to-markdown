@@ -49,6 +49,7 @@ import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import juice from 'juice';
 import { emit, emitError, usage, log, debug } from './lib/contract.mjs';
 import { urlDir } from './lib/env.mjs';
 import { readSharedScript } from './lib/placeholder.mjs';
@@ -83,6 +84,8 @@ async function main() {
   debug(`读入快照 ${snapshotPath}（${fs.statSync(snapshotPath).size} 字节）`);
 
   const pageCleanFn = await readSharedScript('page-clean-snapshot.js');
+  const normalizeFn = await readSharedScript('page-normalize-styles.js');
+  const hiddenFn = await readSharedScript('page-hidden-detect.js');
 
   let browser;
   try {
@@ -90,11 +93,33 @@ async function main() {
     const context = await newU2MContext(browser);
     const page = await context.newPage();
 
-    // 打开快照文件
+    // 阶段 A：加载快照 + style 属性字符串规范化（防 juice 引号改写损毁声明，
+    // 机制见 page-normalize-styles.js 头注；页 1 DOM 保持规范化态供阶段 D 复用）
     await page.goto(`file://${snapshotPath}`, { waitUntil: 'domcontentloaded' });
+    const htmlNorm = await page.evaluate(`(${normalizeFn})()`);
 
-    // 执行清洗
-    const result = await page.evaluate(`(${pageCleanFn})()`);
+    // 阶段 B+C：juice 级联内联 → 页 2 检测隐藏子树。任何失败都降级为「不折叠」
+    // （失败方向安全：清洗版变大，正文与带样式版不受影响），不阻断步骤 2。
+    let hidden = [];
+    try {
+      const t0 = performance.now();
+      const juiced = juice(htmlNorm, { removeStyleTags: true, decodeStyleAttributes: true });
+      debug(`juice 内联 ${((performance.now() - t0) / 1000).toFixed(2)}s（${juiced.length} 字节）`);
+      const page2 = await context.newPage();
+      try {
+        await page2.setContent(juiced, { waitUntil: 'domcontentloaded' });
+        const detect = await page2.evaluate(`(${hiddenFn})()`);
+        hidden = detect.items;
+        debug(`[clean] 检测到 ${hidden.length} 个隐藏子树`);
+      } finally {
+        await page2.close();
+      }
+    } catch (e) {
+      debug(`隐藏检测失败，跳过折叠: ${e.message}`);
+    }
+
+    // 阶段 D：清洗（页 1，规范化态 DOM；hidden 随 cfg 传入）
+    const result = await page.evaluate(`(${pageCleanFn})(${JSON.stringify({ hidden })})`);
 
     // 写盘
     const cleanedPath = path.join(dir, '2_clean_snapshot.html');

@@ -301,6 +301,19 @@ function __u2mCleanSnapshot(cfg) {
   }
   for (var i = 0; i < wsNodes.length; i++) wsNodes[i].parentNode.removeChild(wsNodes[i]);
 
+  // 19. R6 隐藏子树折叠（仅清洗版）：cfg.hidden = 检测管线的 items。统一折叠、
+  //     不删除——根元素保留 data-u2m-id（步骤 3 仍可引用，步骤 6 从带样式版取
+  //     全文）；折叠发生在共享占位之后，占位符只从清洗版消失、恢复清单完整。
+  //     应用容忍目标已被前序清洗删除（nav 内隐藏块等）——跳过。
+  var collapse = Array.isArray(cfg.hidden) ? cfg.hidden : [];
+  for (var i = 0; i < collapse.length; i++) {
+    var ent = collapse[i];
+    var target = document.querySelector('[data-u2m-id="' + ent.id + '"]');
+    if (!target || !document.body.contains(target)) continue;
+    while (target.firstChild) target.removeChild(target.firstChild);
+    target.setAttribute('data-u2m-hidden', ent.chars + '_chars' + (ent.fixed ? ',fixed' : ''));
+  }
+
   return {
     html: '<!DOCTYPE html>\n' + document.documentElement.outerHTML,
     styledHtml: styledHtml,
