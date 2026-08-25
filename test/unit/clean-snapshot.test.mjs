@@ -661,6 +661,33 @@ test('R6: display:none !important 同样折叠——行内 style 属性的 !impo
   } finally { cleanup(); }
 });
 
+test('R6: HTML hidden 属性按显式 display:none 折叠——无 style 属性/无 <style> 规则也生效', async () => {
+  // hidden 属性本身即「不渲染」声明（HTML 规范）；其 UA/preflight 规则
+  // （如 [hidden]:where(:not([hidden=until-found]))）juice 无法内联，
+  // 检测器须在侧直接认定，否则纯 hidden 子树（移动端菜单等）全部漏折叠
+  const attrLong = '这是一段仅靠 hidden 属性隐藏的超长中文文本，验证无任何样式规则也照常折叠。';
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title>
+</head>
+<body>
+  <div data-u2m-id="1">
+    <div data-u2m-id="2" hidden=""><p data-u2m-id="3">${attrLong}</p></div>
+    <p data-u2m-id="4">正文段落</p>
+  </div>
+</body></html>`;
+  const { out, cleaned, styled, cleanup } = await runClean(snapshot, 'r6-hidden-attr');
+  try {
+    const hid = cleaned.match(/<div data-u2m-id="2"[^>]*>/)[0];
+    assert.ok(/data-u2m-hidden="\d+_chars"/.test(hid), `hidden 属性子树应折叠: ${hid}`);
+    assert.ok(!cleaned.includes(attrLong) && !cleaned.includes('data-u2m-id="3"'), '折叠子树内容应从清洗版消失');
+    assert.ok(cleaned.includes('正文段落'), '可见正文保留');
+    // 带样式版保真：长文本经占位符 + 恢复清单完整
+    assert.ok(styled.includes('{{LONG_TEXT_'), '带样式版经占位符保真 hidden 区长文本');
+    const longTexts = JSON.parse(fs.readFileSync(out.longText, 'utf8'));
+    assert.ok(Object.values(longTexts).includes(attrLong), '恢复清单含 hidden 区原文');
+  } finally { cleanup(); }
+});
+
 test('护栏: 折叠后可见文本 <5% 且总量充足 → 放弃折叠并告警；visibility 翻案语义', async () => {
   const gated = '门'.repeat(2100); // 折叠区 2100 字
   const visLong = '外'.repeat(60);

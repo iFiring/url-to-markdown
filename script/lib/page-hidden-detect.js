@@ -4,6 +4,8 @@
  * 语义（spec §4.2，按 CSS 规范补全 juice 不做的继承推导）：
  *   - display 不继承，但祖先 display:none 使整棵子树不生成盒 → 有效 display:none
  *     ⟺ 自身或任一祖先声明为 none；该子树不可被后代翻案，记录后停止下钻。
+ *   - HTML hidden 属性 = 显式 display:none（其 UA/preflight 规则如
+ *     [hidden]:where(...) juice 无法内联，故在检测器侧直接认定）。
  *   - visibility 继承，后代可 visibility:visible 重新可见 → 有效值 = 自身显式
  *     声明，否则沿用父级有效值；visibility:hidden 顶层记录后继续下钻找翻案后代。
  *   - 顶层隐藏子树：有效隐藏且父级上下文未隐藏——折叠只打在最外层。
@@ -39,7 +41,10 @@ function __u2mDetectHidden() {
   var hiddenChars = 0;
   function walk(el, ctx) {
     var d = parseDecls(el.getAttribute('style'));
-    var displayNone = ctx.displayNone || d.display === 'none';
+    // HTML hidden 属性本身即「不渲染」声明，按显式 display:none 认定；
+    // 其 UA/preflight 规则（如 [hidden]:where(...)）juice 无法内联，
+    // 不在检测器侧认定就会整片漏折叠（与 display:none 同：不可被后代翻案）
+    var displayNone = ctx.displayNone || d.display === 'none' || el.hasAttribute('hidden');
     var visHidden = d.visibility === 'hidden' ? true : (d.visibility === 'visible' ? false : ctx.visHidden);
     var hidden = displayNone || visHidden;
     if (hidden && !ctx.hidden) {
