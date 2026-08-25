@@ -631,3 +631,32 @@ test('R6: juice 隐藏折叠——fixed 模态与流内 expander 折成标记，
     assert.equal(out.longTextCount, 1, '折叠区长文本仍计数占位');
   } finally { cleanup(); }
 });
+
+test('R6: display:none !important 同样折叠——行内 style 属性的 !important 后缀需剥离后字面匹配', async () => {
+  // juice 内联 <style> 规则时会自己剥 !important 后缀，但快照里作者手写的
+  // 行内 style="display:none !important" 原样透传到检测端——parseDecls 必须
+  // 剥后缀再字面匹配，否则按可见处理、漏折叠
+  const hardLong = '这是一段被 none important 硬隐藏的超长中文文本，验证 important 后缀剥离后照常折叠。';
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title>
+<style>.hard{display:none !important}</style>
+</head>
+<body>
+  <div data-u2m-id="1">
+    <div data-u2m-id="2" style="display:none !important"><p data-u2m-id="3">${hardLong}</p></div>
+    <p data-u2m-id="4">正文段落</p>
+  </div>
+</body></html>`;
+  const { out, cleaned, styled, cleanup } = await runClean(snapshot, 'r6-important');
+  try {
+    // !important 后缀剥离后按显式 display:none 折叠
+    const hard = cleaned.match(/<div data-u2m-id="2"[^>]*>/)[0];
+    assert.ok(/data-u2m-hidden="\d+_chars"/.test(hard), `!important 隐藏应折叠: ${hard}`);
+    assert.ok(!cleaned.includes(hardLong) && !cleaned.includes('data-u2m-id="3"'), '折叠子树内容应从清洗版消失');
+    assert.ok(cleaned.includes('正文段落'), '可见正文保留');
+    // 带样式版保真：长文本经占位符 + 恢复清单完整
+    assert.ok(styled.includes('{{LONG_TEXT_'), '带样式版经占位符保真硬隐藏区长文本');
+    const longTexts = JSON.parse(fs.readFileSync(out.longText, 'utf8'));
+    assert.ok(Object.values(longTexts).includes(hardLong), '恢复清单含硬隐藏区原文');
+  } finally { cleanup(); }
+});

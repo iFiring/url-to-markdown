@@ -7,8 +7,10 @@
  *   - visibility 继承，后代可 visibility:visible 重新可见 → 有效值 = 自身显式
  *     声明，否则沿用父级有效值；visibility:hidden 顶层记录后继续下钻找翻案后代。
  *   - 顶层隐藏子树：有效隐藏且父级上下文未隐藏——折叠只打在最外层。
- *   - 读值只认字面声明：var() 等不可解析值按可见处理（失败方向安全——
- *     任何不完备都把元素推向保留，正文零误删）。
+ *   - 读值只认字面声明：值先剥 !important 后缀再字面匹配（juice 内联 <style>
+ *     规则时会自己剥，但快照里作者手写的行内 style 属性原样透传，
+ *     display:none !important 也是显式 none）；var() 等不可解析值按可见处理
+ *     （失败方向安全——任何不完备都把元素推向保留，正文零误删）。
  * 返回 { items: [{id, chars, fixed}], totalChars, hiddenChars }：
  *   items[].id     data-u2m-id（无 id 的隐藏根不可定位，不产出）
  *   items[].chars  textContent.trim().length（真实全文规模，供 R6 标记）
@@ -25,6 +27,7 @@ function __u2mDetectHidden() {
       if (c === -1) continue;
       var prop = parts[i].slice(0, c).trim().toLowerCase();
       var val = parts[i].slice(c + 1).trim().toLowerCase();
+      val = val.replace(/\s*!important\s*$/, '');
       if (prop) out[prop] = val;
     }
     return out;
