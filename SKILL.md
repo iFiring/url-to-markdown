@@ -232,19 +232,19 @@ node <skill-root>/script/extract_article.mjs --url <url>
 
 #### 专有名词
 
-**「单传祖先链元素」**：从 <body> 到有效元素(`h/p/span/table/img/文本/...`)之间，没有『有效』兄弟元素的每一级祖先元素，为多级祖先元素的统称
+**「单传祖先链元素」**：对某个目标模块，从 `<body>` 下包裹它的子元素开始向下走到模块容器为止——每一级的子元素中，没有有效内容（子树内无文字/图标/图片，`h/p/span/table/img/文本/...`）的空元素当它不存在；剩下的有效子元素只有一个 → 穿过它继续下探；剩余多个 → 停在该元素（含该元素），它就是**模块容器**。链上所有元素的 `data-u2m-id` 组成该模块的 ID 集
 
 DOM 结构示例：
 > 单传祖先链元素：[1]-[3]
 
 ```html
 <body>
-<!-- 祖先链到从 <body> 开始 -->
+<!-- 祖先链从 <body> 开始 -->
 <div data-u2m-id="1">
   <!-- 元素 [2] 为没有任何有效内容「文字/图标/图片」的空元素，直接忽略 -->
   <div data-u2m-id="2"></div>
   <!-- 元素 [3] 虽然有兄弟，但兄弟没有效内容 -->
-  <!-- 祖先链到含有多个子元素的 [3] 为止 -->
+  <!-- 祖先链到含有多个有效子元素的 [3] 为止 -->
   <div data-u2m-id="3">
     <!-- 元素 [4]/[6] 有有效兄弟元素 -->
     <div data-u2m-id="4">
@@ -268,7 +268,7 @@ DOM 结构示例：
 | `ul` / `ol` | 列表体：`- xxx\n - xxx` / `1. xxx\n 2. xxx` 一行 |
 | `img` | 图片绝对 URL：`![img](url)`|
 | `code` | 语言类型 + 独立代码内容：`{"lang": "tsx", "content": "..."}` |
-| `table` | 完整 markdown 管线表：含 `\|--\|--\|` 分隔行 |
+| `table` | 完整 markdown 表格：含 `|--|--|` 分隔行 |
 | `trans2img` | 独立复杂视觉模块：取「单传祖先链元素」的 `data-u2m-id` |
 
 - 保持文档序、不重不漏；不要修改原义
@@ -276,8 +276,8 @@ DOM 结构示例：
 - value 要带上 Markdown 语法，包括行外语法（`#`、`>`、`-`、`1.`、`![img](url)`等），行内格式（`**粗体**`、`[文本](url)`、`` `code` ``等）
 - 长文本**只引用编号**：读到的 `{{LONG_TEXT_5|16_chars}} / {{LONG_TEXT_5|16_words}}` 写成 `{{LONG_TEXT_5}}`（不带后缀）
 - 短文本（未达长文本占位阈值）与 URL → 照抄
-- 一个顶层元素可展开为多条（`figure` → `img` 条 + `figcaption` 的 `p` 条），也可收敛为一条（卡片 div → 单个 `p`）
-- 在「单传祖先链元素」中，没有块样式（背景/边框/阴影）的父组件可直接忽略
+- 一个顶层元素可展开为多条（`figure` → `img` 条 + `figcaption` 的 `p` 条），也可收敛为一条（无块样式的卡片 div → 单个 `p`）
+- 在「单传祖先链元素」中，没有块样式（背景/边框/圆角/阴影）的父组件可直接忽略
 
 #### 判定规则
 
@@ -286,7 +286,7 @@ DOM 结构示例：
 - 带有明显 `h1 - h6` 标签 → `h1 - h6`
 - 字体大小为 `h1 - h6` 级别大小 → `h1 - h6`
 
-字号粗略映射（浏览器默认字号为基准；整站字号偏移时按页面内相对大小定级）：
+字号粗略映射（浏览器默认字号为基准；整站字号偏移时按页面内相对大小定级；1rem/16px 常为正文常规字号，需结合加粗/语义再定级）：
 
 | 字体大小（约） | 判定 |
 |---|---|
@@ -327,7 +327,7 @@ DOM 结构示例：
 
 **`blockquote` 判定**
 
-- 在「单传祖先链元素」上，存在单个元素有「背景/边框/阴影」的提示段落，子孙元素没有「背景/边框/阴影」等块元素样式，只有文本 → `blockquote`
+- 在「单传祖先链元素」上，存在单个元素有「背景/边框/圆角/阴影」的提示段落，子孙元素没有「背景/边框/圆角/阴影」等块元素样式，只有文本 → `blockquote`
 
 DOM 结构示例：
 ```html
@@ -407,9 +407,10 @@ DOM 结构示例：
 **`code` 判定**
 
 - 在「单传祖先链元素」上：
-  「视觉上」没有任何「背景/边框/阴影」的祖先元素 → `code`；
-  「视觉上」有单个「背景/边框/阴影」的祖先元素 → `code`；
-  「视觉上」有**多个**「背景/边框/阴影」的祖先元素 → 降级 `trans2img`；
+  「视觉上」没有任何「背景/边框/圆角/阴影」的祖先元素 → `code`；
+  「视觉上」有单个「背景/边框/圆角/阴影」的祖先元素 → `code`；
+  「视觉上」有**多个**「背景/边框/圆角/阴影」的祖先元素 → 降级 `trans2img`；
+- `lang` 必填：优先取 `class="language-xxx"` 等语言线索，无线索时写 `""`
 - 删除原本代码左边的数字序号
 
 DOM 结构示例：
@@ -432,13 +433,13 @@ DOM 结构示例：
 输出结构示例：
 ```json
 {"p": "{{LONG_TEXT_k}}"},
-{"code": {"content": "code..."}}
+{"code": {"lang": "", "content": "code..."}}
 ```
 
 **`table` 判定**
 
 - 真实 `<table>`（thead/tbody/th/td，或行列对齐的网格数据）**一律走 `table`**，无论带多重的背景/边框装饰；分组行用粗体行表达，markdown 表格可直接承载宽内容
-- 仅当结构无法用 `<table>` 管线表表达（复杂跨行跨列/嵌套）才降级 `trans2img`
+- 仅当结构无法用 markdown 表格表达（复杂跨行跨列/嵌套）才降级 `trans2img`
 
 **`trans2img` 判定**
 
@@ -486,14 +487,14 @@ DOM 结构示例：
   <div data-u2m-id="28"></div>
   <!-- 元素 [29] 虽然有兄弟，但兄弟没有效内容 -->
   <section data-u2m-id="29" style="background-color: xxx; border: xxx">
-    <!-- 祖先链到含有多个子元素的 [30] 为止 -->
+    <!-- 祖先链到含有多个有效子元素的 [30] 为止 -->
     <div data-u2m-id="30">
       <div style="background-color: xxx; border: xxx">
         <div><p>{{LONG_TEXT_k}}</p></div>
       </div>
       <div style="display: flex;">
-        <div style="background-color: xxx; border: xxx"></div>
-        <div style="background-color: xxx; border: xxx"></div>
+        <div style="background-color: xxx; border: xxx"><p>text</p></div>
+        <div style="background-color: xxx; border: xxx"><p>text</p></div>
       </div>
     </div>
   </section>
@@ -538,7 +539,7 @@ DOM 结构示例：
 输出结构示例：
 ```json
 {"p": "{{LONG_TEXT_1}}"},
-{"code": {"content": "code..."}},
+{"code": {"lang": "", "content": "code..."}},
 {"p": "{{LONG_TEXT_2}}"},
 {"ul": "- {{LONG_TEXT_10}}\n - {{LONG_TEXT_11}}"},
 {"trans2img": [40]}
@@ -559,7 +560,7 @@ DOM 结构示例：
   {"code": {"lang": "python", "content": "def hello():\n    print('hi')"}},
   {"table": "|季度|营收|\n|--|--|\n|Q1|1.2亿|"},
   {"ul": "- {{LONG_TEXT_10}}\n - {{LONG_TEXT_11}}"},
-  {"trans2img": [10, 13]}
+  {"trans2img": [9, 10]}
 ]
 ```
 
