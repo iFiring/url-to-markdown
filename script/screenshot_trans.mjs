@@ -39,10 +39,14 @@
  *      两次渲染结构一致则 id 精确对位）。两侧用同一
  *      page-element-signature.js 对每个 trans2img id 计算签名，全等才在
  *      B 上截图，失配/B 侧缺失/live 整体失败（站点不可达等）在 A 上兜底。
- *      A 侧也未命中的 id → error（骨架与视图不匹配）。live 页与 1_snapshot
+ *      A 侧也未命中的 id → error（骨架与视图不匹配）。折叠模块（手风琴
+ *      收起等）两侧同为隐藏态——每个 id 截图前先跑 page-reveal-hidden.js
+ *      强制展开（只覆写正在隐藏的属性，可见时零改动；签名在展开前算好，
+ *      不受影响），首选页盒无效或截图失败（有界超时 10s，不整页挂死）换
+ *      另一页再试，仍失败汇总 error 列出 id。live 页与 1_snapshot
  *      都是真实文本，无需任何页面内占位符还原。链上每个 id 各截一张并
- *      记录 boundingBox，随后逐条目择优——宽度优先、等宽选高、宽高全同
- *      选最外层（数组首位）——把条目 value 回写为选中路径
+ *      记录 boundingBox（展开后的真实尺寸），随后逐条目择优——宽度优先、
+ *      等宽选高、宽高全同选最外层（数组首位）——把条目 value 回写为选中路径
  *
  * stdout 输出（有且仅有一行 JSON，日志一律走 stderr）:
  *   `resolvedSkeleton` 为 resolved skeleton 路径；
@@ -217,6 +221,7 @@ async function main() {
 
   const sigFn = await readSharedScript('page-element-signature.js');
   const prepareFn = await readSharedScript('page-prepare.js');
+  const revealFn = await readSharedScript('page-reveal-hidden.js');
   const pageInitSrc = await readSharedScript('page-init.js');
 
   let browser;
@@ -304,36 +309,93 @@ async function main() {
     }
 
     // ── 截图：live 命中在 B，失配/缺失在 A 兜底 ──
+    // 折叠模块（手风琴收起等，步骤 2 检测、带样式版保真流到步骤 7 的合法
+    // trans2img）两侧同为隐藏态：el.screenshot() 自动等可见会挂到超时，
+    // 被塌缩祖先裁剪的模块更会截出空白图——每 id 截图前先跑共享
+    // page-reveal-hidden.js 强制展开（只覆写正在隐藏的属性，可见时零改动，
+    // 不动 tag/children/textContent、签名不受影响）；首选页盒无效或截图
+    // 失败再试另一页（快照 A 无 JS，展开 100% 确定），仍失败汇总报 error
     const transDir = path.join(dir, 'assets', 'trans');
     fs.mkdirSync(transDir, { recursive: true });
 
+    const srcLabel = (pg) => (pg === pageB ? 'live' : 'snapshot');
     const screenshots = [];
     const boxes = {}; // id → boundingBox（CSS px）——择优依据
+    const failedIds = [];
     for (const id of transIds) {
       const useLive = liveIds.includes(id);
       if (!useLive) debug(`trans2img ${id} live 签名失配或缺失 → 快照兜底`);
-      const page = useLive ? pageB : pageA;
-      const h = await page.$(`[data-u2m-id="${id}"]`);
-      if (!h) {
-        await context.close();
-        await browser.close();
-        browser = null;
-        return emitError(`trans id 在渲染页未命中: ${id}`, 1);
-      }
+      const pages = (useLive ? [pageB, pageA] : [pageA, pageB]).filter(Boolean);
       const imgPath = path.join(transDir, `${id}.webp`);
-      await h.screenshot({ path: imgPath, type: 'webp' });
-      boxes[id] = await h.boundingBox();
-      debug(`trans2img ${id} 截图（${useLive ? 'live' : 'snapshot'}）→ ${imgPath}${boxes[id] ? `（${Math.round(boxes[id].width)}×${Math.round(boxes[id].height)}）` : ''}`);
-      screenshots.push(imgPath);
+      let done = false;
+      let skipped = false;
+      for (const page of pages) {
+        if (done) break;
+        const rev = await page.evaluate(`(${revealFn})(${id})`);
+        if (!rev.found) continue; // 该页无此元素 → 换页（A 侧缺失已在签名阶段报错）
+        if (rev.touched > 0) {
+          debug(`trans2img ${id} 隐藏态强制展开（${srcLabel(page)}，覆写 ${rev.touched} 处）`);
+        }
+        // display:contents 透明包装：结构性无盒（与隐藏无关），截不出图——
+        // 跳过该 id，视觉由链上其余 id 承载（择优自然落选它）
+        if (rev.boxless) {
+          debug(`trans2img ${id} 为 display:contents 透明包装，自身无盒 → 跳过`);
+          skipped = true;
+          break;
+        }
+        if (!(rev.box && rev.box.width > 0 && rev.box.height > 0)) {
+          debug(`trans2img ${id} 展开后仍无有效盒（${srcLabel(page)}）→ 换页`);
+          continue;
+        }
+        const h = await page.$(`[data-u2m-id="${id}"]`);
+        if (!h) continue;
+        try {
+          // 有界超时：防御未预见隐藏形态，不整页挂死
+          await h.screenshot({ path: imgPath, type: 'webp', timeout: 10000 });
+        } catch (e) {
+          debug(`trans2img ${id} 截图失败（${srcLabel(page)}）: ${String(e.message).split('\n')[0]} → 换页`);
+          continue;
+        }
+        boxes[id] = await h.boundingBox();
+        debug(`trans2img ${id} 截图（${srcLabel(page)}）→ ${imgPath}${boxes[id] ? `（${Math.round(boxes[id].width)}×${Math.round(boxes[id].height)}）` : ''}`);
+        screenshots.push(imgPath);
+        done = true;
+      }
+      if (!done && !skipped) failedIds.push(id);
+    }
+    if (failedIds.length > 0) {
+      await context.close();
+      await browser.close();
+      browser = null;
+      return emitError(
+        `trans id 无法截图（隐藏且强制展开无效）: ${failedIds.join(', ')}（请检查该模块是否值得 trans2img，必要时调整步骤 7 标记后重跑）`,
+        1
+      );
     }
 
     // 逐条目择优（宽度优先 → 等宽选高 → 全同选最外层），回写为选中路径。
-    // trans2img 数组经 resolveSkeletonString 原引用透传，直接按形态识别条目
+    // trans2img 数组经 resolveSkeletonString 原引用透传，直接按形态识别条目。
+    // 条目全部 id 结构性无盒（如整链 display:contents）→ 无一真实出图，
+    // 回写会指向不存在的文件——收集后统一报错
+    const boxlessEntries = [];
     for (const entry of resolvedSkeleton) {
       if (!Array.isArray(entry.trans2img)) continue;
       const best = pickBestId(entry.trans2img, boxes);
+      if (boxes[best] === undefined) {
+        boxlessEntries.push(`[${entry.trans2img.join(', ')}]`);
+        continue;
+      }
       debug(`trans2img [${entry.trans2img.join(', ')}] 择优 → ${best}`);
       entry.trans2img = `assets/trans/${best}.webp`;
+    }
+    if (boxlessEntries.length > 0) {
+      await context.close();
+      await browser.close();
+      browser = null;
+      return emitError(
+        `trans2img 条目全部 id 结构性无盒（如 display:contents 透明包装链）: ${boxlessEntries.join('; ')}（请调整步骤 7 标记，选有真实视觉盒的元素后重跑）`,
+        1
+      );
     }
     await fsPromises.writeFile(resolvedPath, JSON.stringify(resolvedSkeleton, null, 2));
 

@@ -11,6 +11,7 @@ import { urlToDirName } from '../../script/lib/env.mjs';
 
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
 const sigScriptPath = path.resolve(thisDir, '../../script/lib/page-element-signature.js');
+const revealScriptPath = path.resolve(thisDir, '../../script/lib/page-reveal-hidden.js');
 
 test('page-element-signature.js: 文件存在且包含 __u2mElementSignature 函数', () => {
   const src = fs.readFileSync(sigScriptPath, 'utf8');
@@ -20,6 +21,17 @@ test('page-element-signature.js: 文件存在且包含 __u2mElementSignature 函
 test('page-element-signature.js: 函数可被 evaluate 格式调用', () => {
   const src = fs.readFileSync(sigScriptPath, 'utf8');
   const wrapped = `(${src})(["1"])`;
+  assert.doesNotThrow(() => new Function('return ' + wrapped));
+});
+
+test('page-reveal-hidden.js: 文件存在且包含 __u2mRevealHidden 函数', () => {
+  const src = fs.readFileSync(revealScriptPath, 'utf8');
+  assert.ok(src.includes('function __u2mRevealHidden'), '应定义 __u2mRevealHidden');
+});
+
+test('page-reveal-hidden.js: 函数可被 evaluate 格式调用', () => {
+  const src = fs.readFileSync(revealScriptPath, 'utf8');
+  const wrapped = `(${src})(1)`;
   assert.doesNotThrow(() => new Function('return ' + wrapped));
 });
 
@@ -172,6 +184,156 @@ test('screenshot_trans.mjs: 宽高全同的平局选最外层', async () => {
   const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
   assert.deepEqual(resolved, [{ trans2img: 'assets/trans/40.webp' }],
     '40/41 宽高一致 → 选数组首位（最外层）40');
+
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+// 手风琴折叠模块：站点 CSS 把 .body 折叠为 display:none——快照（样式内联）
+// 与 live 重渲染同为隐藏态。链上 50（手风琴项，含可见按钮）自身有盒、
+// 51（折叠 body）/52（模块）无布局盒。隐藏模块是步骤 2 检测、带样式版
+// 保真流到步骤 7 的合法 trans2img 标记——步骤 8 必须强制展开出图，
+// 而不是 el.screenshot() 等可见 30s 超时把整次转换打成 error
+const SNAPSHOT_ACCORDION = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>折叠模块</title><base data-u2m-base="1" href="http://127.0.0.1:9/dead">
+<style>.acc .body { display: none; }</style></head><body>
+<h1 data-u2m-id="1">标题</h1>
+<div class="acc" data-u2m-id="50">
+<button data-u2m-id="53">展开</button>
+<div class="body" data-u2m-id="51"><div data-u2m-id="52" style="background-color: rgb(30, 30, 30); color: rgb(255, 255, 255); padding: 16px"><p>折叠模块段落一。</p><p>折叠模块段落二。</p></div></div>
+</div>
+<p data-u2m-id="60">结尾段落。</p>
+</body></html>`;
+
+// max-height:0 裁剪形态：71 盒高为 0，72（模块）盒正常但像素被祖先裁掉——
+// 不展开就截是空白图。展开后 71/72 等宽等高 → 平局选最外层 71
+const SNAPSHOT_MAXHEIGHT = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>裁剪模块</title><base data-u2m-base="1" href="http://127.0.0.1:9/dead">
+<style>.mh { max-height: 0; overflow: hidden; }</style></head><body>
+<h1 data-u2m-id="1">标题</h1>
+<div class="mh" data-u2m-id="71"><div data-u2m-id="72" style="background-color: rgb(30, 30, 30); color: rgb(255, 255, 255); padding: 16px"><p>被裁剪的模块内容。</p></div></div>
+<p data-u2m-id="60">结尾段落。</p>
+</body></html>`;
+
+test('screenshot_trans.mjs: display:none 折叠模块强制展开后出图，不再挂死 error', async () => {
+  const { tmpRoot, urlDir, assetsDir } = setupTmp('accordion', {
+    snapshot: SNAPSHOT_ACCORDION,
+    skeleton: [{ trans2img: [50, 51, 52] }],
+  });
+  const script = path.resolve('script/screenshot_trans.mjs');
+  const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 120000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}\nstdout: ${r.stdout}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+  assert.equal(out.count, 3, '链上三个 id（含折叠的 51/52）各出一张');
+  assert.equal(out.source, 'snapshot', 'live 不可达（死端口）→ 快照兜底');
+
+  for (const id of [50, 51, 52]) {
+    const imgPath = path.join(assetsDir, 'trans', `${id}.webp`);
+    assert.ok(fs.existsSync(imgPath), `截图应存在: ${imgPath}`);
+    const stat = fs.statSync(imgPath);
+    assert.ok(stat.size > 100, `截图应非空: ${imgPath} ${stat.size} bytes`);
+    const buf = fs.readFileSync(imgPath);
+    assert.equal(buf.toString('ascii', 0, 4), 'RIFF', 'WebP RIFF header');
+    assert.equal(buf.toString('ascii', 8, 12), 'WEBP', 'WebP WEBP signature');
+  }
+
+  // 择优：展开只发生在各 id 自己截图前、方向向上——50 截图时折叠的 51
+  // 尚未展开（盒 = 按钮高度），51/52 展开后等高且更高 → 等宽选高选 51
+  // （展开的内容包装，不含展开按钮，恰是模块语义主体）
+  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
+  assert.deepEqual(resolved, [{ trans2img: 'assets/trans/51.webp' }],
+    '折叠链强制展开后择优应回写路径（等宽选高 → 51）');
+
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test('screenshot_trans.mjs: max-height:0 裁剪模块强制展开后出真实内容，而非空白图', async () => {
+  const { tmpRoot, urlDir, assetsDir } = setupTmp('maxheight', {
+    snapshot: SNAPSHOT_MAXHEIGHT,
+    skeleton: [{ trans2img: [71, 72] }],
+  });
+  const script = path.resolve('script/screenshot_trans.mjs');
+  const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 120000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}\nstdout: ${r.stdout}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+  assert.equal(out.count, 2, '链上两个 id（含盒高为 0 的 71）各出一张');
+
+  for (const id of [71, 72]) {
+    const imgPath = path.join(assetsDir, 'trans', `${id}.webp`);
+    assert.ok(fs.existsSync(imgPath), `截图应存在: ${imgPath}`);
+    const stat = fs.statSync(imgPath);
+    assert.ok(stat.size > 100, `截图应非空: ${imgPath} ${stat.size} bytes`);
+  }
+
+  // 展开后 71/72 等宽等高 → 平局选最外层 71
+  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
+  assert.deepEqual(resolved, [{ trans2img: 'assets/trans/71.webp' }],
+    '裁剪链强制展开后择优应回写路径（全同选最外层 → 71）');
+
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+// display:contents 透明包装（真实 OpenAI 文档形态）：规范上永不生成盒——
+// 自身截不出图是结构性的，不是隐藏。视觉由链上内层模块承载：应跳过
+// contents id、只截内层，择优自然选中内层，而不是整个 run 报错
+const SNAPSHOT_CONTENTS = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>透明包装</title><base data-u2m-base="1" href="http://127.0.0.1:9/dead">
+<style>.expn .body { display: none; }</style></head><body>
+<h1 data-u2m-id="1">标题</h1>
+<div class="expn" data-u2m-id="80">
+<button data-u2m-id="81">展开</button>
+<div class="body" data-u2m-id="82"><div style="display: contents" data-u2m-id="83"><div data-u2m-id="84" style="background-color: rgb(30, 30, 30); color: rgb(255, 255, 255); padding: 16px"><p>透明包装内的模块内容。</p></div></div></div>
+</div>
+<p data-u2m-id="60">结尾段落。</p>
+</body></html>`;
+
+test('screenshot_trans.mjs: display:contents 透明包装跳过不报错，视觉由链上内层承载', async () => {
+  const { tmpRoot, urlDir, assetsDir } = setupTmp('contents', {
+    snapshot: SNAPSHOT_CONTENTS,
+    skeleton: [{ trans2img: [83, 84] }],
+  });
+  const script = path.resolve('script/screenshot_trans.mjs');
+  const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 120000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}\nstdout: ${r.stdout}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+  assert.equal(out.count, 1, '只截内层 84（83 为 contents 结构性无盒）');
+
+  const imgPath = path.join(assetsDir, 'trans', '84.webp');
+  assert.ok(fs.existsSync(imgPath), `内层截图应存在: ${imgPath}`);
+  assert.ok(!fs.existsSync(path.join(assetsDir, 'trans', '83.webp')), 'contents id 不应产出截图');
+
+  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
+  assert.deepEqual(resolved, [{ trans2img: 'assets/trans/84.webp' }],
+    '择优只能落在真实出图的 84 上');
+
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test('screenshot_trans.mjs: 条目全部 id 结构性无盒时报 error 指明条目', async () => {
+  const { tmpRoot } = setupTmp('contents-only', {
+    snapshot: SNAPSHOT_CONTENTS,
+    skeleton: [{ trans2img: [83] }],
+  });
+  const script = path.resolve('script/screenshot_trans.mjs');
+  const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 120000,
+  });
+  assert.equal(r.code, 1);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'error');
+  assert.ok(out.reason.includes('83'), `reason 应含条目 id: ${out.reason}`);
 
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
