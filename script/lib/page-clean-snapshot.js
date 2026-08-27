@@ -1,16 +1,26 @@
 /**
- * 步骤 2 页面内清洗函数。在浏览器 evaluate 中执行。
- * 单趟清洗产出两份快照：
- *   html       —— 清洗版：剥样式、SVG 清空（步骤 3 的结构视图）
- *   styledHtml —— 带样式版：保留 style 属性与 <style> 标签，SVG 瘦身为壳
- *                 （仅留 id/class/data-u2m-id），其余与清洗版一致
- * 两版共享同一套结构清洗与长文本占位，占位符编号逐一对应；
- * 占位跳过 svg/style 子树文本（两版都会删除 SVG 内容与 <style>，若占位会产生孤儿编号）。
- * clean-only 段新增 R1-R6 瘦身规则，见各步骤注释与 spec。
+ * 步骤 2 页面内清洗函数。在浏览器 evaluate 中执行；clean_snapshot.mjs 对
+ * 同一快照跑两趟，cfg.mode ∈ 'styled'（缺省）| 'clean' 分叉：
+ *   styled 趟 —— 共享结构清洗 + 长文本占位（{{LONG_TEXT_k|n_chars|n_words}}）
+ *                + SVG 瘦身为壳（仅留 id/class/data-u2m-id）→ 带样式版 +
+ *                恢复清单（供步骤 4 裁剪与后续占位还原）
+ *   clean 趟   —— 共享结构清洗 + SVG 清空/样式剥除 + 瘦身规则 → 清洗版
+ * 两趟共享同一套结构清洗（步骤 1-8：link/meta/base 删除、骨架删除、播放器
+ * 删除、控件删除、空元素级联 + KEEP_EMPTY）。
+ *
+ * 终端视图不变量：清洗版（clean 趟产物）是步骤 3 LLM 的终端视图——不再含
+ * LONG_TEXT 占位符（一切还原走带样式版与 2_long_text.json），也不再做隐藏
+ * 折叠（R6 已随 juice 检测管线废除，隐藏子树按可见保留）。
+ *
+ * 清洗版瘦身规则 K1-K9（class 语义过滤 K1 → 属性白名单 K2 → SVG 清空 K3 →
+ * astro 解包 K4 → hidden 裸属性折叠 K5 → table 折叠 K6 → pre 折叠 K7 →
+ * 行内 run token 化 K8 → 空白压缩 K9）由后续任务逐个落地；当前为过渡期，
+ * clean 趟沿用旧 R1-R5（R2 class 过滤、R3 data 白名单、R1 pre→code...、
+ * R4 astro 解包、R5 保守空白压缩），见各步骤注释与 spec。
  */
 function __u2mCleanSnapshot(cfg) {
   cfg = cfg || {};
-  var MIN_CHARS = typeof cfg.minChars === 'number' ? cfg.minChars : 16;
+  var mode = cfg.mode === 'clean' ? 'clean' : 'styled';
 
   // 1. 删除所有 <link> 标签（stylesheet/preconnect/icon 等，对结构识别是纯噪声）
   var links = document.querySelectorAll('link');
@@ -114,98 +124,111 @@ function __u2mCleanSnapshot(cfg) {
     if (emp.parentNode) emp.parentNode.removeChild(emp);
   }
 
-  // 9. 长文本占位（中英文分标准；两版共享，编号逐一对应）：
-  //    含汉字（CJK）→ 中文标准：字符数 > MIN_CHARS → {{LONG_TEXT_k|n_chars}}
-  //    不含汉字    → 英文标准：单词数 > MIN_WORDS → {{LONG_TEXT_k|n_words}}
-  //    原文按占位编号收集进 longTexts，由 CLI 写 2_long_text.json 供后续恢复。
-  //    纯空白文本节点（源码缩进/换行）不含语义内容，不占位——否则会在
-  //    父子元素之间凭空捏造"长文本"，误导步骤 3 的结构识别。
-  //    svg/style 子树内的文本不占位——两版都会删除 SVG 内容，清洗版还会删 <style>，
-  //    若占位，占位符会随之消失而编号留在清单里；
-  //    <style> 文本在带样式版中原样保留，SVG 文本两版都不保留
-  var MIN_WORDS = typeof cfg.minWords === 'number' ? cfg.minWords : 12;
-  var CJK_RE = /[一-鿿]/; // CJK 统一表意文字基本区（U+4E00–U+9FFF）
-  function skipPlaceholder(textNode) {
-    var p = textNode.parentElement;
-    return !!(p && p.closest && p.closest('svg, style'));
-  }
-  var k = 0;
-  var longTexts = {};
-  var walker = document.createTreeWalker(
-    document.body,
-    NodeFilter.SHOW_TEXT,
-    null,
-    false
-  );
-  var textNodes = [];
-  var node;
-  while ((node = walker.nextNode())) {
-    textNodes.push(node);
-  }
-  for (var i = 0; i < textNodes.length; i++) {
-    var tn = textNodes[i];
-    if (skipPlaceholder(tn)) continue;
-    var text = tn.textContent;
-    if (text.trim() === '') continue;
-    var n, unit;
-    if (CJK_RE.test(text)) {
-      if (text.length <= MIN_CHARS) continue;
-      n = text.length;
-      unit = 'chars';
-    } else {
-      n = text.trim().split(/\s+/).length;
-      if (n <= MIN_WORDS) continue;
-      unit = 'words';
+  // ---- mode 分叉：styled 趟到占位 + SVG 瘦身即返回；clean 趟继续剥样式 ----
+
+  if (mode !== 'clean') {
+    // 9. 长文本占位（styled 趟；中英文分标准）：含汉字（CJK）→ 中文标准：
+    //    字符数 > MIN_CHARS → {{LONG_TEXT_k|n_chars}}；不含汉字 → 英文标准：
+    //    单词数 > MIN_WORDS → {{LONG_TEXT_k|n_words}}。原文按占位编号收集进
+    //    longTexts，由 CLI 写 2_long_text.json 供后续恢复。
+    //    纯空白文本节点（源码缩进/换行）不含语义内容，不占位——否则会在
+    //    父子元素之间凭空捏造"长文本"，误导步骤 3 的结构识别。
+    //    svg/style 子树内的文本不占位——styled 趟会删 SVG 内容，
+    //    若占位，占位符会随之消失而编号留在清单里；
+    //    <style> 文本在带样式版中原样保留，SVG 文本两版都不保留
+    var MIN_CHARS = typeof cfg.minChars === 'number' ? cfg.minChars : 16;
+    var MIN_WORDS = typeof cfg.minWords === 'number' ? cfg.minWords : 12;
+    var CJK_RE = /[一-鿿]/; // CJK 统一表意文字基本区（U+4E00–U+9FFF）
+    function skipPlaceholder(textNode) {
+      var p = textNode.parentElement;
+      return !!(p && p.closest && p.closest('svg, style'));
     }
-    k++;
-    longTexts[String(k)] = text;
-    tn.textContent = '{{LONG_TEXT_' + k + '|' + n + '_' + unit + '}}';
+    var k = 0;
+    var longTexts = {};
+    var walker = document.createTreeWalker(
+      document.body,
+      NodeFilter.SHOW_TEXT,
+      null,
+      false
+    );
+    var textNodes = [];
+    var node;
+    while ((node = walker.nextNode())) {
+      textNodes.push(node);
+    }
+    for (var i = 0; i < textNodes.length; i++) {
+      var tn = textNodes[i];
+      if (skipPlaceholder(tn)) continue;
+      var text = tn.textContent;
+      if (text.trim() === '') continue;
+      var n, unit;
+      if (CJK_RE.test(text)) {
+        if (text.length <= MIN_CHARS) continue;
+        n = text.length;
+        unit = 'chars';
+      } else {
+        n = text.trim().split(/\s+/).length;
+        if (n <= MIN_WORDS) continue;
+        unit = 'words';
+      }
+      k++;
+      longTexts[String(k)] = text;
+      tn.textContent = '{{LONG_TEXT_' + k + '|' + n + '_' + unit + '}}';
+    }
+
+    // 10. SVG 瘦身（styled 趟）：只留 svg 标签及其 id/class/data-u2m-id，
+    //     删除其余属性与全部子元素——完整 SVG 体积庞大，带样式版只需结构身份
+    var svgs = document.querySelectorAll('svg');
+    for (var i = 0; i < svgs.length; i++) {
+      var svg = svgs[i];
+      while (svg.firstChild) {
+        svg.removeChild(svg.firstChild);
+      }
+      var attrNames = [];
+      for (var j = 0; j < svg.attributes.length; j++) attrNames.push(svg.attributes[j].name);
+      for (var j = 0; j < attrNames.length; j++) {
+        var name = attrNames[j];
+        if (name !== 'id' && name !== 'class' && name !== 'data-u2m-id') {
+          svg.removeAttribute(name);
+        }
+      }
+    }
+
+    return {
+      html: '<!DOCTYPE html>\n' + document.documentElement.outerHTML,
+      longTextCount: k,
+      longTexts: longTexts
+    };
   }
 
-  // 10. SVG 瘦身（带样式版）：只留 svg 标签及其 id/class/data-u2m-id，
-  //    删除其余属性与全部子元素——完整 SVG 体积庞大，带样式版只需结构身份
+  // 11. 清空 SVG 壳：删除全部子元素、剥掉全部属性 → 裸 <svg></svg>（clean 趟；
+  //     styled 趟在步骤 10 只做瘦身，此处须补删子元素达到同一空壳）
   var svgs = document.querySelectorAll('svg');
   for (var i = 0; i < svgs.length; i++) {
     var svg = svgs[i];
     while (svg.firstChild) {
       svg.removeChild(svg.firstChild);
     }
-    var attrNames = [];
-    for (var j = 0; j < svg.attributes.length; j++) attrNames.push(svg.attributes[j].name);
-    for (var j = 0; j < attrNames.length; j++) {
-      var name = attrNames[j];
-      if (name !== 'id' && name !== 'class' && name !== 'data-u2m-id') {
-        svg.removeAttribute(name);
-      }
-    }
-  }
-
-  // --- 此刻 DOM 为"带样式清洗态"（样式完整、SVG 已瘦身、占位已打）：先序列化带样式版 ---
-  var styledHtml = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
-
-  // 11. 清空 SVG 壳：剥掉瘦身壳上剩余的 id/class/data-u2m-id → 裸 <svg></svg>（仅清洗版）
-  for (var i = 0; i < svgs.length; i++) {
-    var svg = svgs[i];
     while (svg.attributes.length > 0) {
       svg.removeAttribute(svg.attributes[0].name);
     }
   }
 
-  // 12. 删除所有 style 属性（仅清洗版）
+  // 12. 删除所有 style 属性（clean 趟）
   var styled = document.querySelectorAll('[style]');
   for (var i = 0; i < styled.length; i++) {
     styled[i].removeAttribute('style');
   }
 
-  // 13. 删除所有 <style> 标签（仅清洗版）
+  // 13. 删除所有 <style> 标签（clean 趟）
   var styles = document.querySelectorAll('style');
   for (var i = styles.length - 1; i >= 0; i--) {
     styles[i].parentNode.removeChild(styles[i]);
   }
 
-  // 14. R2 class 噪声过滤（仅清洗版）：class 值按空白切 token，剥工具/哈希 token、
-  //     留语义 token。原则：拿不准保留——漏删只费字节，误删语义 token（步骤 3 的
-  //     正式识别线索）才伤识别。带样式版不动。
+  // 14. R2 class 噪声过滤（仅清洗版；K1 落地后替换）：class 值按空白切 token，
+  //     剥工具/哈希 token、留语义 token。原则：拿不准保留——漏删只费字节，
+  //     误删语义 token（步骤 3 的正式识别线索）才伤识别。带样式版不动。
   var HASH_PREFIX_RE = /^(?:astro|css|sc|jsx|chakra|emotion|styled|mui|next|module)-[-0-9a-zA-Z]+$/;
   function isHashSuffix(s) {
     return s.length >= 5 && /^[0-9a-zA-Z]+$/.test(s) && /[0-9]/.test(s) && /[a-zA-Z]/.test(s);
@@ -237,8 +260,8 @@ function __u2mCleanSnapshot(cfg) {
     else el.removeAttribute('class');
   }
 
-  // 15. R3 data-* 白名单（仅清洗版）：清洗版只留 data-u2m-id / data-language /
-  //     data-u2m-hidden（R6 折叠标记）；其余 data-* 全是埋点/框架噪声。
+  // 15. R3 data-* 白名单（仅清洗版；K2 落地后替换）：清洗版只留 data-u2m-id /
+  //     data-language / data-u2m-hidden；其余 data-* 全是埋点/框架噪声。
   var DATA_KEEP = { 'data-u2m-id': 1, 'data-language': 1, 'data-u2m-hidden': 1 };
   var allEls = document.querySelectorAll('*');
   for (var i = 0; i < allEls.length; i++) {
@@ -251,9 +274,10 @@ function __u2mCleanSnapshot(cfg) {
     }
   }
 
-  // 16. R1 pre 内容替换（仅清洗版）：代码块对结构识别只是一个单元，内容全文在
-  //     带样式版保真（步骤 7 于 6_article 写进骨架）。首个 code 壳保留（含
-  //     data-language），其余子元素删除；行内 <code> 是句子成分，不动。
+  // 16. R1 pre 内容替换（仅清洗版；K7 落地后替换）：代码块对结构识别只是一个
+  //     单元，内容全文在带样式版保真（步骤 7 于 6_article 写进骨架）。首个
+  //     code 壳保留（含 data-language），其余子元素删除；行内 <code> 是句子
+  //     成分，不动。
   var pres = document.querySelectorAll('pre');
   for (var i = 0; i < pres.length; i++) {
     var pre = pres[i];
@@ -268,9 +292,9 @@ function __u2mCleanSnapshot(cfg) {
     host.appendChild(document.createTextNode('code...'));
   }
 
-  // 17. R4 astro 包装解包（仅清洗版）：astro-island/astro-slot 是框架脚手架标签，
-  //     子元素原样上提，包装自身属性（含其 data-u2m-id）弃置——清洗版不可见即
-  //     不可引用，语义与 R6 折叠一致。带样式版保留（步骤 6 取子树不受影响）。
+  // 17. R4 astro 包装解包（仅清洗版；K4 落地后替换）：astro-island/astro-slot
+  //     是框架脚手架标签，子元素原样上提，包装自身属性（含其 data-u2m-id）
+  //     弃置——清洗版不可见即不可引用。带样式版保留（步骤 6 取子树不受影响）。
   var wraps = document.querySelectorAll('astro-island, astro-slot');
   for (var i = wraps.length - 1; i >= 0; i--) {
     var wrap = wraps[i];
@@ -278,9 +302,9 @@ function __u2mCleanSnapshot(cfg) {
     wrap.parentNode.removeChild(wrap);
   }
 
-  // 18. R5 保守空白压缩（仅清洗版）：删纯空白文本节点，当且仅当前后兄弟都不是
-  //     行内文本敏感节点（非空白文本或行内元素）——行内相邻节点间的空白承载
-  //     词间分隔，保留。pre 内部已被 R1 清空，天然不涉及。
+  // 18. R5 保守空白压缩（仅清洗版；K9 落地后替换）：删纯空白文本节点，当且仅当
+  //     前后兄弟都不是行内文本敏感节点（非空白文本或行内元素）——行内相邻
+  //     节点间的空白承载词间分隔，保留。pre 内部已被 R1 清空，天然不涉及。
   var INLINE_TAGS = { A: 1, SPAN: 1, CODE: 1, STRONG: 1, EM: 1, B: 1, I: 1, U: 1, S: 1,
     MARK: 1, SMALL: 1, SUB: 1, SUP: 1, ABBR: 1, CITE: 1, Q: 1, KBD: 1, SAMP: 1, TIME: 1, IMG: 1, BR: 1 };
   function inlineSensitive(node) {
@@ -298,23 +322,11 @@ function __u2mCleanSnapshot(cfg) {
   }
   for (var i = 0; i < wsNodes.length; i++) wsNodes[i].parentNode.removeChild(wsNodes[i]);
 
-  // 19. R6 隐藏子树折叠（仅清洗版）：cfg.hidden = 检测管线的 items。统一折叠、
-  //     不删除——根元素保留 data-u2m-id（步骤 3 仍可引用，步骤 6 从带样式版取
-  //     全文）；折叠发生在共享占位之后，占位符只从清洗版消失、恢复清单完整。
-  //     应用容忍目标已被前序清洗删除（nav 内隐藏块等）——跳过。
-  var collapse = Array.isArray(cfg.hidden) ? cfg.hidden : [];
-  for (var i = 0; i < collapse.length; i++) {
-    var ent = collapse[i];
-    var target = document.querySelector('[data-u2m-id="' + ent.id + '"]');
-    if (!target || !document.body.contains(target)) continue;
-    while (target.firstChild) target.removeChild(target.firstChild);
-    target.setAttribute('data-u2m-hidden', ent.chars + '_chars' + (ent.fixed ? ',fixed' : ''));
-  }
+  // （原步骤 19 R6 隐藏折叠已废除：juice 检测管线整体移除，隐藏子树按可见
+  //   保留；K5 裸属性折叠由后续任务以零样式计算方式重新引入）
 
   return {
     html: '<!DOCTYPE html>\n' + document.documentElement.outerHTML,
-    styledHtml: styledHtml,
-    longTextCount: k,
-    longTexts: longTexts
+    stats: { hiddenCount: 0, runCount: 0 }
   };
 }

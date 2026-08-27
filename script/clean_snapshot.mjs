@@ -1,16 +1,17 @@
 #!/usr/bin/env node
 /**
- * clean_snapshot.mjs —— 步骤 2：结构清洗。打开 1_snapshot.html 单趟清洗，
- * 产出两份快照（共享同一套清洗与占位）+ 占位符原文清单：
- *   2_clean_snapshot.html        清洗版（供步骤 3 读结构）
- *   2_clean_style_snapshot.html  带样式版（供步骤 4 裁剪）
- *   2_long_text.json             编号 → 原文映射，供后续流程恢复
+ * clean_snapshot.mjs —— 步骤 2：结构清洗。单页两趟（同一 chromium 页面对
+ * 同一 1_snapshot.html 先后渲染两次，cfg.mode 分叉）：
+ *   趟 1（styled）结构清洗 + 长文本占位 + SVG 瘦身
+ *     → 2_clean_style_snapshot.html（供步骤 4 裁剪）+ 2_long_text.json
+ *   趟 2（clean）结构清洗 + 瘦身规则（K1-K9，逐任务落地）
+ *     → 2_clean_snapshot.html（终端视图）
+ * 零样式计算：不做 juice 内联、不做隐藏检测——隐藏子树按可见保留。
  *
- * 用法:
- *   node clean_snapshot.mjs --url <url>
+ * 清洗版是终端视图：不含 LONG_TEXT 占位符（一切还原走带样式版与恢复清单），
+ * 步骤 3 的 LLM 在清洗版上读结构、不再需要二次还原。
  *
- * 共同清洗（两版一致；实现在 lib/page-clean-snapshot.js，按执行序编号 1-19，
- *   其中 14-19 为清洗版六规则瘦身、仅作用于清洗版）：
+ * 共同结构清洗（两趟一致；实现在 lib/page-clean-snapshot.js，共享步骤 1-8）：
  *   【整体删除】与正文结构无关的噪声，连子树一起删：
  *     - 文档级噪声：link / meta / base（title 保留，作步骤 3 识别线索）
  *     - 页面骨架：nav / footer / form 及 role="navigation"/"contentinfo"/"form"
@@ -31,21 +32,15 @@
  *     caption/colgroup/col/thead/tbody/tfoot/tr/td/th（删空单元格/列定义
  *     会让行列错位，单元格内的噪声照删、留空壳）
  *
- * 两版分叉：
- *   - 带样式版：保留 style 属性与 <style> 标签，SVG 瘦身为壳
- *     （仅留 id/class/data-u2m-id）
- *   - 清洗版：删 style 属性与 <style> 标签，SVG 剥成裸 <svg></svg> 壳
- *
- * 清洗版六规则瘦身（步骤 14-19，仅清洗版；带样式版与步骤 4-9 不受影响）：
- *   R2 class 噪声过滤、R3 data-* 白名单、R1 pre→code...、R4 astro 解包、
- *   R5 保守空白压缩、R6 隐藏子树折叠为 data-u2m-hidden 标记（统一折叠不删除，
- *   根元素 data-u2m-id 仍可引用）。R6 隐藏判定走 juice 级联检测管线四阶段
- *   （A 规范化 → B juice 内联 → C 页内检测 → D 清洗，任一失败降级为不折叠），
- *   另有雪崩护栏：折叠后可见文本占比过低时放弃折叠并告警。
- *
- * 长文本占位（两版编号逐一对应；纯空白文本与 svg/style 子树文本不占位）：
- *   中文（含汉字）字符数 > 16 → {{LONG_TEXT_k|n_chars}}
- *   英文（不含汉字）单词数 > 12 → {{LONG_TEXT_k|n_words}}
+ * 两趟分叉（page-clean-snapshot.js 内 mode 分支）：
+ *   - styled 趟：保留 style 属性与 <style> 标签，SVG 瘦身为壳
+ *     （仅留 id/class/data-u2m-id）；长文本占位（纯空白文本与 svg/style
+ *     子树文本不占位）——中文（含汉字）字符数 > 16 → {{LONG_TEXT_k|n_chars}}，
+ *     英文（不含汉字）单词数 > 12 → {{LONG_TEXT_k|n_words}}
+ *   - clean 趟：删 style 属性与 <style> 标签，SVG 剥成裸 <svg></svg> 壳；
+ *     瘦身规则 K1-K9（后续任务逐个落地，当前为过渡期旧 R1-R5：R2 class
+ *     过滤、R3 data 白名单、R1 pre→code...、R4 astro 解包、R5 空白压缩）；
+ *     原六规则的 R6 隐藏折叠已随 juice 检测管线废除
  *
  * stdout 输出（有且仅有一行 JSON，日志一律走 stderr）:
  *   {"status":"ok","cleanedSnapshot":"...","styledSnapshot":"...",
@@ -58,7 +53,6 @@ import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
-import juice from 'juice';
 import { emit, emitError, usage, log, debug } from './lib/contract.mjs';
 import { urlDir } from './lib/env.mjs';
 import { readSharedScript } from './lib/placeholder.mjs';
@@ -93,66 +87,33 @@ async function main() {
   debug(`读入快照 ${snapshotPath}（${fs.statSync(snapshotPath).size} 字节）`);
 
   const pageCleanFn = await readSharedScript('page-clean-snapshot.js');
-  const normalizeFn = await readSharedScript('page-normalize-styles.js');
-  const hiddenFn = await readSharedScript('page-hidden-detect.js');
 
   let browser;
   try {
     browser = await chromium.launch({ headless: true, ...proxyLaunchOptions() });
     const context = await newU2MContext(browser);
     const page = await context.newPage();
+    // 只拦 http(s) 子资源：DOM 解析不需要图片/字体，file:// 主文档导航不经路由
+    await page.route(/^https?:/, (route) => route.abort());
 
-    // 阶段 A：加载快照 + style 属性字符串规范化（防 juice 引号改写损毁声明，
-    // 机制见 page-normalize-styles.js 头注；页 1 DOM 保持规范化态供阶段 D 复用）
+    // 趟 1（styled）：结构清洗 + 长文本占位 + SVG 瘦身 → 带样式版 + 恢复清单
     await page.goto(`file://${snapshotPath}`, { waitUntil: 'domcontentloaded' });
-    const htmlNorm = await page.evaluate(`(${normalizeFn})()`);
+    const styled = await page.evaluate(`(${pageCleanFn})(${JSON.stringify({ mode: 'styled' })})`);
 
-    // 阶段 B+C：juice 级联内联 → 页 2 检测隐藏子树。任何失败都降级为「不折叠」
-    // （失败方向安全：清洗版变大，正文与带样式版不受影响），不阻断步骤 2。
-    let hidden = [];
-    try {
-      const t0 = performance.now();
-      const juiced = juice(htmlNorm, { removeStyleTags: true, decodeStyleAttributes: true });
-      debug(`juice 内联 ${((performance.now() - t0) / 1000).toFixed(2)}s（${juiced.length} 字节）`);
-      const page2 = await context.newPage();
-      try {
-        // 页 2 只读 style 属性，文档由 setContent 提供——子资源全 abort，不出网
-        // （原为每跑一次步骤 2 向原站重拉一轮图片）
-        await page2.route('**/*', (route) => route.abort());
-        await page2.setContent(juiced, { waitUntil: 'domcontentloaded' });
-        const detect = await page2.evaluate(`(${hiddenFn})()`);
-        // 雪崩护栏：juiced DOM 上折叠后可见文本占比 <5% 且折叠前文本充足（≥2000
-        // 非空白字符）→ 本轮放弃折叠（整页被 cookie 墙 display:none 类极端页面）
-        const visibleChars = detect.totalChars - detect.hiddenChars;
-        if (detect.totalChars >= 2000 && visibleChars < detect.totalChars * 0.05) {
-          debug(`[clean] 雪崩护栏：折叠后可见文本 ${visibleChars}/${detect.totalChars} 字符，放弃折叠`);
-          hidden = [];
-        } else {
-          hidden = detect.items;
-          debug(`[clean] 检测到 ${hidden.length} 个隐藏子树`);
-        }
-      } finally {
-        await page2.close();
-      }
-    } catch (e) {
-      debug(`隐藏检测失败，跳过折叠: ${e.message}`);
-    }
+    // 趟 2（clean）：重新加载同一快照，结构清洗 + K1-K9 → 清洗版（终端视图）
+    await page.goto(`file://${snapshotPath}`, { waitUntil: 'domcontentloaded' });
+    const clean = await page.evaluate(`(${pageCleanFn})(${JSON.stringify({ mode: 'clean' })})`);
 
-    // 阶段 D：清洗（页 1，规范化态 DOM；hidden 随 cfg 传入）
-    const result = await page.evaluate(`(${pageCleanFn})(${JSON.stringify({ hidden })})`);
-
-    // 写盘
     const cleanedPath = path.join(dir, '2_clean_snapshot.html');
-    await fsPromises.writeFile(cleanedPath, result.html, 'utf8');
-    // 带样式版：保留 style 属性/<style>/完整 SVG，占位符与清洗版逐一对应
+    await fsPromises.writeFile(cleanedPath, clean.html, 'utf8');
     const styledPath = path.join(dir, '2_clean_style_snapshot.html');
-    await fsPromises.writeFile(styledPath, result.styledHtml, 'utf8');
-    // 长文本恢复清单：占位编号 → 原文
+    await fsPromises.writeFile(styledPath, styled.html, 'utf8');
     const longTextPath = path.join(dir, '2_long_text.json');
-    await fsPromises.writeFile(longTextPath, JSON.stringify(result.longTexts), 'utf8');
-    log(`清洗完成: ${cleanedPath} (${result.longTextCount} 个长文本占位符)`);
+    await fsPromises.writeFile(longTextPath, JSON.stringify(styled.longTexts), 'utf8');
 
-    // 先关浏览器再 emit
+    debug(`[clean] hidden 折叠 ${clean.stats.hiddenCount} · run token ${clean.stats.runCount} · 清洗版 ${Buffer.byteLength(clean.html, 'utf8')} 字节`);
+    log(`清洗完成: ${cleanedPath} (${styled.longTextCount} 个长文本占位符)`);
+
     await context.close();
     await browser.close();
 
@@ -161,7 +122,7 @@ async function main() {
       cleanedSnapshot: cleanedPath,
       styledSnapshot: styledPath,
       longText: longTextPath,
-      longTextCount: result.longTextCount,
+      longTextCount: styled.longTextCount,
     });
   } catch (e) {
     await browser?.close().catch(() => {});

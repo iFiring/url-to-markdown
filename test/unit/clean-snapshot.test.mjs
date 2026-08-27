@@ -9,7 +9,6 @@ import { urlToDirName } from '../../script/lib/env.mjs';
 
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
 const scriptPath = path.resolve(thisDir, '../../script/lib/page-clean-snapshot.js');
-const hiddenDetectPath = path.resolve(thisDir, '../../script/lib/page-hidden-detect.js');
 
 /** 瘦身规则测试基座：手写 1_snapshot 夹具 → 子进程跑真 clean_snapshot.mjs → 读回两版产物。 */
 async function runClean(snapshot, urlPath = 'slim-article', env = {}) {
@@ -33,14 +32,6 @@ async function runClean(snapshot, urlPath = 'slim-article', env = {}) {
   };
 }
 
-function runInBrowser(html, fnSrc) {
-  // 用 node 模拟浏览器环境：使用 jsdom 或直接字符串处理验证
-  // 这里验证函数源码是否合法
-  const wrapped = `(${fnSrc})()`;
-  // 基础语法检查
-  assert.doesNotThrow(() => new Function('return ' + wrapped), '页面函数应为合法 JS');
-}
-
 test('page-clean-snapshot.js: 文件存在且包含 __u2mCleanSnapshot 函数', () => {
   const src = fs.readFileSync(scriptPath, 'utf8');
   assert.ok(src.includes('function __u2mCleanSnapshot'), '应定义 __u2mCleanSnapshot');
@@ -50,12 +41,6 @@ test('page-clean-snapshot.js: 函数可被 evaluate 格式调用', () => {
   const src = fs.readFileSync(scriptPath, 'utf8');
   const wrapped = `(${src})()`;
   assert.doesNotThrow(() => new Function('return ' + wrapped));
-});
-
-test('page-hidden-detect.js: 文件存在且 __u2mDetectHidden 可被 evaluate 格式调用', () => {
-  const src = fs.readFileSync(hiddenDetectPath, 'utf8');
-  assert.ok(src.includes('function __u2mDetectHidden'), '应定义 __u2mDetectHidden');
-  assert.doesNotThrow(() => new Function('return (' + src + ')()'));
 });
 
 test('clean_snapshot.mjs: 无参数时输出 usage_error', async () => {
@@ -90,7 +75,7 @@ test('clean_snapshot.mjs: 对 article-1 快照执行清洗', async () => {
   const cleaned = fs.readFileSync(out.cleanedSnapshot, 'utf8');
   assert.ok(!cleaned.includes('style='), '不应含 style 属性');
   assert.ok(!cleaned.includes('<style'), '不应含 <style> 标签');
-  assert.ok(cleaned.includes('LONG_TEXT'), '应含长文本占位符');
+  assert.ok(!cleaned.includes('LONG_TEXT'), '清洗版不应再含 LONG_TEXT 占位（终端视图，一切还原走带样式版）');
   assert.ok(!cleaned.match(/<svg[^>]+[a-z-]+=/i), 'SVG 不应有属性');
 
   // head 里的 meta/link（charset/viewport/preconnect/og:* 等）对步骤 3 的结构识别
@@ -455,10 +440,10 @@ test('clean_snapshot.mjs: 中英文分标准占位，并生成 2_long_text.json 
   assert.equal(out.longTextCount, 3, '仅中文 17 字、英文 13 词、混合 18 字三段应被占位');
 
   const cleaned = fs.readFileSync(out.cleanedSnapshot, 'utf8');
-  // 中英文分别按字符数/单词数占位，单位后缀小写
-  assert.ok(cleaned.includes('|17_chars}}'), '中文按字符数占位，后缀 _chars');
-  assert.ok(cleaned.includes('|13_words}}'), '英文按单词数占位，后缀 _words');
-  assert.ok(cleaned.includes('|18_chars}}'), '含汉字的混合文本按中文标准');
+  const styled = fs.readFileSync(out.styledSnapshot, 'utf8');
+  assert.ok(styled.includes('|17_chars}}'), '中文按字符数占位，后缀 _chars');
+  assert.ok(styled.includes('|13_words}}'), '英文按单词数占位，后缀 _words');
+  assert.ok(styled.includes('|18_chars}}'), '含汉字的混合文本按中文标准');
   // 12 词英文即使字符数(59) > 16 也不占位
   assert.ok(cleaned.includes(enShort), '12 词英文不应占位（即使字符数 > 16）');
   assert.ok(cleaned.includes(zhShort), '16 字中文不应占位');
@@ -523,10 +508,10 @@ test('clean_snapshot.mjs: 带样式快照保留样式，SVG 瘦身为壳，占�
   assert.ok(!/width=|height=/.test(svgOpen[0]), 'svg 壳不应保留 width/height 等其他属性');
   assert.ok(!styled.includes(svgLong) && !styled.includes('<text'), '带样式版不应残留 SVG 子元素与文本');
 
-  // 两版占位符集合完全一致（编号与 N 值逐一对应）
+  // 占位体系分叉（2026-08-27）：styled 保留 LONG_TEXT；清洗版是终端视图、不再占位
   const ph = (h) => (h.match(/\{\{LONG_TEXT_\d+\|\d+_[a-z]+\}\}/g) || []).sort();
-  assert.deepEqual(ph(styled), ph(cleaned), '两版长文本占位符应完全一致');
-  assert.ok(cleaned.includes('{{LONG_TEXT_'), 'HTML 长文本应被占位');
+  assert.ok(ph(styled).length > 0, '带样式版 HTML 长文本应被占位');
+  assert.ok(!cleaned.includes('{{LONG_TEXT_'), '清洗版不应含 LONG_TEXT 占位（守卫不变量）');
   assert.ok(!styled.includes(htmlLong), '带样式版中 HTML 长文本同样应被占位');
 
   // 恢复清单条数 = 占位数（SVG 文本与 <style> CSS 均不参与，故仅 htmlLong 一条）
@@ -632,169 +617,19 @@ test('R4+R5: astro 包装解包；安全位置空白删除、行内间空白保�
   } finally { cleanup(); }
 });
 
-test('R6: juice 隐藏折叠——fixed 模态与流内 expander 折成标记，var() 按可见，带样式版/占位清单完整', async () => {
-  const hiddenLong = '这是一段藏在折叠区里的超长中文文本内容，用来验证占位符只在带样式版出现。'; // >16 字 → 占位
+test('守卫: 清洗版是终端视图——不含 {{LONG_TEXT_，步骤 2 不再 import juice', async () => {
   const snapshot = `<!DOCTYPE html>
-<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title>
-<style>.modal{display:none;position:fixed}.expn{display:none}.keepvar{display:var(--x)}</style>
-</head>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
-  <div data-u2m-id="1">
-    <div data-u2m-id="2" class="modal"><p data-u2m-id="3">模态内容模态内容</p></div>
-    <div data-u2m-id="4" class="expn"><p data-u2m-id="5">${hiddenLong}</p></div>
-    <div data-u2m-id="6" class="keepvar">按可见处理</div>
-    <p data-u2m-id="7">正文段落</p>
-  </div>
+  <div data-u2m-id="1"><p data-u2m-id="2">这是一段超过十六个汉字的长文本，清洗版不应为其生成占位符。</p></div>
 </body></html>`;
-  const { out, cleaned, styled, cleanup } = await runClean(snapshot, 'r6-hidden');
+  const { out, cleaned, styled, cleanup } = await runClean(snapshot, 'guard-terminal');
   try {
-    // 折叠标记：fixed 带 ,fixed 后缀，流内不带
-    const modal = cleaned.match(/<div data-u2m-id="2"[^>]*>/)[0];
-    assert.ok(/data-u2m-hidden="\d+_chars,fixed"/.test(modal), `模态应折成 fixed 标记: ${modal}`);
-    const expn = cleaned.match(/<div data-u2m-id="4"[^>]*>/)[0];
-    assert.ok(/data-u2m-hidden="\d+_chars"/.test(expn) && !/fixed/.test(expn), `expander 应折成无 fixed 标记: ${expn}`);
-    // 子树内容与内部 id 从清洗版消失
-    assert.ok(!cleaned.includes('模态内容') && !cleaned.includes('data-u2m-id="3"') && !cleaned.includes('data-u2m-id="5"'), '折叠子树内容应消失');
-    // var() 不可解析 → 按可见处理
-    assert.ok(cleaned.includes('按可见处理') && cleaned.includes('data-u2m-id="6"'), 'var() 值按可见保留');
-    assert.ok(cleaned.includes('正文段落'), '可见正文保留');
-    // 带样式版完整保真
-    assert.ok(styled.includes('模态内容') && styled.includes('data-u2m-id="3"'), '带样式版模态内容完整');
-    assert.ok(styled.includes('{{LONG_TEXT_'), '带样式版含折叠区长文本占位符');
-    // 占位符语义分叉：清洗版折叠区占位符消失，但 2_long_text.json 完整
-    assert.ok(!cleaned.includes('{{LONG_TEXT_'), '清洗版不应含折叠区长文本占位符');
-    const longTexts = JSON.parse(fs.readFileSync(out.longText, 'utf8'));
-    assert.ok(Object.values(longTexts).includes(hiddenLong), '恢复清单含折叠区原文');
-    assert.equal(out.longTextCount, 1, '折叠区长文本仍计数占位');
-  } finally { cleanup(); }
-});
-
-test('R6: display:none !important 同样折叠——行内 style 属性的 !important 后缀需剥离后字面匹配', async () => {
-  // juice 内联 <style> 规则时会自己剥 !important 后缀，但快照里作者手写的
-  // 行内 style="display:none !important" 原样透传到检测端——parseDecls 必须
-  // 剥后缀再字面匹配，否则按可见处理、漏折叠
-  const hardLong = '这是一段被 none important 硬隐藏的超长中文文本，验证 important 后缀剥离后照常折叠。';
-  const snapshot = `<!DOCTYPE html>
-<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title>
-<style>.hard{display:none !important}</style>
-</head>
-<body>
-  <div data-u2m-id="1">
-    <div data-u2m-id="2" style="display:none !important"><p data-u2m-id="3">${hardLong}</p></div>
-    <p data-u2m-id="4">正文段落</p>
-  </div>
-</body></html>`;
-  const { out, cleaned, styled, cleanup } = await runClean(snapshot, 'r6-important');
-  try {
-    // !important 后缀剥离后按显式 display:none 折叠
-    const hard = cleaned.match(/<div data-u2m-id="2"[^>]*>/)[0];
-    assert.ok(/data-u2m-hidden="\d+_chars"/.test(hard), `!important 隐藏应折叠: ${hard}`);
-    assert.ok(!cleaned.includes(hardLong) && !cleaned.includes('data-u2m-id="3"'), '折叠子树内容应从清洗版消失');
-    assert.ok(cleaned.includes('正文段落'), '可见正文保留');
-    // 带样式版保真：长文本经占位符 + 恢复清单完整
-    assert.ok(styled.includes('{{LONG_TEXT_'), '带样式版经占位符保真硬隐藏区长文本');
-    const longTexts = JSON.parse(fs.readFileSync(out.longText, 'utf8'));
-    assert.ok(Object.values(longTexts).includes(hardLong), '恢复清单含硬隐藏区原文');
-  } finally { cleanup(); }
-});
-
-test('R6: HTML hidden 属性按显式 display:none 折叠——无 style 属性/无 <style> 规则也生效', async () => {
-  // hidden 属性本身即「不渲染」声明（HTML 规范）；其 UA/preflight 规则
-  // （如 [hidden]:where(:not([hidden=until-found]))）juice 无法内联，
-  // 检测器须在侧直接认定，否则纯 hidden 子树（移动端菜单等）全部漏折叠
-  const attrLong = '这是一段仅靠 hidden 属性隐藏的超长中文文本，验证无任何样式规则也照常折叠。';
-  const snapshot = `<!DOCTYPE html>
-<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title>
-</head>
-<body>
-  <div data-u2m-id="1">
-    <div data-u2m-id="2" hidden=""><p data-u2m-id="3">${attrLong}</p></div>
-    <p data-u2m-id="4">正文段落</p>
-  </div>
-</body></html>`;
-  const { out, cleaned, styled, cleanup } = await runClean(snapshot, 'r6-hidden-attr');
-  try {
-    const hid = cleaned.match(/<div data-u2m-id="2"[^>]*>/)[0];
-    assert.ok(/data-u2m-hidden="\d+_chars"/.test(hid), `hidden 属性子树应折叠: ${hid}`);
-    assert.ok(!cleaned.includes(attrLong) && !cleaned.includes('data-u2m-id="3"'), '折叠子树内容应从清洗版消失');
-    assert.ok(cleaned.includes('正文段落'), '可见正文保留');
-    // 带样式版保真：长文本经占位符 + 恢复清单完整
-    assert.ok(styled.includes('{{LONG_TEXT_'), '带样式版经占位符保真 hidden 区长文本');
-    const longTexts = JSON.parse(fs.readFileSync(out.longText, 'utf8'));
-    assert.ok(Object.values(longTexts).includes(attrLong), '恢复清单含 hidden 区原文');
-  } finally { cleanup(); }
-});
-
-test('R6 边界钉住: @media 响应式隐藏不折叠——juice 不内联媒体查询，按可见保留', async () => {
-  // 钉当前行为——@media 不内联故响应式隐藏不折叠（安全方向：多保留不误删）。
-  // juice 对 @media 规则（removeStyleTags:true 下含媒体查询的 <style> 原样
-  // 保留）从不把声明写进 style 属性，__u2mDetectHidden 静态读不到
-  // display:none；xl:hidden/lg:hidden 类响应式隐藏同此边界（spec §6 用例 5）
-  const snapshot = `<!DOCTYPE html>
-<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title>
-<style>@media (min-width: 1280px) { .resp{display:none} }</style>
-</head>
-<body>
-  <div data-u2m-id="1">
-    <div data-u2m-id="2" class="resp"><p data-u2m-id="3">响应式隐藏内容</p></div>
-    <p data-u2m-id="4">正文段落</p>
-  </div>
-</body></html>`;
-  const { cleaned, styled, cleanup } = await runClean(snapshot, 'r6-media-pin');
-  try {
-    const resp = cleaned.match(/<div data-u2m-id="2"[^>]*>/)[0];
-    assert.ok(!/data-u2m-hidden/.test(resp), `@media 隐藏不应折叠: ${resp}`);
-    assert.ok(!/data-u2m-hidden="/.test(cleaned), '全程不应产生折叠标记');
-    assert.ok(cleaned.includes('响应式隐藏内容') && cleaned.includes('data-u2m-id="3"'), '内容按可见保留在清洗版');
-    assert.ok(cleaned.includes('正文段落'), '可见正文保留');
-    assert.ok(styled.includes('响应式隐藏内容'), '带样式版保留');
-  } finally { cleanup(); }
-});
-
-test('护栏: 折叠后可见文本 <5% 且总量充足 → 放弃折叠并告警；visibility 翻案语义', async () => {
-  const gated = '门'.repeat(2100); // 折叠区 2100 字
-  const visLong = '外'.repeat(60);
-  const snapshot = `<!DOCTYPE html>
-<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title>
-<style>.gate{display:none}.vis{visibility:hidden}.reshow{visibility:visible}</style>
-</head>
-<body>
-  <div data-u2m-id="1">
-    <div data-u2m-id="2" class="gate"><p data-u2m-id="3">${gated}</p></div>
-    <p data-u2m-id="4">${visLong}</p>
-    <div data-u2m-id="5" class="vis">可见性隐藏祖先<span data-u2m-id="6" class="reshow">翻案后代</span></div>
-  </div>
-</body></html>`;
-  const { cleaned, stderr, cleanup } = await runClean(snapshot, 'r6-guard', { U2M_DEBUG: '1' });
-  try {
-    // 可见文本 ≈ 60 字 vs 折叠 2100 字 → 护栏触发：内容原样保留在清洗版
-    // The gated content should be preserved as a placeholder (not folded away)
-    assert.ok(cleaned.includes('{{LONG_TEXT'), '护栏触发后折叠区内容应作为占位符保留');
-    assert.ok(cleaned.includes('|2100_chars}}'), '应保留折叠区长文本占位符');
-    assert.ok(!/data-u2m-hidden="/.test(cleaned), '不应产生折叠标记');
-    assert.ok(stderr.includes('护栏') || stderr.includes('雪崩'), `stderr 应含护栏告警: ${stderr.slice(-300)}`);
-  } finally { cleanup(); }
-});
-
-test('R6 语义: visibility:hidden 顶层折叠、visible 后代翻案仅入带样式版（已知边界）', async () => {
-  const snapshot = `<!DOCTYPE html>
-<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title>
-<style>.vis{visibility:hidden}</style>
-</head>
-<body>
-  <div data-u2m-id="1">
-    <div data-u2m-id="5" class="vis">可见性隐藏祖先<span data-u2m-id="6" style="visibility:visible">翻案后代</span></div>
-    <p data-u2m-id="7">正文正文正文正文正文正文正文正文正文正文正文正文</p>
-  </div>
-</body></html>`;
-  const { cleaned, styled, cleanup } = await runClean(snapshot, 'r6-vis');
-  try {
-    // .vis 顶层折叠：标记存在、文本消失（翻案后代随根折叠——spec 已记边界）
-    const root = cleaned.match(/<div data-u2m-id="5"[^>]*>/)[0];
-    assert.ok(/data-u2m-hidden="\d+_chars"/.test(root), `visibility 顶层应折叠: ${root}`);
-    assert.ok(!cleaned.includes('可见性隐藏祖先'), '折叠根文本应消失');
-    // 带样式版完整
-    assert.ok(styled.includes('翻案后代') && styled.includes('可见性隐藏祖先'), '带样式版完整保留');
+    assert.ok(!cleaned.includes('{{LONG_TEXT_'), '清洗版不应含 LONG_TEXT 占位');
+    assert.ok(styled.includes('{{LONG_TEXT_'), '带样式版保留 LONG_TEXT 占位');
+    assert.equal(out.longTextCount, 1, '恢复清单仍从带样式版产出');
+    const src = fs.readFileSync(path.resolve('script/clean_snapshot.mjs'), 'utf8');
+    assert.ok(!src.includes("from 'juice'"), '步骤 2 不再 import juice');
   } finally { cleanup(); }
 });
 
