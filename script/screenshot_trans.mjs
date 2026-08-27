@@ -4,14 +4,18 @@
  * 读 7_skeleton.json + 1_snapshot.html + 2_long_text.json，产出：
  * 
  *   8_resolved_skeleton.json  结构同步骤 7，所有 {{LONG_TEXT_k[|suffix]}}
- *                             替换为真实文本（trans2img 条目保留）；img 条目
- *                             在下载成功后改写为本地相对路径并重写本文件
- * 
+ *                             替换为真实文本；img 条目（![img](url) 形态）在
+ *                             下载成功后只换括号内 URL 改写为
+ *                             ![img](assets/images/<name>) 并重写本文件；
+ *                             trans2img 条目在截图择优后回写为选中路径
+ *                             assets/trans/{id}.webp 并重写本文件
+ *
  *   assets/images/<name>      骨架 img 条目的远端图片（见 lib/download_images.mjs
  *                             头注：优先 URL 文件名、冲突带编号、扩展名按
  *                             content-type、失败保留原 URL）
- * 
- *   assets/trans/{id}.webp    每个 trans2img 元素一张截图（WebP，2x 分辨率）
+ *
+ *   assets/trans/{id}.webp    trans2img 单传祖先链上每个 id 各一张截图
+ *                             （WebP，2x 分辨率，全部落盘保留）
  *
  * 用法:
  *   node screenshot_trans.mjs --url <url>
@@ -36,7 +40,9 @@
  *      page-element-signature.js 对每个 trans2img id 计算签名，全等才在
  *      B 上截图，失配/B 侧缺失/live 整体失败（站点不可达等）在 A 上兜底。
  *      A 侧也未命中的 id → error（骨架与视图不匹配）。live 页与 1_snapshot
- *      都是真实文本，无需任何页面内占位符还原
+ *      都是真实文本，无需任何页面内占位符还原。链上每个 id 各截一张并
+ *      记录 boundingBox，随后逐条目择优——宽度优先、等宽选高、宽高全同
+ *      选最外层（数组首位）——把条目 value 回写为选中路径
  *
  * stdout 输出（有且仅有一行 JSON，日志一律走 stderr）:
  *   `resolvedSkeleton` 为 resolved skeleton 路径；
@@ -105,6 +111,29 @@ function resolveSkeletonString(value, longText) {
   return { resolved: value, undefined: [] };
 }
 
+// 从 img 条目 value（![img](url) 形态）解包出 {alt, url}。
+// 非该形态或 URL 非 http(s) 返回 null——跳过下载。
+const IMG_MD_RE = /^!\[([^\]]*)\]\(([^)]+)\)$/;
+function unpackImgEntry(value) {
+  if (typeof value !== 'string') return null;
+  const m = value.match(IMG_MD_RE);
+  if (!m || !/^https?:\/\//.test(m[2])) return null;
+  return { alt: m[1], url: m[2] };
+}
+
+// trans2img 条目择优：宽度优先 → 等宽选高 → 宽高全同选最外层（数组首位）。
+// boundingBox 缺失（null）按 -1 计，排序垫底但不影响平局规则。
+function pickBestId(ids, boxes) {
+  const boxOf = (id) => boxes[id] || { width: -1, height: -1 };
+  let best = ids[0];
+  for (const id of ids.slice(1)) {
+    const a = boxOf(id);
+    const b = boxOf(best);
+    if (a.width > b.width || (a.width === b.width && a.height > b.height)) best = id;
+  }
+  return best;
+}
+
 // 签名逐字段比对（严校验：任何差异都判失配，宁降级不出错图）。
 function sameSignature(a, b) {
   return a !== null && b !== null
@@ -158,17 +187,28 @@ async function main() {
     );
   }
 
-  // 按文档序收集 trans2img id；按文档序收集 img URL（去重，只下 http/https）
-  const transIds = [];
+  // 按文档序收集 trans2img 条目（value 应为非空正整数 ID 数组——单传祖先链）；
+  // 按文档序收集 img 条目括号内 URL（去重，只下 http/https）
+  const transEntries = [];
   for (const entry of skeleton) {
-    if (entry.trans2img !== undefined) transIds.push(String(entry.trans2img));
+    if (entry.trans2img === undefined) continue;
+    const v = entry.trans2img;
+    const okShape = Array.isArray(v) && v.length > 0 && v.every((id) => Number.isInteger(id) && id > 0);
+    if (!okShape) {
+      return emitError(
+        `trans2img 条目 value 应为非空正整数 ID 数组（单传祖先链），实际为: ${JSON.stringify(v)}——请按步骤 7 指南修正 7_skeleton.json`,
+        1
+      );
+    }
+    transEntries.push(v);
   }
+  const transIds = [...new Set(transEntries.flat())];
   const imgUrls = [];
   for (const entry of resolvedSkeleton) {
-    const v = entry.img;
-    if (typeof v === 'string' && /^https?:\/\//.test(v) && !imgUrls.includes(v)) imgUrls.push(v);
+    const img = unpackImgEntry(entry.img);
+    if (img && !imgUrls.includes(img.url)) imgUrls.push(img.url);
   }
-  debug(`骨架 ${skeleton.length} 条：trans2img ${transIds.length} 个、img 去重后 ${imgUrls.length} 张`);
+  debug(`骨架 ${skeleton.length} 条：trans2img 条目 ${transEntries.length} 个（去重 id ${transIds.length} 个）、img 去重后 ${imgUrls.length} 张`);
 
   if (transIds.length === 0 && imgUrls.length === 0) {
     log('骨架无 trans2img 条目也无 img 条目（已写出 resolved skeleton）');
@@ -201,8 +241,10 @@ async function main() {
       failedImages = failed.map((f) => f.url);
       if (map.size > 0) {
         for (const entry of resolvedSkeleton) {
-          const local = entry.img !== undefined ? map.get(entry.img) : undefined;
-          if (local !== undefined) entry.img = local;
+          const img = entry.img !== undefined ? unpackImgEntry(entry.img) : null;
+          if (!img) continue;
+          const local = map.get(img.url);
+          if (local !== undefined) entry.img = `![${img.alt}](${local})`;
         }
         await fsPromises.writeFile(resolvedPath, JSON.stringify(resolvedSkeleton, null, 2));
       }
@@ -266,6 +308,7 @@ async function main() {
     fs.mkdirSync(transDir, { recursive: true });
 
     const screenshots = [];
+    const boxes = {}; // id → boundingBox（CSS px）——择优依据
     for (const id of transIds) {
       const useLive = liveIds.includes(id);
       if (!useLive) debug(`trans2img ${id} live 签名失配或缺失 → 快照兜底`);
@@ -279,9 +322,20 @@ async function main() {
       }
       const imgPath = path.join(transDir, `${id}.webp`);
       await h.screenshot({ path: imgPath, type: 'webp' });
-      debug(`trans2img ${id} 截图（${useLive ? 'live' : 'snapshot'}）→ ${imgPath}`);
+      boxes[id] = await h.boundingBox();
+      debug(`trans2img ${id} 截图（${useLive ? 'live' : 'snapshot'}）→ ${imgPath}${boxes[id] ? `（${Math.round(boxes[id].width)}×${Math.round(boxes[id].height)}）` : ''}`);
       screenshots.push(imgPath);
     }
+
+    // 逐条目择优（宽度优先 → 等宽选高 → 全同选最外层），回写为选中路径。
+    // trans2img 数组经 resolveSkeletonString 原引用透传，直接按形态识别条目
+    for (const entry of resolvedSkeleton) {
+      if (!Array.isArray(entry.trans2img)) continue;
+      const best = pickBestId(entry.trans2img, boxes);
+      debug(`trans2img [${entry.trans2img.join(', ')}] 择优 → ${best}`);
+      entry.trans2img = `assets/trans/${best}.webp`;
+    }
+    await fsPromises.writeFile(resolvedPath, JSON.stringify(resolvedSkeleton, null, 2));
 
     await context.close();
     await browser.close();

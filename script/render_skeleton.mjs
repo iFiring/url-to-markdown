@@ -8,15 +8,17 @@
  * 用法:
  *   node render_skeleton.mjs --url <url>
  *
- * 转换规则（块级语法由此脚本加，行内 markdown 已在步骤 7 写好）：
- *   h1-h6       "#" 前缀（数量 = 级别）
- *   p           value 原样
- *   blockquote  每行前缀 "> "
- *   ul / ol     value 原样（行级 "- " / "1. " 语法已写好）
+ * 转换规则（契约见 references/markdown_skeleton_guide.md：value 已带行外
+ * 语法——#、>、- 、1.、![img](url) 由步骤 7 写好，行内 markdown 同理）：
+ *   h1-h6       以 key 为准重建：剥 value 自带 # 前缀（仅剥后随空白者，
+ *               「#1 排行榜」这类正文不误伤）后按级别补 "#"*N——LLM 漏写
+ *               /写错级别也能纠正
+ *   blockquote  以 key 为准重建：剥行首 > 后逐行补 "> "
+ *   p / ul / ol / table / img   透传（嵌套缩进、管线表、![img](url) 只存在于
+ *               value；img 经步骤 8 后或为 ![img](assets/images/x) 本地形态）
  *   code        "```{lang}" 围栏（lang 缺省时仅 "```"）
- *   img         ![]({url})
- *   table       value 原样（完整管线表已写好）
- *   trans2img   ![](assets/trans/{id}.webp)（相对工作目录）
+ *   trans2img   value 为步骤 8 择优回写的选中路径 assets/trans/{id}.webp →
+ *               ![]({path})；仍是 ID 数组 → error（提示先跑步骤 8）
  *   未知 key 静默跳过；空骨架输出空文件
  *
  * stdout 输出（有且仅有一行 JSON，日志一律走 stderr）:
@@ -46,25 +48,26 @@ function parseArgs(argv) {
 }
 
 // 单条骨架 → markdown 字符串。未知 key 返回 null（被主流程过滤）。
+// trans2img 的 value 不是字符串（如仍是 ID 数组）时抛错——步骤 8 未跑。
 function entryToMarkdown(key, value) {
-  // h1-h6：# 前缀
+  // h1-h6：以 key 级别为准重建——key 才是语义判定载体
   if (/^h[1-6]$/.test(key)) {
     const level = +key[1];
-    return `${'#'.repeat(level)} ${String(value)}`;
+    const text = String(value).trim().replace(/^#{1,6}[ \t]+/, '');
+    return `${'#'.repeat(level)} ${text}`;
   }
 
   switch (key) {
     case 'p':
-      return String(value);
-
-    case 'blockquote': {
-      const text = String(value);
-      return text.split('\n').map((l) => `> ${l}`).join('\n');
-    }
-
     case 'ul':
     case 'ol':
-      return String(value);
+    case 'table':
+      return String(value).trim();
+
+    case 'blockquote': {
+      const lines = String(value).trim().split('\n');
+      return lines.map((l) => `> ${l.replace(/^[ \t]*>[ \t]?/, '')}`).join('\n');
+    }
 
     case 'code': {
       if (!value || typeof value !== 'object') return null;
@@ -74,13 +77,17 @@ function entryToMarkdown(key, value) {
     }
 
     case 'img':
-      return `![](${String(value)})`;
+      // value 已是 ![img](url) / ![img](assets/images/x) 完整 markdown，透传
+      return String(value).trim();
 
-    case 'table':
-      return String(value);
-
-    case 'trans2img':
-      return `![](assets/trans/${String(value)}.webp)`;
+    case 'trans2img': {
+      if (typeof value !== 'string') {
+        throw new Error(
+          `trans2img 条目 value 应为步骤 8 择优回写的截图路径，实际为: ${JSON.stringify(value)}——请先运行步骤 8`
+        );
+      }
+      return `![](${value})`;
+    }
 
     default:
       return null;

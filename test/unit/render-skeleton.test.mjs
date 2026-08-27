@@ -22,19 +22,25 @@ test('render_skeleton.mjs: 无参数时输出 usage_error', async () => {
   assert.equal(JSON.parse(r.stdout).status, 'usage_error');
 });
 
+// 新契约（references/markdown_skeleton_guide.md）：value 自带行外语法。
+// h1-h6/blockquote 以 key 为准规范化重建（LLM 漏写/写错级别也能纠正），
+// p/ul/ol/table/img 透传，trans2img 为步骤 8 回写的选中截图路径。
 const RESOLVED = [
-  { h1: '标题一' },
+  { h1: '# 标题一' },
   { p: '一段正文，含**粗体**。' },
-  { h2: '二级标题' },
-  { blockquote: '单行引用' },
-  { blockquote: '多行引用\n第二段' },
-  { ul: '- 条目一\n- 条目二' },
+  { h2: '# 级别写错的标题' },
+  { h5: '漏写井号的标题' },
+  { h1: '# #1 排行榜' },
+  { blockquote: '> 单行引用' },
+  { blockquote: '> 多行引用\n第二段缺前缀' },
+  { ul: '- 条目一\n - 嵌套条目' },
   { ol: '1. 第一步\n2. 第二步' },
   { code: { lang: 'python', content: 'def hello():\n    print("hi")' } },
-  { code: { content: 'plain code' } },
-  { img: 'https://example.com/a.png' },
+  { code: { lang: '', content: 'plain code' } },
+  { img: '![img](https://example.com/a.png)' },
+  { img: '![img](assets/images/cover.png)' },
   { table: '|a|b|\n|--|--|\n|1|2|' },
-  { trans2img: '92' },
+  { trans2img: 'assets/trans/92.webp' },
   { p: '结尾段落' },
 ];
 
@@ -62,7 +68,7 @@ test('render_skeleton.mjs: 缺前置文件时报 error', async () => {
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('render_skeleton.mjs: 全类型条目转换为 markdown', async () => {
+test('render_skeleton.mjs: 全类型条目按新契约转换（h/blockquote 以 key 重建，其余透传）', async () => {
   const { tmpRoot, urlDir } = setup('full');
   const r = await runScript(process.execPath, [scriptPath, '--url', URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
@@ -82,18 +88,41 @@ test('render_skeleton.mjs: 全类型条目转换为 markdown', async () => {
 
   assert.equal(blocks[0], '# 标题一');
   assert.equal(blocks[1], '一段正文，含**粗体**。');
-  assert.equal(blocks[2], '## 二级标题');
-  assert.equal(blocks[3], '> 单行引用');
-  assert.equal(blocks[4], '> 多行引用\n> 第二段');
-  assert.equal(blocks[5], '- 条目一\n- 条目二');
-  assert.equal(blocks[6], '1. 第一步\n2. 第二步');
-  assert.equal(blocks[7], '```python\ndef hello():\n    print("hi")\n```');
-  assert.equal(blocks[8], '```\nplain code\n```');
-  assert.equal(blocks[9], '![](https://example.com/a.png)');
-  assert.equal(blocks[10], '|a|b|\n|--|--|\n|1|2|');
-  assert.equal(blocks[11], '![](assets/trans/92.webp)');
-  assert.equal(blocks[12], '结尾段落');
+  // key 为准：h2 配单 # value 重建为 ##
+  assert.equal(blocks[2], '## 级别写错的标题');
+  // 漏写 # 的 value 按级别补前缀
+  assert.equal(blocks[3], '##### 漏写井号的标题');
+  // 正文以 # 开头：只剥后随空白的 # 前缀，内容不误伤
+  assert.equal(blocks[4], '# #1 排行榜');
+  assert.equal(blocks[5], '> 单行引用');
+  // 缺前缀的行重建为 > 开头
+  assert.equal(blocks[6], '> 多行引用\n> 第二段缺前缀');
+  // ul/ol 透传（嵌套缩进只在 value 里）
+  assert.equal(blocks[7], '- 条目一\n - 嵌套条目');
+  assert.equal(blocks[8], '1. 第一步\n2. 第二步');
+  assert.equal(blocks[9], '```python\ndef hello():\n    print("hi")\n```');
+  assert.equal(blocks[10], '```\nplain code\n```');
+  // img 透传（远端 URL 与本地化路径两种形态）
+  assert.equal(blocks[11], '![img](https://example.com/a.png)');
+  assert.equal(blocks[12], '![img](assets/images/cover.png)');
+  assert.equal(blocks[13], '|a|b|\n|--|--|\n|1|2|');
+  // trans2img：value 为步骤 8 回写的选中路径
+  assert.equal(blocks[14], '![](assets/trans/92.webp)');
+  assert.equal(blocks[15], '结尾段落');
 
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test('render_skeleton.mjs: trans2img 仍为 ID 数组时报 error（提示先跑步骤 8）', async () => {
+  const { tmpRoot } = setup('rawtrans', { resolved: [{ trans2img: [9, 10] }] });
+  const r = await runScript(process.execPath, [scriptPath, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+  });
+  assert.equal(r.code, 1);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'error');
+  assert.ok(out.reason.includes('步骤 8'), `reason 应提示步骤 8: ${out.reason}`);
+  assert.ok(!fs.existsSync(path.join(tmpRoot, urlToDirName(URL), '9_markdown.md')), '不应产出 markdown');
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
@@ -113,4 +142,3 @@ test('render_skeleton.mjs: 空骨架输出空 markdown', async () => {
 
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
-

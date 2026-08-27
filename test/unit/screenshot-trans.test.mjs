@@ -31,24 +31,45 @@ test('screenshot_trans.mjs: 无参数时输出 usage_error', async () => {
 });
 
 // 步骤 1 产物：全保真快照——真实文本（占位符只存在于步骤 2 派生视图）。
+// 模块带单传祖先链：[9]（无样式外层包裹，占满 body 宽）→ [10]（带背景/
+// 边框的模块容器，被 9 的 padding 收窄）→ [11]/[12] 内部装饰。
+// 链上 9 比 10 宽 → 择优应选 9 的截图。
 // --url 指向死端口 → 步骤 8 的 live 重渲染即时失败（ECONNREFUSED），
 // 离线走快照兜底
 const SNAPSHOT = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>测试</title><base data-u2m-base="1" href="http://127.0.0.1:9/dead"></head><body>
 <h1 data-u2m-id="1">标题</h1>
 <p data-u2m-id="2">段落一文本内容</p>
+<div data-u2m-id="9" style="padding: 24px">
 <div data-u2m-id="10" style="background-color: rgb(240, 240, 240); border: 1px solid rgb(200, 200, 200); padding: 16px">
 <div data-u2m-id="11" style="background-color: rgb(255, 255, 255); padding: 8px">
 <span data-u2m-id="12">重要内容</span>
 </div>
 </div>
+</div>
 <p data-u2m-id="20">段落二文本内容</p>
 </body></html>`;
 
+// 内层宽于外层：30（width:300 含 padding）内嵌 31（width:900 溢出）→
+// 宽度优先于最外层，择优选 31
+const SNAPSHOT_INNER_WIDER = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>测试</title><base data-u2m-base="1" href="http://127.0.0.1:9/dead"></head><body>
+<div data-u2m-id="30" style="width: 300px; padding: 8px">
+<div data-u2m-id="31" style="width: 900px; background-color: rgb(240, 240, 240)">加宽内容文本</div>
+</div>
+</body></html>`;
+
+// 同宽同高：40/41 均占满 body 内容宽、高度一致 → 平局选最外层 40
+const SNAPSHOT_TIE = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>测试</title><base data-u2m-base="1" href="http://127.0.0.1:9/dead"></head><body>
+<div data-u2m-id="40"><div data-u2m-id="41" style="background-color: rgb(240, 240, 240)">同宽文本</div></div>
+</body></html>`;
+
+// 新契约：value 自带行外语法；trans2img 为单传祖先链 ID 数组
 const SKELETON = [
-  { h1: '标题' },
+  { h1: '# 标题' },
   { p: '{{LONG_TEXT_5}}' },
-  { trans2img: '10' },
+  { trans2img: [9, 10] },
   { p: '{{LONG_TEXT_8}}' },
 ];
 
@@ -83,37 +104,102 @@ test('screenshot_trans.mjs: live 不可达时快照兜底截图 + resolved skele
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
-  assert.equal(out.count, 1, '应截图 1 个元素');
+  assert.equal(out.count, 2, '链上每个 id 各截一张（9、10）');
   assert.equal(out.source, 'snapshot', 'live 重渲染失败（死端口）应整体走快照兜底');
-  assert.equal(out.replaced, undefined, 'replaced 字段应随页面内占位符还原一起退役');
   assert.equal(out.resolvedSkeleton, path.join(urlDir, '8_resolved_skeleton.json'));
 
-  // 截图文件存在且非空
-  const imgPath = path.join(assetsDir, 'trans', '10.webp');
-  assert.ok(fs.existsSync(imgPath), `截图应存在: ${imgPath}`);
-  const stat = fs.statSync(imgPath);
-  assert.ok(stat.size > 100, `截图应非空: ${stat.size} bytes`);
+  // 链上所有截图文件存在且为 WebP
+  for (const id of [9, 10]) {
+    const imgPath = path.join(assetsDir, 'trans', `${id}.webp`);
+    assert.ok(fs.existsSync(imgPath), `截图应存在: ${imgPath}`);
+    const stat = fs.statSync(imgPath);
+    assert.ok(stat.size > 100, `截图应非空: ${imgPath} ${stat.size} bytes`);
+    const buf = fs.readFileSync(imgPath);
+    assert.equal(buf.toString('ascii', 0, 4), 'RIFF', 'WebP RIFF header');
+    assert.equal(buf.toString('ascii', 8, 12), 'WEBP', 'WebP WEBP signature');
+  }
 
-  // 确认是 WebP（RIFF....WEBP 文件头）
-  const buf = fs.readFileSync(imgPath);
-  assert.equal(buf.toString('ascii', 0, 4), 'RIFF', 'WebP RIFF header');
-  assert.equal(buf.toString('ascii', 8, 12), 'WEBP', 'WebP WEBP signature');
-
-  // resolved skeleton：占位符全部还原，trans2img 保留
+  // resolved skeleton：占位符全部还原；trans2img 择优回写为选中路径
+  // （外层 9 占满 body 宽 > 被其 padding 收窄的 10 → 选 9）
   const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
   assert.deepEqual(resolved, [
-    { h1: '标题' },
+    { h1: '# 标题' },
     { p: '段落一文本内容' },
-    { trans2img: '10' },
+    { trans2img: 'assets/trans/9.webp' },
     { p: '段落二文本内容' },
-  ], 'resolved skeleton 应还原所有占位符并保留 trans2img 条目');
+  ], 'resolved skeleton 应还原占位符并把 trans2img 回写为择优路径');
 
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
+test('screenshot_trans.mjs: 择优按宽度优先——内层更宽时选内层', async () => {
+  const { tmpRoot, urlDir } = setupTmp('innerwider', {
+    snapshot: SNAPSHOT_INNER_WIDER,
+    skeleton: [{ trans2img: [30, 31] }],
+  });
+  const script = path.resolve('script/screenshot_trans.mjs');
+  const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 60000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+  assert.equal(out.count, 2);
+
+  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
+  assert.deepEqual(resolved, [{ trans2img: 'assets/trans/31.webp' }],
+    '内层 31（900px）宽于外层 30（316px）→ 选 31');
+
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test('screenshot_trans.mjs: 宽高全同的平局选最外层', async () => {
+  const { tmpRoot, urlDir } = setupTmp('tie', {
+    snapshot: SNAPSHOT_TIE,
+    skeleton: [{ trans2img: [40, 41] }],
+  });
+  const script = path.resolve('script/screenshot_trans.mjs');
+  const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 60000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+  assert.equal(out.count, 2);
+
+  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
+  assert.deepEqual(resolved, [{ trans2img: 'assets/trans/40.webp' }],
+    '40/41 宽高一致 → 选数组首位（最外层）40');
+
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test('screenshot_trans.mjs: trans2img value 非法（旧格式/空数组/非整数）时报 error', async () => {
+  const script = path.resolve('script/screenshot_trans.mjs');
+  const cases = [
+    { name: 'oldstr', skeleton: [{ trans2img: '10' }] },
+    { name: 'empty', skeleton: [{ trans2img: [] }] },
+    { name: 'nonint', skeleton: [{ trans2img: [9, 'x'] }] },
+  ];
+  for (const c of cases) {
+    const { tmpRoot } = setupTmp(`bad-${c.name}`, { skeleton: c.skeleton });
+    const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
+      env: { U2M_WORKING_ROOT: tmpRoot },
+      timeoutMs: 60000,
+    });
+    assert.equal(r.code, 1, `${c.name} 应报 error: ${r.stdout}`);
+    const out = JSON.parse(r.stdout);
+    assert.equal(out.status, 'error');
+    assert.ok(out.reason.includes('trans2img'), `${c.name} reason 应指向 trans2img: ${out.reason}`);
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
 test('screenshot_trans.mjs: 无 trans2img 条目时 skipped 但仍输出 resolved skeleton', async () => {
   const { tmpRoot, urlDir, assetsDir } = setupTmp('skip', {
-    skeleton: [{ h1: '标题' }, { p: '{{LONG_TEXT_5}}' }],
+    skeleton: [{ h1: '# 标题' }, { p: '{{LONG_TEXT_5}}' }],
   });
   const script = path.resolve('script/screenshot_trans.mjs');
   const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
@@ -129,7 +215,7 @@ test('screenshot_trans.mjs: 无 trans2img 条目时 skipped 但仍输出 resolve
   // skipped 路径也应写出 resolved skeleton
   const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
   assert.deepEqual(resolved, [
-    { h1: '标题' },
+    { h1: '# 标题' },
     { p: '段落一文本内容' },
   ], 'skipped 路径也应还原占位符');
 
@@ -137,8 +223,8 @@ test('screenshot_trans.mjs: 无 trans2img 条目时 skipped 但仍输出 resolve
 });
 
 test('screenshot_trans.mjs: id 在快照也未命中时报 error', async () => {
-  const { tmpRoot, urlDir } = setupTmp('miss', {
-    skeleton: [{ trans2img: '999' }],
+  const { tmpRoot } = setupTmp('miss', {
+    skeleton: [{ trans2img: [999] }],
   });
   const script = path.resolve('script/screenshot_trans.mjs');
   const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
@@ -155,7 +241,7 @@ test('screenshot_trans.mjs: id 在快照也未命中时报 error', async () => {
 test('screenshot_trans.mjs: code 条目 content 内的占位符同样还原', async () => {
   const { tmpRoot, urlDir } = setupTmp('code', {
     skeleton: [
-      { h1: '标题' },
+      { h1: '# 标题' },
       { p: '{{LONG_TEXT_5}}' },
       { code: { lang: 'python', content: '{{LONG_TEXT_6}}' } },
     ],
@@ -172,7 +258,7 @@ test('screenshot_trans.mjs: code 条目 content 内的占位符同样还原', as
 
   const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
   assert.deepEqual(resolved, [
-    { h1: '标题' },
+    { h1: '# 标题' },
     { p: '段落一文本内容' },
     { code: { lang: 'python', content: '重要内容' } },
   ], 'code 对象的 content 占位符应被还原');
@@ -184,6 +270,7 @@ test('screenshot_trans.mjs: code 条目 content 内的占位符同样还原', as
   });
   assert.equal(r9.code, 0, `stderr: ${r9.stderr}`);
   const md = fs.readFileSync(path.join(urlDir, '9_markdown.md'), 'utf8');
+  assert.ok(md.includes('# 标题'), 'h1 应以 key 重建出 # 前缀');
   assert.ok(md.includes('```python\n重要内容\n```'), '最终 markdown 应含还原后的代码围栏');
   assert.ok(!md.includes('{{LONG_TEXT'), '最终 markdown 不应残留字面占位符');
 
@@ -191,7 +278,7 @@ test('screenshot_trans.mjs: code 条目 content 内的占位符同样还原', as
 });
 
 test('screenshot_trans.mjs: code 条目引用未定义编号时报 error', async () => {
-  const { tmpRoot, urlDir } = setupTmp('coderef', {
+  const { tmpRoot } = setupTmp('coderef', {
     skeleton: [{ code: { content: '{{LONG_TEXT_999}}' } }],
     longText: { '5': '其他文本' },
   });
@@ -259,16 +346,16 @@ function startImageServer() {
     resolve({ base: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((r) => server.close(r)) })));
 }
 
-test('screenshot_trans.mjs: img 条目下载到 assets/images/（冲突编号 + 同 URL 去重 + 失败保留原 URL）', async () => {
+test('screenshot_trans.mjs: img 条目下载到 assets/images/（解包 ![img](url)、冲突编号、同 URL 去重、失败保留原值）', async () => {
   const srv = await startImageServer();
   const { tmpRoot, urlDir, assetsDir } = setupTmp('imgs', {
     skeleton: [
-      { h1: '标题' },
-      { img: `${srv.base}/Dir/cover.png` },
-      { img: `${srv.base}/other/cover.png` },
-      { img: `${srv.base}/Dir/cover.png` },
-      { img: `${srv.base}/pic.svg` },
-      { img: `${srv.base}/missing.png` },
+      { h1: '# 标题' },
+      { img: `![img](${srv.base}/Dir/cover.png)` },
+      { img: `![img](${srv.base}/other/cover.png)` },
+      { img: `![img](${srv.base}/Dir/cover.png)` },
+      { img: `![img](${srv.base}/pic.svg)` },
+      { img: `![img](${srv.base}/missing.png)` },
       { p: '{{LONG_TEXT_5}}' },
     ],
   });
@@ -291,27 +378,27 @@ test('screenshot_trans.mjs: img 条目下载到 assets/images/（冲突编号 + 
     assert.equal(fs.readFileSync(path.join(imagesDir, 'cover.png')).toString('base64'),
       PIXEL_PNG.toString('base64'), '内容应为服务器返回的字节');
 
-    // resolved skeleton：成功条目改写为本地相对路径，失败条目保留原 URL
+    // resolved skeleton：成功条目只换括号内 URL、保留 ![img] 形态，失败条目保留原值
     const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
     assert.deepEqual(resolved, [
-      { h1: '标题' },
-      { img: 'assets/images/cover.png' },
-      { img: 'assets/images/cover-1.png' },
-      { img: 'assets/images/cover.png' },
-      { img: 'assets/images/pic.svg' },
-      { img: `${srv.base}/missing.png` },
+      { h1: '# 标题' },
+      { img: '![img](assets/images/cover.png)' },
+      { img: '![img](assets/images/cover-1.png)' },
+      { img: '![img](assets/images/cover.png)' },
+      { img: '![img](assets/images/pic.svg)' },
+      { img: `![img](${srv.base}/missing.png)` },
       { p: '段落一文本内容' },
-    ], '成功下载的 img 应改写为本地路径，失败保留原 URL');
+    ], '成功下载的 img 应改写为本地路径（保留 alt），失败保留原值');
 
-    // 步骤 9 直接可渲染本地引用
+    // 步骤 9 直接可渲染
     const r9 = await runScript(process.execPath, [path.resolve('script/render_skeleton.mjs'), '--url', LIVE_URL], {
       env: { U2M_WORKING_ROOT: tmpRoot },
       timeoutMs: 30000,
     });
     assert.equal(r9.code, 0, `stderr: ${r9.stderr}`);
     const md = fs.readFileSync(path.join(urlDir, '9_markdown.md'), 'utf8');
-    assert.ok(md.includes('![](assets/images/cover.png)'), 'markdown 应引用本地图片');
-    assert.ok(md.includes(`![](${srv.base}/missing.png)`), '失败图片保留远端引用');
+    assert.ok(md.includes('![img](assets/images/cover.png)'), 'markdown 应引用本地图片');
+    assert.ok(md.includes(`![img](${srv.base}/missing.png)`), '失败图片保留远端引用');
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
     await srv.close();
@@ -322,9 +409,9 @@ test('screenshot_trans.mjs: trans2img 与 img 混合时截图、下载同轮完�
   const srv = await startImageServer();
   const { tmpRoot, urlDir, assetsDir } = setupTmp('mix', {
     skeleton: [
-      { img: `${srv.base}/Dir/cover.png` },
+      { img: `![img](${srv.base}/Dir/cover.png)` },
       { p: '{{LONG_TEXT_5}}' },
-      { trans2img: '10' },
+      { trans2img: [9, 10] },
     ],
   });
   const script = path.resolve('script/screenshot_trans.mjs');
@@ -336,15 +423,16 @@ test('screenshot_trans.mjs: trans2img 与 img 混合时截图、下载同轮完�
     assert.equal(r.code, 0, `stderr: ${r.stderr}`);
     const out = JSON.parse(r.stdout);
     assert.equal(out.status, 'ok');
-    assert.equal(out.count, 1, 'trans2img 截图 1 张');
+    assert.equal(out.count, 2, 'trans2img 链上 9、10 各截 1 张');
     assert.equal(out.source, 'snapshot', '死端口 --url 下混合用例同样走快照兜底');
     assert.equal(out.images, 1, '下载 1 张');
-    assert.ok(fs.existsSync(path.join(assetsDir, 'trans', '10.webp')), '截图应存在');
+    assert.ok(fs.existsSync(path.join(assetsDir, 'trans', '9.webp')), '外层截图应存在');
+    assert.ok(fs.existsSync(path.join(assetsDir, 'trans', '10.webp')), '模块容器截图应存在');
     assert.ok(fs.existsSync(path.join(assetsDir, 'images', 'cover.png')), '下载应存在');
 
     const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
-    assert.equal(resolved[0].img, 'assets/images/cover.png');
-    assert.deepEqual(resolved[2], { trans2img: '10' }, 'trans2img 条目不受图片改写影响');
+    assert.equal(resolved[0].img, '![img](assets/images/cover.png)');
+    assert.deepEqual(resolved[2], { trans2img: 'assets/trans/9.webp' }, 'trans2img 择优回写选中路径');
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
     await srv.close();

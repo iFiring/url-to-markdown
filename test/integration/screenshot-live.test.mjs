@@ -82,7 +82,7 @@ test('步骤 8 live 重渲染：同内容两次渲染 id 对位 → source:"live
   const moduleId = m[1] || m[2];
   assert.ok(Number(moduleId) > 0, `模块 id 应为正数: ${moduleId}`);
 
-  fs.writeFileSync(path.join(urlDir, '7_skeleton.json'), JSON.stringify([{ trans2img: String(moduleId) }]));
+  fs.writeFileSync(path.join(urlDir, '7_skeleton.json'), JSON.stringify([{ trans2img: [Number(moduleId)] }]));
   fs.writeFileSync(path.join(urlDir, '2_long_text.json'), '{}');
 
   // ── 步骤 8（v1：live 重渲染结构一致 → id 对位、签名全等）──
@@ -115,7 +115,7 @@ test('步骤 8 live 重渲染：同内容两次渲染 id 对位 → source:"live
   assert.equal(out3.source, 'snapshot', '翻版后签名失配应自动走快照兜底');
   assert.ok(fs.existsSync(webp), '兜底截图应覆盖写入');
 
-  // resolved skeleton 同步产出
+  // resolved skeleton 同步产出：trans2img 回写为择优选中的截图路径
   const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
-  assert.deepEqual(resolved, [{ trans2img: String(moduleId) }]);
+  assert.deepEqual(resolved, [{ trans2img: `assets/trans/${moduleId}.webp` }]);
 });
