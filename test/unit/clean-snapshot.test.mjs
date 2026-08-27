@@ -76,7 +76,7 @@ test('clean_snapshot.mjs: 对 article-1 快照执行清洗', async () => {
   assert.ok(!cleaned.includes('style='), '不应含 style 属性');
   assert.ok(!cleaned.includes('<style'), '不应含 <style> 标签');
   assert.ok(!cleaned.includes('LONG_TEXT'), '清洗版不应再含 LONG_TEXT 占位（终端视图，一切还原走带样式版）');
-  assert.ok(!cleaned.match(/<svg[^>]+[a-z-]+=/i), 'SVG 不应有属性');
+  assert.ok(/<svg data-u2m-id="[0-9]+"><\/svg>/.test(cleaned) || !cleaned.includes('<svg'), 'SVG 壳保留 data-u2m-id');
 
   // head 里的 meta/link（charset/viewport/preconnect/og:* 等）对步骤 3 的结构识别
   // 是纯噪声，全部删除；title 保留作识别线索
@@ -136,7 +136,7 @@ test('clean_snapshot.mjs: 空元素级联删除，有内容的元素保留', asy
   assert.ok(cleaned.includes('data-u2m-id="7"'), '含文本 span 的父元素必须保留');
   assert.ok(cleaned.includes('data-u2m-id="8"'), '含文本的 span 必须保留');
   assert.ok(cleaned.includes('data-u2m-id="10"'), 'img 必须保留');
-  assert.ok(cleaned.includes('<svg></svg>'), 'svg 壳必须保留');
+  assert.ok(cleaned.includes('<svg data-u2m-id="11"></svg>'), 'svg 壳必须保留且带 id');
   assert.ok(cleaned.includes('data-u2m-id="12"'), '标题（h1）即使为空也保留');
   assert.ok(cleaned.includes('data-u2m-id="13"'), '含 br 的元素必须保留');
 
@@ -493,7 +493,7 @@ test('clean_snapshot.mjs: 带样式快照保留样式，SVG 瘦身为壳，占�
   // 清洗版：无样式、SVG 清空
   assert.ok(!cleaned.match(/ style="/), '清洗版不应含 style 属性');
   assert.ok(!cleaned.includes('<style'), '清洗版不应含 <style> 标签');
-  assert.ok(cleaned.includes('<svg></svg>'), '清洗版 SVG 应清空为壳');
+  assert.ok(/<svg data-u2m-id="3"><\/svg>/.test(cleaned), '清洗版 SVG 清空为壳且保留 id');
   assert.ok(!cleaned.includes(svgLong), '清洗版不应残留 SVG 文本');
 
   // 带样式版：保留 style 属性与 <style> 标签；SVG 瘦身为壳（仅 id/class/data-u2m-id）
@@ -522,48 +522,54 @@ test('clean_snapshot.mjs: 带样式快照保留样式，SVG 瘦身为壳，占�
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('R2: class 噪声过滤——工具/哈希 token 剥除，语义 token 保留，带样式版不受影响', async () => {
+test('K1: class 语义过滤——工具/哈希/CSS-modules/变体剥除，语义 token 保留', async () => {
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
   <div data-u2m-id="1">
-    <section data-u2m-id="2" class="article flex px-4 astro-3ef6ksr2 h-[30rem] text-xs hover:bg-x md:flex">正文内容</section>
-    <div data-u2m-id="3" class="page-header btn-primary expn-content shiki">语义类元素</div>
-    <div data-u2m-id="4" class="flex px-4 rounded">全是噪声</div>
+    <section data-u2m-id="2" class="article flex px-4 astro-3ef6ksr2 h-[30rem] text-xs hover:bg-x md:flex -top-0.5 !h-9 _Button_6dmow_1 overflow-x-hidden shiki">正文内容</section>
+    <div data-u2m-id="3" class="page-header btn-primary expn-content">语义类元素</div>
+    <div data-u2m-id="4" class="flex px-4 rounded overflow-auto border">全是噪声</div>
   </div>
 </body></html>`;
-  const { cleaned, styled, cleanup } = await runClean(snapshot, 'r2-class');
+  const { cleaned, styled, cleanup } = await runClean(snapshot, 'k1-class');
   try {
     const sec = cleaned.match(/<section[^>]*>/)[0];
     assert.ok(sec.includes('class="article"'), `语义 token article 应保留: ${sec}`);
-    assert.ok(!/(flex|px-4|astro-|30rem|text-xs|hover:|md:)/.test(sec), `噪声 token 应剥除: ${sec}`);
+    assert.ok(!/(flex|px-4|astro-|30rem|text-xs|hover:|md:|top-0|!h-9|_Button_|overflow|shiki)/.test(sec), `噪声 token 应剥除: ${sec}`);
     const keep = cleaned.match(/<div data-u2m-id="3"[^>]*>/)[0];
-    for (const tok of ['page-header', 'btn-primary', 'expn-content', 'shiki']) {
+    for (const tok of ['page-header', 'btn-primary', 'expn-content']) {
       assert.ok(keep.includes(tok), `两词 kebab 语义 token ${tok} 应保留: ${keep}`);
     }
     assert.ok(!/<div data-u2m-id="4"[^>]*class=/.test(cleaned), '全噪声 class 应连同属性删除');
-    // 带样式版不受影响（硬约束）
     assert.ok(styled.includes('astro-3ef6ksr2') && styled.includes('h-[30rem]'), '带样式版保留原始 class');
   } finally { cleanup(); }
 });
 
-test('R3: data-* 白名单——噪声 data 属性删除，data-u2m-id/data-language 保留', async () => {
+test('K2: 属性白名单——八属性存活，href/src/aria/style 等删净，URL 一律清空', async () => {
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
   <div data-u2m-id="1">
-    <div data-u2m-id="2" data-1p-ignore="true" data-copy-ignore="true" data-syntax-highlighter-id="_r104R_9dd_" tabindex="0" data-language="javascript" aria-label="x">正文</div>
+    <a data-u2m-id="2" href="https://example.com/x" aria-label="链接" target="_blank" data-1p-ignore="1">链接文本</a>
+    <img data-u2m-id="3" src="https://example.com/i.png" alt="示意图" width="10" height="10">
+    <div data-u2m-id="4" role="button" type="button" hidden="true" id="anchor" data-language="python" class="keep-me" tabindex="0" draggable="true">内容</div>
   </div>
 </body></html>`;
-  const { cleaned, styled, cleanup } = await runClean(snapshot, 'r3-data');
+  const { cleaned, styled, cleanup } = await runClean(snapshot, 'k2-attrs');
   try {
-    const div = cleaned.match(/<div data-u2m-id="2"[^>]*>/)[0];
-    assert.ok(!div.includes('data-1p-ignore'), '噪声 data 属性应删除');
-    assert.ok(!div.includes('data-copy-ignore'), '噪声 data 属性应删除');
-    assert.ok(!div.includes('data-syntax-highlighter-id'), '噪声 data 属性应删除');
-    assert.ok(div.includes('data-language="javascript"'), 'data-language 应保留');
-    assert.ok(div.includes('data-u2m-id="2"') && div.includes('aria-label'), 'data-u2m-id 与 aria 保留');
-    assert.ok(styled.includes('data-1p-ignore'), '带样式版不受影响');
+    const a = cleaned.match(/<a data-u2m-id="2"[^>]*>/)[0];
+    assert.ok(!/href|aria-label|target|data-1p/.test(a), `a 的 URL/aria/data 噪声应删净: ${a}`);
+    const img = cleaned.match(/<img data-u2m-id="3"[^>]*>/)[0];
+    assert.ok(!/src|width|height/.test(img), `img 的 src/宽高应删净: ${img}`);
+    assert.ok(img.includes('alt="示意图"'), 'img 的 alt 语义保留');
+    const div = cleaned.match(/<div data-u2m-id="4"[^>]*>/)[0];
+    for (const attr of ['role="button"', 'type="button"', 'hidden="true"', 'id="anchor"', 'data-language="python"', 'class="keep-me"']) {
+      assert.ok(div.includes(attr), `白名单属性 ${attr} 应保留: ${div}`);
+    }
+    assert.ok(!/tabindex|draggable/.test(div), `白名单外属性应删净: ${div}`);
+    assert.ok(!cleaned.includes('lang='), 'html lang 应删（白名单外）');
+    assert.ok(styled.includes('href="https://example.com/x"') && styled.includes('data-1p-ignore'), '带样式版不受影响');
   } finally { cleanup(); }
 });
 

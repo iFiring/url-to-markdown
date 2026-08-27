@@ -201,17 +201,10 @@ function __u2mCleanSnapshot(cfg) {
     };
   }
 
-  // 11. 清空 SVG 壳：删除全部子元素、剥掉全部属性 → 裸 <svg></svg>（clean 趟；
-  //     styled 趟在步骤 10 只做瘦身，此处须补删子元素达到同一空壳）
+  // 11. SVG 清空子树（仅清洗版）：属性由 K2 白名单统一裁剪，data-u2m-id 等存活
   var svgs = document.querySelectorAll('svg');
   for (var i = 0; i < svgs.length; i++) {
-    var svg = svgs[i];
-    while (svg.firstChild) {
-      svg.removeChild(svg.firstChild);
-    }
-    while (svg.attributes.length > 0) {
-      svg.removeAttribute(svg.attributes[0].name);
-    }
+    while (svgs[i].firstChild) svgs[i].removeChild(svgs[i].firstChild);
   }
 
   // 12. 删除所有 style 属性（clean 趟）
@@ -226,10 +219,12 @@ function __u2mCleanSnapshot(cfg) {
     styles[i].parentNode.removeChild(styles[i]);
   }
 
-  // 14. R2 class 噪声过滤（仅清洗版；K1 落地后替换）：class 值按空白切 token，
-  //     剥工具/哈希 token、留语义 token。原则：拿不准保留——漏删只费字节，
-  //     误删语义 token（步骤 3 的正式识别线索）才伤识别。带样式版不动。
+  // K1. class 语义过滤（仅清洗版）：样式强相关 token 删、语义 token 留。
+  //     原则：拿不准保留——漏删只费字节，误删语义 token 才伤步骤 3 判读。
+  //     2026-08-27 在旧 R2 基础上补漏：负号前缀位移类、CSS-modules、!
+  //     important 变体、overflow/appearance、裸 border/shadow/prose、工具名类。
   var HASH_PREFIX_RE = /^(?:astro|css|sc|jsx|chakra|emotion|styled|mui|next|module)-[-0-9a-zA-Z]+$/;
+  var CSS_MODULE_RE = /^_[A-Za-z][A-Za-z0-9]*_[a-z0-9]+(?:_\d+)?$/;
   function isHashSuffix(s) {
     return s.length >= 5 && /^[0-9a-zA-Z]+$/.test(s) && /[0-9]/.test(s) && /[a-zA-Z]/.test(s);
   }
@@ -243,13 +238,17 @@ function __u2mCleanSnapshot(cfg) {
     /^(?:text|bg|border|from|to|via)-.+$/,
     /^(?:font|leading|tracking|indent|line-clamp|aspect|object|will-change|fill|stroke|transition|duration|ease|delay|animate|transform|scale|translate|rotate|origin|skew|pointer-events|cursor|select|resize|whitespace|break|overscroll|scroll|snap)-?.*$/,
     /^(?:uppercase|lowercase|capitalize|underline|overline|line-through|truncate|antialiased|italic|visible|invisible|collapse|sr-only|not-sr-only)$/,
+    /^(?:overflow|appearance)-?[a-z0-9-]*$/,
+    /^(?:prose|not-prose|border|shadow|shiki|shiki-themes|syntax-highlighter)(?:-[a-z0-9-]+)?$/
   ];
   function isClassNoise(tok) {
     if (tok.indexOf(':') !== -1 || tok.indexOf('[') !== -1 || tok.indexOf(']') !== -1) return true; // 变体前缀/任意值
-    if (HASH_PREFIX_RE.test(tok)) return true;
-    var dash = tok.lastIndexOf('-');
-    if (dash !== -1 && isHashSuffix(tok.slice(dash + 1)) && /^[a-z][a-z0-9-]*$/i.test(tok.slice(0, dash))) return true;
-    for (var i = 0; i < UTILITY_RES.length; i++) if (UTILITY_RES[i].test(tok)) return true;
+    if (tok.charAt(0) === '!') return true;                    // !h-9 等 important 变体
+    var body = tok.charAt(0) === '-' ? tok.slice(1) : tok;     // 负号前缀剥离后再判
+    if (HASH_PREFIX_RE.test(tok) || CSS_MODULE_RE.test(tok)) return true;
+    var dash = body.lastIndexOf('-');
+    if (dash !== -1 && isHashSuffix(body.slice(dash + 1)) && /^[a-z][a-z0-9-]*$/i.test(body.slice(0, dash))) return true;
+    for (var i = 0; i < UTILITY_RES.length; i++) if (UTILITY_RES[i].test(body)) return true;
     return false;
   }
   var withClass = document.querySelectorAll('[class]');
@@ -260,17 +259,23 @@ function __u2mCleanSnapshot(cfg) {
     else el.removeAttribute('class');
   }
 
-  // 15. R3 data-* 白名单（仅清洗版；K2 落地后替换）：清洗版只留 data-u2m-id /
-  //     data-language / data-u2m-hidden；其余 data-* 全是埋点/框架噪声。
-  var DATA_KEEP = { 'data-u2m-id': 1, 'data-language': 1, 'data-u2m-hidden': 1 };
+  // K2. 属性白名单（仅清洗版）：全文档只留 LLM 可理解的最小属性集；
+  //     href/src/aria-*/style/tabindex 等一律删除——a/img 的 URL 就此清空。
+  //     SVG 特殊处理：仅保留 data-u2m-id（id/class 等由 styled 趟保留，clean 趟删净）
+  var ATTR_KEEP = { 'class': 1, 'id': 1, 'data-u2m-id': 1, 'data-language': 1, 'hidden': 1, 'type': 1, 'role': 1, 'alt': 1 };
   var allEls = document.querySelectorAll('*');
   for (var i = 0; i < allEls.length; i++) {
     var el2 = allEls[i];
-    var names = [];
-    for (var j = 0; j < el2.attributes.length; j++) names.push(el2.attributes[j].name);
-    for (var j = 0; j < names.length; j++) {
-      var nm = names[j].toLowerCase();
-      if (nm.indexOf('data-') === 0 && !DATA_KEEP[nm]) el2.removeAttribute(names[j]);
+    var isSvg = el2.tagName && el2.tagName.toLowerCase() === 'svg';
+    var attrNames = [];
+    for (var j = 0; j < el2.attributes.length; j++) attrNames.push(el2.attributes[j].name);
+    for (var j = 0; j < attrNames.length; j++) {
+      var name = attrNames[j].toLowerCase();
+      if (isSvg) {
+        if (name !== 'data-u2m-id') el2.removeAttribute(attrNames[j]);
+      } else {
+        if (!ATTR_KEEP[name]) el2.removeAttribute(attrNames[j]);
+      }
     }
   }
 
