@@ -8,9 +8,9 @@
  *   node extract_styled.mjs --url <url>
  *
  * 裁剪规则：
- *   - 完整保留（一字不动，含全部标签属性与样式属性）：三类 key 元素
- *     （titleIds/descriptionIds/listFlowIds）的子树 + 它们到 <body> 的
- *     祖先链——祖先上下文不变，CSS 选择器照常生效
+ *   - 完整保留（一字不动，含全部标签属性与样式属性）：四类 key 元素
+ *     （titleIds/descriptionIds/standaloneIds/listFlowIds）的子树 + 它们到
+ *     <body> 的祖先链——祖先上下文不变，CSS 选择器照常生效
  *   - <head> 完全不动（<title> + 全部 <style> 原地保留）；body 里即将删除
  *     的分支中若有 <style>，先挪入 <head> 再删分支，样式标签零丢失
  *   - 删除：其余全部 body 元素（封面区块、推荐、营销等步骤 3 排除的内容）
@@ -65,7 +65,7 @@ async function main() {
   if (!Array.isArray(keyIds.listFlowIds) || keyIds.listFlowIds.length === 0) {
     return emitError('listFlowIds 为空（步骤 3 要求至少选一个列表流），请重跑步骤 3');
   }
-  debug(`key_ids: title=${keyIds.titleIds?.length ?? 0} desc=${keyIds.descriptionIds?.length ?? 0} flow=${keyIds.listFlowIds.length}`);
+  debug(`key_ids: title=${keyIds.titleIds?.length ?? 0} desc=${keyIds.descriptionIds?.length ?? 0} standalone=${keyIds.standaloneIds?.length ?? 0} flow=${keyIds.listFlowIds.length}`);
 
   const pageExtractFn = await readSharedScript('page-extract-styled.js');
 

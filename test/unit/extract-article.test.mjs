@@ -205,6 +205,98 @@ test('extract_article.mjs: 噪音嵌在迁移子元素内部时整棵剔除、�
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
+test('extract_article.mjs: 嵌套 listFlowIds 最外层优先——内层子节点跳过、结构保留、文档序不变', async () => {
+  const nestedFlows = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>嵌套流</title></head><body><h1 data-u2m-id="1">标题</h1><div data-u2m-id="4"><section data-u2m-id="5"><p data-u2m-id="6">正文</p><div data-u2m-id="7"><p data-u2m-id="8">小节正文</p></div></section><p data-u2m-id="10">尾段</p></div></body></html>`;
+  const { tmpRoot, urlDir } = setupTmp('nested-flows', { titleIds: [1], descriptionIds: [], listFlowIds: [4, 7], listFlowDeleteIds: [] });
+  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), nestedFlows);
+  const script = path.resolve('script/extract_article.mjs');
+  const r = await runScript(process.execPath, [script, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+  assert.equal(out.elementCount, 3, '应提取 3 个元素（h1/section5/p10），内层流子节点 8 随 5 整体带入不单列');
+
+  const html = fs.readFileSync(out.article, 'utf8');
+  // 内层流容器 7 连同其子元素 8 原样留在 section 5 内——不被拔出、不留空壳
+  assert.ok(html.includes('<div data-u2m-id="7"><p data-u2m-id="8">小节正文</p></div>'),
+    `内层流应整体保留在 section 内: ${html.slice(html.indexOf('<body>'))}`);
+  assert.equal((html.match(/data-u2m-id="8"/g) || []).length, 1, 'id 8 应只出现一次');
+  // 文档序：1 → 5 → 8（在 5 内）→ 10
+  const order = [1, 5, 8, 10].map((id) => html.indexOf(`data-u2m-id="${id}"`));
+  for (let i = 1; i < order.length; i++) {
+    assert.ok(order[i] > order[i - 1], `id 顺序应递增: ${order}`);
+    assert.ok(order[i - 1] >= 0, '元素应存在');
+  }
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test('extract_article.mjs: listFlowIds 列表乱序时输出仍按文档序', async () => {
+  const twoFlows = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>乱序流</title></head><body><h1 data-u2m-id="1">标题</h1><div data-u2m-id="4"><p data-u2m-id="5">前段</p></div><div data-u2m-id="7"><p data-u2m-id="8">后段</p></div></body></html>`;
+  const { tmpRoot, urlDir } = setupTmp('order', { titleIds: [1], descriptionIds: [], listFlowIds: [7, 4], listFlowDeleteIds: [] });
+  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), twoFlows);
+  const script = path.resolve('script/extract_article.mjs');
+  const r = await runScript(process.execPath, [script, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+  assert.equal(out.elementCount, 3, '应提取 3 个元素（h1/p5/p8）');
+
+  const html = fs.readFileSync(out.article, 'utf8');
+  assert.ok(html.indexOf('data-u2m-id="5"') < html.indexOf('data-u2m-id="8"'),
+    `列表乱序不应打乱输出文档序: ${html.slice(html.indexOf('<body>'))}`);
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test('extract_article.mjs: standaloneIds 游离内容各成一块、按文档序落位在流之间', async () => {
+  const standalone = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>游离内容</title></head><body><h1 data-u2m-id="1">标题</h1><div data-u2m-id="4"><p data-u2m-id="5">前流段落</p></div><h2 data-u2m-id="6">流间小标题</h2><p data-u2m-id="7">流间引言</p><div data-u2m-id="8"><p data-u2m-id="9">后流段落</p></div></body></html>`;
+  const { tmpRoot, urlDir } = setupTmp('standalone', { titleIds: [1], descriptionIds: [], standaloneIds: [6, 7], listFlowIds: [4, 8], listFlowDeleteIds: [] });
+  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), standalone);
+  const script = path.resolve('script/extract_article.mjs');
+  const r = await runScript(process.execPath, [script, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+  assert.equal(out.elementCount, 5, '应提取 5 个元素（h1/p5/h2-6/p7/p9）');
+
+  const html = fs.readFileSync(out.article, 'utf8');
+  // 游离块落在两个流之间：1 → 5 → 6 → 7 → 9
+  const order = [1, 5, 6, 7, 9].map((id) => html.indexOf(`data-u2m-id="${id}"`));
+  for (let i = 1; i < order.length; i++) {
+    assert.ok(order[i] > order[i - 1], `id 顺序应递增: ${order}`);
+    assert.ok(order[i - 1] >= 0, '元素应存在');
+  }
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test('extract_article.mjs: standaloneIds 与 listFlowDeleteIds 重叠时报 error', async () => {
+  const snap = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>重叠</title></head><body><h1 data-u2m-id="1">标题</h1><div data-u2m-id="4"><p data-u2m-id="5">段落</p><div class="ad" data-u2m-id="6">广告</div></div></body></html>`;
+  const { tmpRoot, urlDir } = setupTmp('standalone-overlap', { titleIds: [1], descriptionIds: [], standaloneIds: [6], listFlowIds: [4], listFlowDeleteIds: [6] });
+  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), snap);
+  const script = path.resolve('script/extract_article.mjs');
+  const r = await runScript(process.execPath, [script, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 1);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'error');
+  assert.ok(out.reason.includes('重叠'), `reason 应说明重叠: ${out.reason}`);
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
 test('extract_article.mjs: key id 未命中时报 error 并列出缺失 id', async () => {
   const { tmpRoot, urlDir } = setupTmp('miss', { titleIds: [1], descriptionIds: [99], listFlowIds: [4] });
   const script = path.resolve('script/extract_article.mjs');

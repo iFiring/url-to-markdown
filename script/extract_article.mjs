@@ -7,14 +7,20 @@
  * 用法:
  *   node extract_article.mjs --url <url>
  *
- * 提取规则（按分组顺序：标题 → 说明 → 正文块）：
- *   - titleIds / descriptionIds：元素本身（完整子树，属性与内容一字不动）
- *   - listFlowIds：遍历各容器子节点，元素与非空白裸文本按文档序交错迁入
+ * 提取规则（收齐后统一按文档序迁入）：
+ *   - titleIds / descriptionIds / standaloneIds：元素本身（完整子树，属性与
+ *     内容一字不动；standaloneIds 为不在任何流子树内的游离内容——流的
+ *     兄弟或流的祖先的兄弟，同路径整体迁入）
+ *   - listFlowIds：遍历各容器子节点，元素与非空白裸文本收齐
  *     ——裸文本没有 data-u2m-id 但可能是未包标签的正文，丢弃即内容损失；
- *     纯空白文本与注释不迁；flow 容器本身与祖先骨架不入新 html
+ *     纯空白文本与注释不迁；flow 容器本身与祖先骨架不入新 html。
+ *     流容器可嵌套（步骤 3 标记所有层级）：最外层优先去重——被另一
+ *     收选节点包含的跳过，内容已随外层整块带入，结构保留不拆散
  *   - listFlowDeleteIds：列表流噪音（菜单/导航/广告/推荐），迁移完成后
  *     按 id 在新 body 里整棵剔除（不限深度）；与 key id 重叠或未命中报 error
  *   - 去重：同一元素被指名两次（如 description 同时是 flow 子元素）只出现一次
+ *   - 排序：全部收选节点按文档序（compareDocumentPosition）统一迁入，
+ *     key_ids 的列出顺序与流层级嵌套都不影响输出顺序
  *   - head：保留原文 <title>；<html lang> 照抄
  *   - 新 <body> 带阅读布局内联样式 max-width: 768px; margin: 4rem auto
  *     （限宽、水平居中）
@@ -74,6 +80,7 @@ async function main() {
   const keyIdSet = new Set([
     ...(keyIds.titleIds || []),
     ...(keyIds.descriptionIds || []),
+    ...(keyIds.standaloneIds || []),
     ...keyIds.listFlowIds,
   ]);
   const deleteIds = Array.isArray(keyIds.listFlowDeleteIds) ? keyIds.listFlowDeleteIds : [];
@@ -83,7 +90,7 @@ async function main() {
       `listFlowDeleteIds 与 key id 重叠: ${overlap.join(', ')}（同一元素不能既是关键元素又是噪音，请重跑步骤 3）`
     );
   }
-  debug(`key_ids: title=${keyIds.titleIds?.length ?? 0} desc=${keyIds.descriptionIds?.length ?? 0} flow=${keyIds.listFlowIds.length} delete=${deleteIds.length}`);
+  debug(`key_ids: title=${keyIds.titleIds?.length ?? 0} desc=${keyIds.descriptionIds?.length ?? 0} standalone=${keyIds.standaloneIds?.length ?? 0} flow=${keyIds.listFlowIds.length} delete=${deleteIds.length}`);
 
   const pageExtractFn = await readSharedScript('page-extract-article.js');
 

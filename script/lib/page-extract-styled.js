@@ -1,8 +1,8 @@
 /**
  * 步骤 4 页面内裁剪函数。在浏览器 evaluate 中执行。
  * 基于 3_key_ids.json 的关键 ID，把带样式版快照裁剪为只含文章主体的样式视图：
- *   - key 元素（titleIds/descriptionIds/listFlowIds）的完整子树一字不动——
- *     标签、属性、后代、文本全部原样保留
+ *   - key 元素（titleIds/descriptionIds/standaloneIds/listFlowIds）的完整子树
+ *     一字不动——标签、属性、后代、文本全部原样保留
  *   - key 元素到 <body> 的祖先链（骨架）保留，链上属性同样不动——
  *     祖先上下文不变，CSS 选择器照常生效
  *   - <head> 完全不动（title + <style> 原地保留）；body 即将删除的分支里
@@ -15,6 +15,7 @@ function __u2mExtractStyled(keyIds) {
   var ids = []
     .concat(keyIds.titleIds || [])
     .concat(keyIds.descriptionIds || [])
+    .concat(keyIds.standaloneIds || [])
     .concat(keyIds.listFlowIds || []);
 
   var missing = [];

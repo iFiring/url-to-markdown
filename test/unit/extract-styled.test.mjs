@@ -97,6 +97,31 @@ test('extract_styled.mjs: 保留 key 子树+骨架链与属性，删噪声，bod
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
+test('extract_styled.mjs: standaloneIds 游离内容子树保留、同层噪音裁掉', async () => {
+  const snap = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>游离</title></head><body><div class="wrap" data-u2m-id="1"><h2 data-u2m-id="2">流外标题</h2><p data-u2m-id="3">流外引言文本<em data-u2m-id="31">强调</em></p><section data-u2m-id="4"><p data-u2m-id="5">段落一</p></section><aside class="ad" data-u2m-id="6">广告</aside></div></body></html>`;
+  const { tmpRoot, urlDir } = setupTmp('standalone', { titleIds: [], descriptionIds: [], standaloneIds: [2, 3], listFlowIds: [4] });
+  fs.writeFileSync(path.join(urlDir, '2_clean_style_snapshot.html'), snap);
+  const script = path.resolve('script/extract_styled.mjs');
+  const r = await runScript(process.execPath, [script, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+
+  const html = fs.readFileSync(out.styledExtract, 'utf8');
+  // 游离元素子树（含后代 31）+ 祖先链 1 + 流 4/5 保留；同层噪音 6 裁掉
+  for (const id of [1, 2, 3, 31, 4, 5]) {
+    assert.ok(html.includes(`data-u2m-id="${id}"`), `id ${id} 应保留`);
+  }
+  assert.ok(!html.includes('data-u2m-id="6"'), '噪音应删除');
+  assert.ok(!html.includes('广告'), '噪音文本应删除');
+  assert.ok(html.includes('流外引言文本<em'), '游离元素后代应原样保留');
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
 test('extract_styled.mjs: key id 未命中时报 error 并列出缺失 id', async () => {
   const { tmpRoot, urlDir } = setupTmp('miss', { titleIds: [3], descriptionIds: [99], listFlowIds: [5] });
   const script = path.resolve('script/extract_styled.mjs');
