@@ -97,6 +97,7 @@ working/                 # 运行时工作目录（gitignore，仅保留骨架�
 | `U2M_WORKING_ROOT` | 覆盖 working 根目录（测试隔离用） |
 | `U2M_PROXY` | 代理控制：不设则继承系统代理 / `direct` 绕过 / URL 显式钉住 |
 | `U2M_DEBUG` | 非空时各 CLI 向 stderr 输出 `[dbg +N.NNs]` 调试行（阶段耗时、输入输出字节数、登录检测信号、滚动轮次、逐图下载、`[net]` 打开页面（document 导航，含重定向/登录跳转）的请求头与响应头（裸行无前缀，子资源不记），反爬诊断用） |
+| `U2M_FONTCONFIG_CONF` / `U2M_FONT_DIR` | 覆盖 init.sh（仅 Linux）fontconfig 配置与字体目录的探测路径；测试在任意宿主模拟 Linux 环境用 |
 
 ## 测试
 
@@ -120,5 +121,5 @@ pnpm test:all             # 全量
 | 步骤 4-6 | 样式裁剪 → juice 内联 → 文章视图 | 已完成 |
 | 步骤 8 `screenshot_trans.mjs` | 占位符还原 + 图片下载 + trans2img 截图 | 已完成 |
 | 步骤 9 `render_skeleton.mjs` | 骨架回填 markdown | 已完成 |
-| 测试 | 单测 + 集成 154 项 | 已完成 |
+| 测试 | 单测 + 集成 159 项 | 已完成 |
 | 真实 URL 冒烟 | 手动清单 `test/smoke/SMOKE.md` | 场景 1 已记录通过（产生于旧双稿管线，新 9 步管线待重验）；场景 2/3 待人工 |

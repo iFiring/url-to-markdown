@@ -72,6 +72,73 @@ else
   CHROMIUM_OK=true
 fi
 
+# ── 4b. 字体环境（仅 Linux）：缺 fontconfig 配置/字体时 chromium 渲染即 FATAL 崩溃；
+#         缺 CJK 字体不崩溃但中文截图显示豆腐块——独立检查补装 ──
+# FONTCONFIG_FILE/FONTCONFIG_PATH 已设说明用户自带字体环境，信任并跳过。
+# 覆盖点 U2M_FONTCONFIG_CONF / U2M_FONT_DIR 供测试在任意宿主上模拟 Linux。
+if [ "$(uname -s)" = "Linux" ] && [ -z "${FONTCONFIG_FILE:-}" ] && [ -z "${FONTCONFIG_PATH:-}" ]; then
+  FONTCONF="${U2M_FONTCONFIG_CONF:-/etc/fonts/fonts.conf}"
+  FONTDIRS="${U2M_FONT_DIR:-/usr/share/fonts /usr/local/share/fonts}"
+  fonts_ok() {
+    if command -v fc-list >/dev/null 2>&1 && [ -n "$(fc-list 2>/dev/null | head -n 1)" ]; then
+      return 0
+    fi
+    [ -f "$FONTCONF" ] || return 1
+    # shellcheck disable=SC2086 # FONTDIRS 是受控空格列表
+    [ -n "$(find $FONTDIRS -type f \( -name '*.ttf' -o -name '*.otf' -o -name '*.ttc' \) 2>/dev/null | head -n 1)" ] || return 1
+    return 0
+  }
+  cjk_ok() {
+    if command -v fc-list >/dev/null 2>&1; then
+      [ -n "$(fc-list :lang=zh 2>/dev/null | head -n 1)" ] && return 0
+      return 1
+    fi
+    # 无 fc-list 时按文件名粗判（覆盖主流 CJK 字体包命名）
+    # shellcheck disable=SC2086
+    [ -n "$(find $FONTDIRS -type f 2>/dev/null | grep -iE 'cjk|noto[^/]*(sc|tc|jp|kr)|wqy|uming|ukai|droid|sourcehan|han[s]?sans' | head -n 1)" ] && return 0
+    return 1
+  }
+  FONT_PM=""
+  for c in apt-get dnf apk zypper; do
+    if command -v "$c" >/dev/null 2>&1; then FONT_PM="$c"; break; fi
+  done
+  SUDO=""
+  [ "$(id -u)" = 0 ] || SUDO="sudo"
+  font_core() {
+    case "$FONT_PM" in
+      apt-get) $SUDO apt-get update >&2 || true
+               $SUDO apt-get install -y fontconfig fonts-liberation >&2 ;;
+      dnf)     $SUDO dnf install -y fontconfig liberation-fonts >&2 ;;
+      apk)     $SUDO apk add fontconfig font-liberation >&2 ;;
+      zypper)  $SUDO zypper --non-interactive install fontconfig liberation-fonts >&2 ;;
+    esac
+  }
+  font_cjk() {
+    case "$FONT_PM" in
+      apt-get) $SUDO apt-get update >&2 || true
+               $SUDO apt-get install -y fonts-noto-cjk >&2 ;;
+      dnf)     $SUDO dnf install -y google-noto-sans-cjk-fonts >&2 ;;
+      apk)     $SUDO apk add font-noto-cjk >&2 ;;
+      zypper)  $SUDO zypper --non-interactive install noto-sans-cjk-fonts >&2 ;;
+    esac
+  }
+  if ! fonts_ok; then
+    log "Linux 缺 fontconfig 配置或字体（chromium 渲染会 FATAL 崩溃），尝试修复"
+    [ -n "$FONT_PM" ] || die "Linux 缺 fontconfig/字体且无已知包管理器，请手动安装 fontconfig 与字体（西文如 liberation、中文如 noto-cjk）后重试"
+    font_core || die "$FONT_PM 安装 fontconfig 失败（需 root/sudo），请手动安装后重试"
+    fonts_ok || die "字体修复后仍未检测到 fontconfig 配置或字体，请手动安装后重试"
+  fi
+  if ! cjk_ok; then
+    log "缺 CJK 字体（中文 trans2img 截图会豆腐块），尝试补装"
+    if [ -z "$FONT_PM" ]; then
+      warn "缺 CJK 字体且无已知包管理器——文本提取不受影响，但中文截图将显示豆腐块（可手动安装 noto-cjk）"
+    else
+      font_cjk || true
+      cjk_ok || warn "CJK 字体不可用——文本提取不受影响，但中文截图将显示豆腐块（可手动安装 noto-cjk）"
+    fi
+  fi
+fi
+
 # ── 5. 核心参数：url-name / url-working-path ─────────────────
 # 命名规则唯一事实源：lib/env.mjs urlToDirName（与步骤 1 的目录派生一致）
 URL_NAME="$(U2M_ROOT="$ROOT" node --input-type=module -e '

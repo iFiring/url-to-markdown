@@ -197,6 +197,7 @@ node <skill-root>/script/render_skeleton.mjs --url <url>
 | 现象 | 处置 |
 |---|---|
 | `init.sh` 报 `未找到 pnpm/yarn/npm` | 请用户安装任一包管理器后重试步骤 0 |
+| `init.sh`(Linux) 报 fontconfig/字体安装失败（需 root/sudo） | 步骤 0 自动修复未成功（无 root 或无包管理器）：请用户以 root 手动安装 fontconfig 与字体（西文如 liberation、中文如 noto-cjk）后重试步骤 0；不装的话 chromium 渲染任何带文字的页面都会 FATAL 崩溃 |
 | `snapshot` 判定已登录但页面仍是登录墙 | 请用户手动删除 `working/cookies/storage_state.json` 后重跑步骤 1 |
 | `snapshot` 报 `virtual_list` 但用户确信是普通长页 | 该站可能主动裁剪离屏 DOM（与虚拟列表同构，产出亦只是部分窗口），属已知边界；建议改用其他抓取方式 |
 | 页面加载报 `net::ERR_TUNNEL_CONNECTION_FAILED` / `ERR_PROXY_CONNECTION_FAILED` | 本机系统代理不可用或拒绝目标站：设 `U2M_PROXY=direct` 绕过系统代理，或 `U2M_PROXY=http://<host>:<port>` 显式指定可用代理后重跑 |

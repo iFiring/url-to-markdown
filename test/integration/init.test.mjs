@@ -89,3 +89,158 @@ test('init.sh: 缺 --url 时输出 usage_error 退出 2', async () => {
   assert.equal(r.code, 2);
   assert.equal(JSON.parse(r.stdout).status, 'usage_error');
 });
+
+// ── Linux 字体自检（最小化镜像缺 fontconfig 配置/字体时 chromium 渲染即 FATAL 崩溃）──
+// init.sh 仅在 uname=Linux 时检查；测试用 PATH 垫片（uname/fc-list/sudo/apt-get）
+// + U2M_FONTCONFIG_CONF / U2M_FONT_DIR 覆盖探测路径，在任意宿主上密封模拟 Linux。
+function makeFontShims(binDir, apt, { zh = false, fcList = true } = {}) {
+  fs.mkdirSync(binDir, { recursive: true });
+  const aptLog = path.join(binDir, 'apt-get.log');
+  let aptBody = `echo "$@" >> '${aptLog}'\n`;
+  if (apt === 'fix') {
+    aptBody += `mkdir -p "$(dirname "$U2M_FONTCONFIG_CONF")"; : > "$U2M_FONTCONFIG_CONF"\n`
+      + `mkdir -p "$U2M_FONT_DIR"; : > "$U2M_FONT_DIR/Dummy.ttf"\nexit 0`;
+  } else if (apt === 'fail') {
+    aptBody += 'exit 1';
+  } else {
+    aptBody += 'exit 0'; // 健康场景不应被调用；调了也只记账
+  }
+  const shims = { uname: 'echo Linux', sudo: 'exec "$@"', 'apt-get': aptBody };
+  // fc-list：zh=true 模拟中西文齐全；zh=false 静默（无任何可列字体）
+  if (fcList) {
+    shims['fc-list'] = zh
+      ? `if [ "$1" = ':lang=zh' ]; then echo /usr/share/fonts/NotoSansCJK-Regular.ttc: NotoSansCJK; exit 0; fi\n`
+        + `echo /usr/share/fonts/LiberationSans-Regular.ttf: LiberationSans; exit 0`
+      : 'exit 0';
+  }
+  for (const [name, body] of Object.entries(shims)) {
+    const p = path.join(binDir, name);
+    fs.writeFileSync(p, `#!/bin/sh\n${body}\n`);
+    fs.chmodSync(p, 0o755);
+  }
+  return { aptLog };
+}
+
+function fontEnv(binDir, projState, workRoot) {
+  return {
+    U2M_WORKING_ROOT: workRoot,
+    PATH: `${binDir}:${process.env.PATH}`,
+    U2M_FONTCONFIG_CONF: path.join(projState, 'fonts.conf'),
+    U2M_FONT_DIR: path.join(projState, 'fonts'),
+  };
+}
+
+test('init.sh(Linux): fontconfig 配置/字体缺失时自动修复后 ok', { timeout: 300000 }, async () => {
+  const projState = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-font-fix-'));
+  let workRoot;
+  try {
+    const { aptLog } = makeFontShims(path.join(projState, 'bin'), 'fix');
+    workRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-init-work-'));
+    const r = await runScript('bash', [path.resolve('script/init.sh'), '--url', URL], {
+      env: fontEnv(path.join(projState, 'bin'), projState, workRoot),
+      timeoutMs: 280000,
+    });
+    assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+    const json = JSON.parse(r.stdout.split('\n').filter(Boolean)[0]);
+    assert.equal(json.status, 'ok');
+    assert.ok(fs.existsSync(path.join(projState, 'fonts.conf')), '修复后应生成 fontconfig 配置');
+    assert.ok(
+      fs.readFileSync(aptLog, 'utf8').includes('fontconfig'),
+      '应经包管理器安装 fontconfig',
+    );
+    assert.match(fs.readFileSync(aptLog, 'utf8'), /noto-cjk|cjk/i, '应补装 CJK 字体');
+  } finally {
+    fs.rmSync(projState, { recursive: true, force: true });
+    if (workRoot) fs.rmSync(workRoot, { recursive: true, force: true });
+  }
+});
+
+test('init.sh(Linux): 中西文字体齐全时不重复安装', { timeout: 300000 }, async () => {
+  const projState = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-font-ok-'));
+  let workRoot;
+  try {
+    const binDir = path.join(projState, 'bin');
+    const { aptLog } = makeFontShims(binDir, 'observe', { zh: true });
+    workRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-init-work-'));
+    const r = await runScript('bash', [path.resolve('script/init.sh'), '--url', URL], {
+      env: fontEnv(binDir, projState, workRoot),
+      timeoutMs: 280000,
+    });
+    assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+    assert.equal(JSON.parse(r.stdout.split('\n').filter(Boolean)[0]).status, 'ok');
+    assert.ok(!fs.existsSync(aptLog), '健康时不应调用包管理器');
+  } finally {
+    fs.rmSync(projState, { recursive: true, force: true });
+    if (workRoot) fs.rmSync(workRoot, { recursive: true, force: true });
+  }
+});
+
+test('init.sh(Linux): 无 fc-list 时按文件名判中西文齐全、不重装', { timeout: 300000 }, async () => {
+  const projState = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-font-nofc-'));
+  let workRoot;
+  try {
+    const binDir = path.join(projState, 'bin');
+    const { aptLog } = makeFontShims(binDir, 'observe', { fcList: false });
+    // 文件探测路径上的中西文健康态：配置 + 西文 ttf + CJK 命名字体
+    fs.writeFileSync(path.join(projState, 'fonts.conf'), '');
+    fs.mkdirSync(path.join(projState, 'fonts'));
+    fs.writeFileSync(path.join(projState, 'fonts', 'LiberationSans-Regular.ttf'), '');
+    fs.writeFileSync(path.join(projState, 'fonts', 'NotoSansCJKsc-Regular.otf'), '');
+    workRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-init-work-'));
+    const r = await runScript('bash', [path.resolve('script/init.sh'), '--url', URL], {
+      env: fontEnv(binDir, projState, workRoot),
+      timeoutMs: 280000,
+    });
+    assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+    assert.equal(JSON.parse(r.stdout.split('\n').filter(Boolean)[0]).status, 'ok');
+    assert.ok(!fs.existsSync(aptLog), '文件名判健康时不应调用包管理器');
+  } finally {
+    fs.rmSync(projState, { recursive: true, force: true });
+    if (workRoot) fs.rmSync(workRoot, { recursive: true, force: true });
+  }
+});
+
+test('init.sh(Linux): 西文健康但缺 CJK 时补装；补装失败仅警告不阻断', { timeout: 300000 }, async () => {
+  const projState = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-font-cjk-'));
+  let workRoot;
+  try {
+    const binDir = path.join(projState, 'bin');
+    const { aptLog } = makeFontShims(binDir, 'fail'); // fc-list 静默：无任何可列字体
+    // 崩溃门健康：配置 + 西文字体文件存在；但无 CJK
+    fs.writeFileSync(path.join(projState, 'fonts.conf'), '');
+    fs.mkdirSync(path.join(projState, 'fonts'));
+    fs.writeFileSync(path.join(projState, 'fonts', 'Dummy.ttf'), '');
+    workRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-init-work-'));
+    const r = await runScript('bash', [path.resolve('script/init.sh'), '--url', URL], {
+      env: fontEnv(binDir, projState, workRoot),
+      timeoutMs: 280000,
+    });
+    assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+    assert.equal(JSON.parse(r.stdout.split('\n').filter(Boolean)[0]).status, 'ok');
+    assert.match(fs.readFileSync(aptLog, 'utf8'), /noto-cjk/, '应尝试补装 CJK 字体');
+    assert.match(r.stderr, /豆腐/, 'CJK 缺失应警告截图豆腐块');
+  } finally {
+    fs.rmSync(projState, { recursive: true, force: true });
+    if (workRoot) fs.rmSync(workRoot, { recursive: true, force: true });
+  }
+});
+
+test('init.sh(Linux): 修复失败时输出 error 并退出 1', { timeout: 300000 }, async () => {
+  const projState = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-font-fail-'));
+  let workRoot;
+  try {
+    makeFontShims(path.join(projState, 'bin'), 'fail');
+    workRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-init-work-'));
+    const r = await runScript('bash', [path.resolve('script/init.sh'), '--url', URL], {
+      env: fontEnv(path.join(projState, 'bin'), projState, workRoot),
+      timeoutMs: 280000,
+    });
+    assert.equal(r.code, 1);
+    const json = JSON.parse(r.stdout.split('\n').filter(Boolean)[0]);
+    assert.equal(json.status, 'error');
+    assert.match(json.reason, /字体|fontconfig/);
+  } finally {
+    fs.rmSync(projState, { recursive: true, force: true });
+    if (workRoot) fs.rmSync(workRoot, { recursive: true, force: true });
+  }
+});
