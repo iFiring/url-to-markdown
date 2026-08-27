@@ -7,7 +7,7 @@
   3. **说明分块**（`descriptionIds`）：描述性元数据对应的元素 ID，如作者、日期、摘要、副标题等；可为空数组（在 `listFlowIds` 内；不存在）
   4. **列表流噪音**（`listFlowDeleteIds`）：列表流**之内**的噪音：菜单、导航、广告、推荐，步骤 6 提取时整棵剔除；**必须确定不属于文章内容**，不确定不能带上。列表流之外的噪音无需标记（不在任何 key 元素子树内，步骤 4 自然裁掉）
 
-**约束**
+## 约束
 
   1. **必须排除**菜单、导航、广告等不属于三类关键元素的元素
   3. 不选 `<body>` 或 `<html>`——它们的 ID 无意义
@@ -15,7 +15,7 @@
   5. `<pre>` 内的 `code...`：代码块内容占位。完整代码在后续步骤保真，识别时把 pre 当作一个结构单元即可
 
 
-**`2_clean_snapshot.html`结构示例**：
+## `2_clean_snapshot.html`结构示例：
 
 > `data-u2m-id` 的生成是在 DOM 树中自上而下自增的，所以通常只有两个情况：titleIds 或 descriptionIds 在 listFlowIds 里面，值更大，输出 JSON 里不应该有值；titleIds 或 descriptionIds 在 listFlowIds 前面，值更小。
 
@@ -32,12 +32,12 @@
 
     <!-- 列表流 listFlowIds[5] -->
     <section data-u2m-id="5" class="article">
-      <!-- descriptionIds:[6] 在 listFlowIds[5] 之内，JSON 不纳入 -->
+      <!-- 元素 [6] 在 listFlowIds[5] 之内，不纳入 descriptionIds -->
       <div data-u2m-id="6">
         <h2 data-u2m-id="7">Author:</h2>
         <span data-u2m-id="8">Name...</span>
       </div>
-      <!-- 列表流噪音 listFlowDeleteIds[9]：列表流之内 → 必须标记 -->
+      <!-- 列表流噪音——元素 [9] 在列表流之内 → 必须纳入 listFlowDeleteIds -->
       <div data-u2m-id="9" class="ad">Ad...</div>
       <p data-u2m-id="10">
         <h2 data-u2m-id="11">...</h2>
@@ -56,11 +56,11 @@
 </html>
 ```
 
-**输出要求** 
+## 输出要求
 
 输出路径：`<url-working-path>/3_key_ids.json`
 
-**本任务输出的完整 JSON 结构**：
+完整 JSON 结构：
 
 ```json
 {

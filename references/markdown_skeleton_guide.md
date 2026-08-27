@@ -321,7 +321,7 @@ DOM 结构示例：
 
 输出路径：`<url-working-path>/7_skeleton.json`
 
-**本任务输出的完整 JSON 结构**：
+完整 JSON 结构：
 
 ```json
 [
