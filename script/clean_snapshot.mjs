@@ -4,9 +4,10 @@
  * 同一 1_snapshot.html 先后渲染两次，cfg.mode 分叉）：
  *   趟 1（styled）结构清洗 + 长文本占位 + SVG 瘦身
  *     → 2_clean_style_snapshot.html（供步骤 4 裁剪）+ 2_long_text.json
- *   趟 2（clean）结构清洗 + 瘦身规则（K1-K9，逐任务落地）
+ *   趟 2（clean）结构清洗 + K1-K9 机械规则瘦身
  *     → 2_clean_snapshot.html（终端视图）
- * 零样式计算：不做 juice 内联、不做隐藏检测——隐藏子树按可见保留。
+ * 零样式计算：不做 juice 内联、不做 CSS 隐藏检测——CSS 隐藏子树按可见
+ * 保留，清洗版的隐藏折叠只认 HTML 裸 hidden 属性（K5）。
  *
  * 清洗版是终端视图：不含 LONG_TEXT 占位符（一切还原走带样式版与恢复清单），
  * 步骤 3 的 LLM 在清洗版上读结构、不再需要二次还原。
@@ -38,9 +39,11 @@
  *     子树文本不占位）——中文（含汉字）字符数 > 16 → {{LONG_TEXT_k|n_chars}}，
  *     英文（不含汉字）单词数 > 12 → {{LONG_TEXT_k|n_words}}
  *   - clean 趟：删 style 属性与 <style> 标签，SVG 剥成裸 <svg></svg> 壳；
- *     瘦身规则 K1-K9（后续任务逐个落地，当前为过渡期旧 R1-R5：R2 class
- *     过滤、R3 data 白名单、R1 pre→code...、R4 astro 解包、R5 空白压缩）；
- *     原六规则的 R6 隐藏折叠已随 juice 检测管线废除
+ *     K1-K9 机械规则全部就位——K1 class 语义过滤、K2 属性白名单（href/src/
+ *     aria 全删）、K3 SVG 清空、K4 astro 解包、K5 hidden 裸属性折叠
+ *     {{n;构成}}、K6/K7 table/pre 折叠 {{table>n}}/{{pre>code>n}}、K8 行内
+ *     run token 化（title 容器豁免——title 是步骤 3 识别线索，不 token 化）、
+ *     K9 空白压缩
  *
  * stdout 输出（有且仅有一行 JSON，日志一律走 stderr）:
  *   {"status":"ok","cleanedSnapshot":"...","styledSnapshot":"...",

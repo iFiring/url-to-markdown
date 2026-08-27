@@ -12,10 +12,10 @@
  * LONG_TEXT 占位符（一切还原走带样式版与 2_long_text.json）；隐藏折叠不走
  * juice 样式检测，由 K5 以 hidden 裸属性零样式计算实现。
  *
- * 清洗版瘦身规则 K1-K9（class 语义过滤 K1 → 属性白名单 K2 → SVG 清空 K3 →
- * astro 解包 K4 → hidden 裸属性折叠 K5 → table 折叠 K6 → pre 折叠 K7 →
- * 行内 run token 化 K8 → 空白压缩 K9）逐任务落地：K1-K9 已就位，
- * 见各步骤注释与 spec。
+ * 清洗版瘦身规则 K1-K9（全部就位）：class 语义过滤 K1 → 属性白名单 K2 →
+ * SVG 清空 K3 → astro 解包 K4 → hidden 裸属性折叠 K5 → table 折叠 K6 →
+ * pre 折叠 K7 → 行内 run token 化 K8（title 容器豁免——title 是步骤 3 的
+ * 识别线索，不 token 化）→ 空白压缩 K9；详见各步骤注释与 spec。
  */
 function __u2mCleanSnapshot(cfg) {
   cfg = cfg || {};

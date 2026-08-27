@@ -1,12 +1,12 @@
 # 任务
 
-这是**一篇文章页面**， 读取 `<url-working-path>/2_clean_snapshot.html` 的 DOM 结构（元素层级、标签类型、class 名称）和长文本占位符（`{{LONG_TEXT_k|...}}`）分布，找到以下四类关键元素与列表流噪音的 `data-u2m-id` (ID)：
+这是**一篇文章页面**， 读取 `<url-working-path>/2_clean_snapshot.html` 的 DOM 结构（元素层级、标签类型、语义 class）与**文本规模 token** 分布，找到以下四类关键元素与列表流噪音的 `data-u2m-id` (ID)：
 
   1. **列表流**（`listFlowIds`）：文章主体的流容器 ID。**语义门最高优先**：只有**文章主体内容**才能标流——菜单、导航、目录（TOC）、面包屑、页脚链接、相关推荐、评论列表、分享栏等，即使内部结构完全符合下述判据（导航/目录里的 `<ul>` 是最典型的『假流』），也**不是流、绝不标记**；结构判据只用于文章主体**内部**的层级判定。过语义门后：凡**直接子元素包含段落级块、或包含另一个列表流**的容器即是列表流。后者即「流的流」：article / section / 手风琴项等包装容器靠**子流**成流——标题头、展开/收起按钮这类非段落兄弟随子块整体迁入、文本不丢；若无此判据，包装容器只有在恰好直接挂 `<p>` 时才成流，标题头会悬空丢失。段落级块**只有以下六类**，其余元素一律不算：
 
      - 段落 `<p>`
      - 标题 `<h1>`、`<h2>`、`<h3>`、`<h4>`、`<h5>`、`<h6>`
-     - 预格式块 `<pre>`（步骤 2 清洗后内容为 `code...` 占位）
+     - 预格式块 `<pre>`（内容折叠为 `{{pre>code>N_chars}}` 占位）
      - 列表 `<ul>`、`<ol>`
      - 定义列表 `<dl>`（`<dt>`/`<dd>` 的术语对、问答、元信息对）
      - 引用块 `<blockquote>`
@@ -27,8 +27,10 @@
 
   1. **必须排除**菜单、导航、广告等不属于四类关键元素的元素——特别注意：导航/目录/推荐里的 `<ul>` 结构上完全符合流的判据，但语义上不是文章内容，**任何一类（含 `standaloneIds`）都不能标**；四类标记只收文章主体内容
   2. 不选 `<body>` 或 `<html>`——它们的 ID 无意义
-  3. `data-u2m-hidden="N_chars"`（或 `N_chars,fixed`）标记：折叠的隐藏子树（模态/抽屉/折叠展开区/响应式隐藏）。根元素的 `data-u2m-id` 可正常引用——原文完整保留在带样式版，纳入 listFlowIds 即可还原全文；值是该子树的真实文本规模，可据此判断是否值得纳入
-  4. `<pre>` 内的 `code...`：代码块内容占位。完整代码在后续步骤保真，识别时把 pre 当作一个结构单元即可
+  3. **`hidden` 属性元素 + `{{n_chars;n_a/n_div/...}}` 内容 token**：折叠的隐藏子树（模态/抽屉/移动端导航等）。根元素的 `data-u2m-id` 可正常引用——原文完整保留在带样式版，纳入 listFlowIds 即可还原全文（FAQ 折叠答案、tab 变体面板是典型可纳入场景）；token 值是真实文本规模与标签构成（计数降序），可据此判断是否值得纳入
+  4. `{{pre>code>N_chars}}`：pre 代码块内容占位（`data-language` 在 pre 上）。完整代码在后续步骤保真，识别时把 pre 当作一个结构单元即可
+  5. `{{table>N_chars}}` / `{{table>N_words}}`：表格整体占位。完整表格在后续步骤从带样式版保真，判定容器是否为流时把 table 当复合单元即可（注意：`>` 在文本节点序列化时转义为 `&gt;`，4/5 两类 token 在 HTML 源码里显示为 `{{table&gt;N_chars}}` / `{{pre&gt;code&gt;N_chars}}`——本手册一律按规范形态 `>` 书写）
+  6. 链接与图片元素**不带 URL**（href/src 已清空，链接文本与 alt 保留）；超阈值的连续行内文本段（含链接混排）整段折叠为 `{{n_chars;n_a/...}}` token——文本规模与构成是判读流价值的线索，短文本（≤16 汉字 / ≤12 词）保留原文；`<title>` 原文保留（不 token 化），仍是识别线索
 
 
 ## `2_clean_snapshot.html`结构示例：
@@ -77,13 +79,14 @@
            也是流（标不标均可、多标无害——随外层 [5] 整块迁入，[22]/[23] 不拆出） -->
       <div class="codeblock" data-u2m-id="21">
         <div class="bar" data-u2m-id="22">tsx</div>
-        <pre data-u2m-id="23">code...</pre>
+        <pre data-u2m-id="23" data-language="tsx">{{pre>code>412_chars}}</pre>
       </div>
       <!-- 非流：直接子元素仅 figure 复合单元 → 不标，整体迁入 -->
       <div data-u2m-id="24"><figure data-u2m-id="25">...</figure></div>
-      <!-- 折叠隐藏子树：在流内无需特殊处理——原文在带样式版完整保留，
-           整块迁入即还原全文（data-u2m-hidden 的值是真实文本规模） -->
-      <div data-u2m-hidden="120_chars" data-u2m-id="26">…</div>
+      <!-- hidden 折叠子树（{{n_chars;构成}} token）：在流内无需特殊处理——
+           原文在带样式版完整保留，整块迁入即还原全文（token 是真实文本
+           规模与标签构成） -->
+      <div hidden data-u2m-id="26">{{120_chars;3_p}}</div>
     </section>
     <!-- 列表流之外的广告无需标记——不在任何 key 元素子树内，步骤 4 自然裁掉 -->
     <!-- 列表流 listFlowIds[28]（与 [5] 互不嵌套的另一流） -->
@@ -96,7 +99,7 @@
       <!-- 非流：figcaption 与表格包装都是复合单元、无段落级块 → 不标，整体迁入 -->
       <figure class="table" data-u2m-id="32">
         <figcaption data-u2m-id="33">表题</figcaption>
-        <div data-u2m-id="34"><table data-u2m-id="35">...</table></div>
+        <div data-u2m-id="34"><table data-u2m-id="35">{{table>96_chars}}</table></div>
       </figure>
       <p data-u2m-id="36"><span data-u2m-id="37">...</span></p>
       <!-- <dl> 本身是段落级块：作为 [28] 的一个子块整体迁入 -->
@@ -106,13 +109,12 @@
       </dl>
     </div>
     <!-- 手风琴项（不在任何外层流内）：直接子元素 = 展开/收起标题 button [43]
-         （长文本）+ 折叠内容流 [44]（子元素为 <p>）——按「含子流」判据项容器
-         [42] 也是流，标 [42] 与 [44] → button 作为子块整体迁入，标题文本保留 -->
+         + 折叠内容流 [44]（hidden 折叠为 {{200_chars;1_p}}——构成 1_p 即原
+         <p> 子元素，含段落级块 → 是流）——按「含子流」判据项容器 [42] 也是
+         流，标 [42] 与 [44] → button 作为子块整体迁入，标题文本保留 -->
     <div class="accordion-item" data-u2m-id="42">
-      <button data-u2m-id="43">{{LONG_TEXT_1|80_chars}}</button>
-      <div data-u2m-hidden="200_chars" data-u2m-id="44">
-        <p data-u2m-id="45">折叠的正文段落...</p>
-      </div>
+      <button data-u2m-id="43">{{80_chars}}</button>
+      <div hidden data-u2m-id="44">{{200_chars;1_p}}</div>
     </div>
     <!-- 游离内容：[28]/[42] 的兄弟元素、不在任何流子树内（此处不把包装
          div 标成流——标它会把上方的流外广告一并带入）→ 整体单独标
