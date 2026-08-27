@@ -65,8 +65,10 @@ LONG_TEXT 占位（阈值 16 汉字 / 12 词不变）。
 class 值按空白切 token，逐 token 判定：样式强相关 token 删，其余保留；全噪声则
 删整个属性。在今日 R2 基础上补齐实测漏网：`overflow-*`、`appearance-*`、裸
 `border`/`shadow`/`prose` 等 tailwind 单体、`!` 前缀 important 变体、CSS-modules
-`_Name_hash` 形态、工具名类（`shiki`/`shiki-themes`/`syntax-highlighter`——代码块
-语义已由 pre + data-language 表达）。原则不变：**拿不准保留**——漏删只费字节，
+`_Name_hash` 形态、负号前缀的位移/尺寸工具类（`-top-0.5` 等——今日正则漏网，
+匹配时先剥前导 `-` 再走位移/间距族）、工具名类（`shiki`/`shiki-themes`/
+`syntax-highlighter`——代码块语义已由 pre + data-language 表达）。原则不变：
+**拿不准保留**——漏删只费字节，
 误删语义 token 才伤步骤 3 判读。过滤表以参考页实测校准。
 
 ### K2 属性白名单
