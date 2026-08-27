@@ -51,8 +51,10 @@ done
 cd "$ROOT" || die "无法进入项目根目录"
 log "使用 $PM 安装 Node 依赖"
 case "$PM" in
-  pnpm) if [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile >&2 || die "pnpm install --frozen-lockfile 失败";
-        else pnpm install >&2 || die "pnpm install 失败"; fi ;;
+  # CI=true：非交互环境下 pnpm 需清空异版 node_modules 时自动确认重建，
+  # 否则无 TTY 直接 ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY 中止
+  pnpm) if [ -f pnpm-lock.yaml ]; then CI=true pnpm install --frozen-lockfile >&2 || die "pnpm install --frozen-lockfile 失败";
+        else CI=true pnpm install >&2 || die "pnpm install 失败"; fi ;;
   yarn) if [ -f yarn.lock ]; then yarn install --frozen-lockfile >&2 || die "yarn install --frozen-lockfile 失败";
         else yarn install >&2 || die "yarn install 失败"; fi ;;
   npm)  if [ -f package-lock.json ]; then npm ci >&2 || die "npm ci 失败";
