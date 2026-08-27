@@ -60,7 +60,7 @@
 
 输出路径：`<url-working-path>/3_key_ids.json`
 
-输出结构：
+**本任务输出的完整 JSON 结构**：
 
 ```json
 {

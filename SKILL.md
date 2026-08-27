@@ -109,11 +109,11 @@ node <skill-root>/script/clean_snapshot.mjs --url <url>
 
 #### 任务
 
-读取 Skill 目录 `<skill-root>/references/analyze_html_guide.md`，当前工作目录 url-working-path 为 `<url-working-path>/`。
+读取 Skill 目录 `<skill-root>/references/analyze_html_guide.md`，当前工作目录(<url-working-path>) 为 `<url-working-path>/`
 
 #### 后续
 
-当前任务完成后，进入步骤 4
+当产物 `<url-working-path>/3_key_ids.json` 完成后，进入步骤 4
 
 ### 步骤 4 · 用脚本裁剪 DOM
 
@@ -160,11 +160,11 @@ node <skill-root>/script/extract_article.mjs --url <url>
 
 #### 任务
 
-读取 Skill 目录 `<skill-root>/references/markdown_skeleton_guide.md`，当前工作目录 url-working-path 为 `<url-working-path>/`。
+读取 Skill 目录 `<skill-root>/references/markdown_skeleton_guide.md`，当前工作目录(<url-working-path>) 为 `<url-working-path>/`
 
 #### 后续
 
-当前任务完成后，进入步骤 8
+当产物 `<url-working-path>/7_skeleton.json` 完成后，进入步骤 8
 
 ### 步骤 8 · 用脚本还原占位符 + 图片下载
 

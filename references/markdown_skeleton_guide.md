@@ -53,7 +53,7 @@ DOM 结构示例：
 
 ## 判定规则
 
-**`h1 - h6` 判定**
+### `h1 - h6` 判定
 
 - 带有明显 `h1 - h6` 标签 → `h1 - h6`
 - 字体大小为 `h1 - h6` 级别大小 → `h1 - h6`
@@ -90,14 +90,14 @@ DOM 结构示例：
 </body>
 ```
 
-输出结构示例：
+输出示例：
 ```json
 {"h1": "# {{LONG_TEXT_1}}"},
 {"h1": "# {{LONG_TEXT_2}}"},
 {"h2": "## {{LONG_TEXT_3}}"}
 ```
 
-**`blockquote` 判定**
+### `blockquote` 判定
 
 - 在「单传祖先链元素」上，存在单个元素有「背景/边框/圆角/阴影」的提示段落，子孙元素没有「背景/边框/圆角/阴影」等块元素样式，只有文本 → `blockquote`
 
@@ -118,12 +118,12 @@ DOM 结构示例：
 </body>
 ```
 
-输出结构示例：
+输出示例：
 ```json
 {"blockquote": "> {{LONG_TEXT_1}}\n> {{LONG_TEXT_2}}\n> {{LONG_TEXT_3}}"}
 ```
 
-**`ul` / `ol` 判定**
+### `ul` / `ol` 判定
 
 - 真实列表标签：`<ul>`/`<ol>`/`<li>` → `ul`/`ol`；
 - 在「单传祖先链元素」上，无列表标签但子元素**同构重复**（多个纯文本行的「卡片组、垂直堆叠的图标+文本行、要点罗列、标签组等」），能够用多级 `ul` / `ol` 展示的 → `ul`/`ol`；
@@ -145,20 +145,20 @@ DOM 结构示例：
 </body>
 ```
 
-输出结构示例：
+输出示例：
 ```json
 {"ol": "1. {{LONG_TEXT_10}}\n 2. {{LONG_TEXT_11}}"},
 {"ul": "- {{LONG_TEXT_12}}\n - {{LONG_TEXT_13}}"}
 ```
 
-**`img` 判定**
+### `img` 判定
 
 - `<img>` / `<picture>` 元素：value 统一写 `![img](图片绝对URL)`（URL 为快照阶段已绝对化的 src） → `img`；
 - `<figure><img>` + `<figcaption>`：展开为两条——`img` 条 + figcaption 的 `p` 条 → `img`；
 - 伴随文本的行内小图标 / 装饰图标不单独成 `img` 条
 - 多图组成视觉整体，文本较少（图片组、图文拼贴）→ 判定 `trans2img`，不逐张拆 `img`；CSS 背景图同理（取不到独立 URL）
 
-DOM 结构示例：
+DOM 示例：
 ```html
 <body>
 <figure>
@@ -176,7 +176,7 @@ DOM 结构示例：
 {"img": "![img](https://example.com/a/diagram.png)"}
 ```
 
-**`code` 判定**
+### `code` 判定
 
 - 在「单传祖先链元素」上：
   「视觉上」没有任何「背景/边框/圆角/阴影」的祖先元素 → `code`；
@@ -202,18 +202,18 @@ DOM 结构示例：
 </body>
 ```
 
-输出结构示例：
+输出示例：
 ```json
 {"p": "{{LONG_TEXT_k}}"},
 {"code": {"lang": "", "content": "code..."}}
 ```
 
-**`table` 判定**
+### `table` 判定
 
 - 真实 `<table>`（thead/tbody/th/td，或行列对齐的网格数据）**一律走 `table`**，无论带多重的背景/边框装饰；分组行用粗体行表达，markdown 表格可直接承载宽内容
 - 仅当结构无法用 markdown 表格表达（复杂跨行跨列/嵌套）才降级 `trans2img`
 
-**`trans2img` 判定**
+### `trans2img` 判定
 
 >  当模块的视觉布局本身承载语义，markdown 无法表达，就需要将元素整体转换成图片：`trans2img`
 
@@ -222,7 +222,7 @@ DOM 结构示例：
 - 多图文组合的卡片组 → `trans2img`
 - 图表、流程、图解、以空间关系表意的卡片拼贴 → `trans2img`
 
-**`trans2img` ID 取值规则**
+### `trans2img` ID 取值规则
 
 - 从「单传祖先链元素」上取出所有 ID
 - `trans2img` 的 ID 可能存在一个或多个
@@ -274,16 +274,16 @@ DOM 结构示例：
 </body>
 ```
 
-输出结构示例：
+输出示例：
 ```json
 {"trans2img": [9, 10]},
 {"trans2img": [27, 29, 30]}
 ```
 
-**冲突判定原则**
+### 冲突判定原则
 
 - **文本形态（markdown 语法）优先**：能用 Markdown 正确显示的内容，优先用 Markdown 格式展示——`trans2img` 是 markdown 无法表达时的兜底
-- `<body>` 下某块元素的子孙是单个 `table` / `pre` / `code` / `img`，且「上方/下方」仅有纯文本段落时，应该拆开成 `p + code + p`（`p + table + p` / `p + img + p` 同理），**不应该判定成 `trans2img`**——包装的背景/边框只是装饰
+- 当「单传祖先链元素」下是单个 `table` / `pre` / `code` / `img`，且「上方/下方」仅有纯文本段落时，应该拆开成 `p + code + p`（`p + table + p` / `p + img + p` 同理），**不应该判定成 `trans2img`**——包装的背景/边框只是装饰
 - 卡片组：以文本为主要内容、仅带小图标 → `ul`；以图片为主要内容、文本较短 → `trans2img`
 
 DOM 结构示例：
@@ -308,7 +308,7 @@ DOM 结构示例：
 </body>
 ```
 
-输出结构示例：
+输出示例：
 ```json
 {"p": "{{LONG_TEXT_1}}"},
 {"code": {"lang": "", "content": "code..."}},
@@ -321,7 +321,7 @@ DOM 结构示例：
 
 输出路径：`<url-working-path>/7_skeleton.json`
 
-输出的 JSON 结构：
+**本任务输出的完整 JSON 结构**：
 
 ```json
 [
