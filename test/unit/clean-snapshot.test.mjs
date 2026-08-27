@@ -270,64 +270,40 @@ test('clean_snapshot.mjs: 删除 video/audio 与残余表单控件，header/asid
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('clean_snapshot.mjs: 表格结构整体保留（含空单元格），内部噪声仍删', async () => {
+test('K6: table 整树折叠为 {{table>N}}——带样式版结构完整（含空单元格）', async () => {
   // 回归：空 <td>/<th>/<tr>/<col> 不在 KEEP_EMPTY 白名单时会被空元素级联删除，
   // 删掉后表格行列错位；article-1 实测丢过整个 <colgroup>+4 <col>。
-  // 表格结构元素即使为空也保留；单元格内的按钮自 2026-08-25 起保留不删。
-  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-clean-table-'));
-  const url = 'https://example.com/table-article';
-  const urlDir = path.join(tmpRoot, urlToDirName(url));
-  fs.mkdirSync(urlDir, { recursive: true });
-
+  // 清洗版整树折叠为字数 token（结构守护转移至带样式版断言）。
+  // 注：HTML 文本节点序列化把 `>` 转义为 &gt;，正则按磁盘字节断言。
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
-  <div id="root" data-u2m-id="1">
+  <div data-u2m-id="1">
     <table data-u2m-id="2">
       <colgroup data-u2m-id="3"><col data-u2m-id="4"><col data-u2m-id="5"></colgroup>
       <thead data-u2m-id="6"><tr data-u2m-id="7"><th data-u2m-id="8">列A</th><th data-u2m-id="9"></th></tr></thead>
       <tbody data-u2m-id="10">
-        <tr data-u2m-id="11"><td data-u2m-id="12">有值</td><td data-u2m-id="13"></td><td data-u2m-id="14"><button data-u2m-id="15">按钮</button></td></tr>
-        <tr data-u2m-id="16"></tr>
+        <tr data-u2m-id="11"><td data-u2m-id="12">有值</td><td data-u2m-id="13"></td></tr>
       </tbody>
     </table>
-    <p data-u2m-id="17">正文段落</p>
+    <p data-u2m-id="14">正文段落</p>
   </div>
 </body></html>`;
-  fs.writeFileSync(path.join(urlDir, '1_snapshot.html'), snapshot);
-
-  const script = path.resolve('script/clean_snapshot.mjs');
-  const r = await runScript(process.execPath, [script, '--url', url], {
-    env: { U2M_WORKING_ROOT: tmpRoot },
-    timeoutMs: 30000,
-  });
-  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
-  assert.equal(out.status, 'ok');
-  const cleaned = fs.readFileSync(out.cleanedSnapshot, 'utf8');
-
-  // 表格结构全体保留——含空 th/td/tr 与无子节点的 col/colgroup
-  for (const [tid, what] of [
-    ['2', 'table'], ['3', 'colgroup'], ['4', 'col'], ['5', 'col'],
-    ['6', 'thead'], ['7', 'tr'], ['8', '有值的 th'], ['9', '空 th'],
-    ['10', 'tbody'], ['11', 'tr'], ['12', '有值的 td'], ['13', '空 td'],
-    ['14', '含按钮的 td'], ['16', '空 tr'],
-  ]) {
-    assert.ok(cleaned.includes(`data-u2m-id="${tid}"`), `${what} (id=${tid}) 必须保留`);
-  }
-  assert.equal((cleaned.match(/<td[\s>]/g) || []).length, 3, 'td 数量应为 3（不丢空单元格）');
-  assert.equal((cleaned.match(/<tr[\s>]/g) || []).length, 3, 'tr 数量应为 3（不丢空行）');
-  assert.equal((cleaned.match(/<col[\s>]/g) || []).length, 2, 'col 数量应为 2');
-
-  // 单元格内的按钮不再删除（2026-08-25 起按钮保留），单元格天然保有内容
-  assert.ok(cleaned.includes('data-u2m-id="15"'), '单元格内的 button 应保留');
-  assert.ok(/<button[^>]*>按钮</.test(cleaned), 'button 文本应保留');
-
-  // 表格外的正文与级联行为不受影响
-  assert.ok(cleaned.includes('data-u2m-id="17"'), '表格外正文必须保留');
-  assert.ok(cleaned.includes('正文段落'), '正文文本必须保留');
-
-  fs.rmSync(tmpRoot, { recursive: true, force: true });
+  const { cleaned, styled, cleanup } = await runClean(snapshot, 'k6-table');
+  try {
+    const seg = cleaned.match(/<table data-u2m-id="2"[^>]*>([\s\S]*?)<\/table>/)[1];
+    assert.ok(/^\{\{table&gt;\d+_(chars|words)\}\}$/.test(seg), `table 应折叠为字数 token: ${seg}`);
+    assert.ok(!cleaned.includes('列A') && !cleaned.includes('data-u2m-id="3"'), '表格内部结构与内容从清洗版消失');
+    assert.ok(cleaned.includes('正文段落'), '表外正文保留');
+    // 带样式版：表格结构全体保留（含空 th/td/col——删空单元格会让行列错位）
+    for (const [tid, what] of [
+      ['3', 'colgroup'], ['4', 'col'], ['6', 'thead'], ['8', '有值的 th'], ['9', '空 th'],
+      ['12', '有值的 td'], ['13', '空 td'],
+    ]) {
+      assert.ok(styled.includes(`data-u2m-id="${tid}"`), `${what} (id=${tid}) 带样式版必须保留`);
+    }
+    assert.ok(!styled.includes('{{table&gt;') && !styled.includes('{{table>'), '守卫: 带样式版不得出现新 token');
+  } finally { cleanup(); }
 });
 
 test('clean_snapshot.mjs: 按钮保留——button 与 role="button" 两版都不再删除', async () => {
@@ -573,7 +549,36 @@ test('K2: 属性白名单——八属性存活，href/src/aria/style 等删净�
   } finally { cleanup(); }
 });
 
-test('R1: pre 内容替换为 code...——token span 全删，pre/code 壳与 id/language 保留，行内 code 不动', async () => {
+test('K5: hidden 裸属性折叠——最外层折为构成 token，嵌套取外层，data-u2m-hidden 属性取消', async () => {
+  const attrLong = '这是一段仅靠 hidden 属性隐藏的中文文本';
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-u2m-id="1">
+    <div data-u2m-id="2" hidden="true"><p data-u2m-id="3">${attrLong}</p><a data-u2m-id="4" href="/x">链接</a></div>
+    <div data-u2m-id="5" hidden><div data-u2m-id="6" hidden="until-found"><p data-u2m-id="7">嵌套隐藏</p></div></div>
+    <p data-u2m-id="8">正文段落</p>
+  </div>
+</body></html>`;
+  const { out, cleaned, styled, cleanup } = await runClean(snapshot, 'k5-hidden');
+  try {
+    const seg1 = cleaned.match(/<div data-u2m-id="2"[^>]*>([\s\S]*?)<\/div>/)[1];
+    assert.ok(/^\{\{\d+_(chars|words);1_p\/1_a\}\}$/.test(seg1), `子树应折为构成 token: ${seg1}`);
+    assert.ok(cleaned.match(/<div data-u2m-id="2"[^>]*>/)[0].includes('hidden'), 'hidden 属性保留（触发信号）');
+    assert.ok(!cleaned.includes(attrLong) && !cleaned.includes('data-u2m-id="3"') && !cleaned.includes('data-u2m-id="4"'), '折叠子树内容应消失');
+    const seg2 = cleaned.match(/<div data-u2m-id="5"[^>]*>([\s\S]*?)<\/div>/)[1];
+    assert.ok(/^\{\{\d+_(chars|words);1_div\/1_p\}\}$/.test(seg2), `嵌套 hidden 只折最外层: ${seg2}`);
+    assert.ok(!cleaned.includes('data-u2m-id="6"') && !cleaned.includes('data-u2m-id="7"'), '内层 id 随外层折叠消失');
+    assert.ok(!cleaned.includes('data-u2m-hidden'), 'data-u2m-hidden 属性应取消');
+    assert.ok(cleaned.includes('正文段落'), '可见正文保留');
+    // attrLong 23 字 > 16：带样式版以 LONG_TEXT 占位符保留、原文进恢复清单
+    assert.ok(styled.includes('{{LONG_TEXT_1|') && styled.includes('data-u2m-id="3"'), '带样式版子树完整（长文本以占位符保留）');
+    assert.ok(JSON.parse(fs.readFileSync(out.longText, 'utf8'))[1] === attrLong, '隐藏长文本原文在恢复清单完整保留');
+    assert.ok(!styled.includes(';1_p'), '守卫: 带样式版不得出现新 token');
+  } finally { cleanup(); }
+});
+
+test('K7: pre 折叠为 {{pre>code>N_chars}}——data-language 提升到 pre，行内 code 不动', async () => {
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
@@ -582,14 +587,17 @@ test('R1: pre 内容替换为 code...——token span 全删，pre/code 壳与 i
     <p data-u2m-id="7">行内 <code data-u2m-id="8">client.create()</code> 代码</p>
   </div>
 </body></html>`;
-  const { cleaned, styled, cleanup } = await runClean(snapshot, 'r1-pre');
+  const { cleaned, styled, cleanup } = await runClean(snapshot, 'k7-pre');
   try {
-    assert.ok(/<pre[^>]*data-u2m-id="2"[^>]*>[\s\S]*?<code[^>]*data-u2m-id="3"[^>]*>code\.\.\.<\/code><\/pre>/.test(cleaned), `pre/code 壳应保留且内容为 code...: ${cleaned.match(/<pre[\s\S]*?<\/pre>/)?.[0]}`);
-    assert.ok(!cleaned.includes('shiki-token') || !/<span[^>]*class="shiki-token"/.test(cleaned), 'token span 应删除');
-    assert.ok(!cleaned.includes('data-u2m-id="4"') && !cleaned.includes('data-u2m-id="5"'), 'pre 内部 id 随内容删除');
-    assert.ok(cleaned.includes('data-language="javascript"'), 'data-language 保留');
+    assert.ok(
+      /<pre[^>]*data-u2m-id="2"[^>]*data-language="javascript"[^>]*>\{\{pre&gt;code&gt;\d+_chars\}\}<\/pre>/.test(cleaned),
+      `pre 应折叠为 token 且 data-language 提升: ${cleaned.match(/<pre[\s\S]*?<\/pre>/)?.[0]}`
+    );
+    assert.ok(!cleaned.includes('data-u2m-id="3"') && !cleaned.includes('data-u2m-id="4"'), 'pre 内部 id 随子树删除');
+    assert.ok(!cleaned.includes('shiki-token'), 'token span 应删除');
     assert.ok(cleaned.includes('<code data-u2m-id="8">client.create()</code>'), '行内 code 不动');
     assert.ok(styled.includes('shiki-token') && styled.includes('import'), '带样式版完整保留代码');
+    assert.ok(!styled.includes('{{pre&gt;') && !styled.includes('{{pre>'), '守卫: 带样式版不得出现新 token');
   } finally { cleanup(); }
 });
 

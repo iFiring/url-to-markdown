@@ -9,14 +9,13 @@
  * 删除、控件删除、空元素级联 + KEEP_EMPTY）。
  *
  * 终端视图不变量：清洗版（clean 趟产物）是步骤 3 LLM 的终端视图——不再含
- * LONG_TEXT 占位符（一切还原走带样式版与 2_long_text.json），也不再做隐藏
- * 折叠（R6 已随 juice 检测管线废除，隐藏子树按可见保留）。
+ * LONG_TEXT 占位符（一切还原走带样式版与 2_long_text.json）；隐藏折叠不走
+ * juice 样式检测，由 K5 以 hidden 裸属性零样式计算实现。
  *
  * 清洗版瘦身规则 K1-K9（class 语义过滤 K1 → 属性白名单 K2 → SVG 清空 K3 →
  * astro 解包 K4 → hidden 裸属性折叠 K5 → table 折叠 K6 → pre 折叠 K7 →
- * 行内 run token 化 K8 → 空白压缩 K9）由后续任务逐个落地；当前为过渡期，
- * clean 趟沿用旧 R1-R5（R2 class 过滤、R3 data 白名单、R1 pre→code...、
- * R4 astro 解包、R5 保守空白压缩），见各步骤注释与 spec。
+ * 行内 run token 化 K8 → 空白压缩 K9）逐任务落地：K1-K7 已就位；K8 未做、
+ * 空白压缩暂沿用旧 R5 保守实现（K9 落地后替换），见各步骤注释与 spec。
  */
 function __u2mCleanSnapshot(cfg) {
   cfg = cfg || {};
@@ -279,27 +278,10 @@ function __u2mCleanSnapshot(cfg) {
     }
   }
 
-  // 16. R1 pre 内容替换（仅清洗版；K7 落地后替换）：代码块对结构识别只是一个
-  //     单元，内容全文在带样式版保真（步骤 7 于 6_article 写进骨架）。首个
-  //     code 壳保留（含 data-language），其余子元素删除；行内 <code> 是句子
-  //     成分，不动。
-  var pres = document.querySelectorAll('pre');
-  for (var i = 0; i < pres.length; i++) {
-    var pre = pres[i];
-    var codeShell = null;
-    var nodes = Array.prototype.slice.call(pre.childNodes);
-    for (var j = 0; j < nodes.length; j++) {
-      if (!codeShell && nodes[j].nodeType === 1 && nodes[j].tagName === 'CODE') { codeShell = nodes[j]; continue; }
-      pre.removeChild(nodes[j]);
-    }
-    var host = codeShell || pre;
-    while (host.firstChild) host.removeChild(host.firstChild);
-    host.appendChild(document.createTextNode('code...'));
-  }
-
-  // 17. R4 astro 包装解包（仅清洗版；K4 落地后替换）：astro-island/astro-slot
-  //     是框架脚手架标签，子元素原样上提，包装自身属性（含其 data-u2m-id）
-  //     弃置——清洗版不可见即不可引用。带样式版保留（步骤 6 取子树不受影响）。
+  // K4. astro 包装解包（仅清洗版）：astro-island/astro-slot 是框架脚手架标签，
+  //     子元素原样上提，包装自身属性（含其 data-u2m-id）弃置——清洗版不可见
+  //     即不可引用。带样式版保留（步骤 6 取子树不受影响）。置于 K5-K7 折叠
+  //     之前，折叠统计的是解包后的真实子树。
   var wraps = document.querySelectorAll('astro-island, astro-slot');
   for (var i = wraps.length - 1; i >= 0; i--) {
     var wrap = wraps[i];
@@ -307,9 +289,71 @@ function __u2mCleanSnapshot(cfg) {
     wrap.parentNode.removeChild(wrap);
   }
 
+  // K5. hidden 裸属性折叠（仅清洗版）：HTML 规范里属性存在即隐藏（任意值），
+  //     无需样式计算。最外层折叠、子树清空放构成 token；根保留 id 可引用，
+  //     原文在带样式版（listFlow 引用即可还原 FAQ 折叠答案等）。
+  var CJK_RE = /[一-鿿]/;
+  function sizeSuffix(text) {
+    var t = (text || '').trim();
+    var cjk = CJK_RE.test(t);
+    var n = cjk ? t.length : t.split(/\s+/).filter(Boolean).length;
+    return { n: n, unit: cjk ? 'chars' : 'words' };
+  }
+  function topTags(counts) {
+    return Object.keys(counts)
+      .map(function (t) { return counts[t] + '_' + t; })
+      .sort(function (a, b) { return parseInt(b, 10) - parseInt(a, 10); })
+      .slice(0, 4).join('/');
+  }
+  var hiddenCount = 0;
+  var hiddenEls = Array.prototype.slice.call(document.querySelectorAll('[hidden]'));
+  for (var i = 0; i < hiddenEls.length; i++) {
+    var he = hiddenEls[i];
+    if (!he.parentNode || !document.body.contains(he)) continue;   // 已被前序折叠删除
+    var anc = he.parentElement, nested = false;
+    while (anc) { if (anc.hasAttribute && anc.hasAttribute('hidden')) { nested = true; break; } anc = anc.parentElement; }
+    if (nested) continue;                                          // 只折最外层
+    var tagCounts = {};
+    var desc = he.querySelectorAll('*');
+    for (var j = 0; j < desc.length; j++) {
+      var dt = desc[j].tagName.toLowerCase();
+      tagCounts[dt] = (tagCounts[dt] || 0) + 1;
+    }
+    var sz = sizeSuffix(he.textContent);
+    var comp = topTags(tagCounts);
+    var token = '{{' + sz.n + '_' + sz.unit + (comp ? ';' + comp : '') + '}}';
+    while (he.firstChild) he.removeChild(he.firstChild);
+    he.appendChild(document.createTextNode(token));
+    hiddenCount++;
+  }
+
+  // K6. table 折叠（仅清洗版）：整树清空、只统计字数；步骤 7 从带样式版读全表
+  var tables = document.querySelectorAll('table');
+  for (var i = 0; i < tables.length; i++) {
+    var tb = tables[i];
+    if (!tb.parentNode) continue;
+    var tsz = sizeSuffix(tb.textContent);
+    while (tb.firstChild) tb.removeChild(tb.firstChild);
+    tb.appendChild(document.createTextNode('{{table>' + tsz.n + '_' + tsz.unit + '}}'));
+  }
+
+  // K7. pre 折叠（仅清洗版）：data-language 从 code 壳提升到 pre；代码一律按字符数
+  var pres = document.querySelectorAll('pre');
+  for (var i = 0; i < pres.length; i++) {
+    var pre = pres[i];
+    if (!pre.parentNode) continue;
+    var langShell = pre.querySelector('code[data-language]');
+    if (langShell && !pre.hasAttribute('data-language')) {
+      pre.setAttribute('data-language', langShell.getAttribute('data-language'));
+    }
+    var codeChars = (pre.textContent || '').trim().length;
+    while (pre.firstChild) pre.removeChild(pre.firstChild);
+    pre.appendChild(document.createTextNode('{{pre>code>' + codeChars + '_chars}}'));
+  }
+
   // 18. R5 保守空白压缩（仅清洗版；K9 落地后替换）：删纯空白文本节点，当且仅当
   //     前后兄弟都不是行内文本敏感节点（非空白文本或行内元素）——行内相邻
-  //     节点间的空白承载词间分隔，保留。pre 内部已被 R1 清空，天然不涉及。
+  //     节点间的空白承载词间分隔，保留。pre 内部已被 K7 折叠清空，天然不涉及。
   var INLINE_TAGS = { A: 1, SPAN: 1, CODE: 1, STRONG: 1, EM: 1, B: 1, I: 1, U: 1, S: 1,
     MARK: 1, SMALL: 1, SUB: 1, SUP: 1, ABBR: 1, CITE: 1, Q: 1, KBD: 1, SAMP: 1, TIME: 1, IMG: 1, BR: 1 };
   function inlineSensitive(node) {
@@ -327,11 +371,11 @@ function __u2mCleanSnapshot(cfg) {
   }
   for (var i = 0; i < wsNodes.length; i++) wsNodes[i].parentNode.removeChild(wsNodes[i]);
 
-  // （原步骤 19 R6 隐藏折叠已废除：juice 检测管线整体移除，隐藏子树按可见
-  //   保留；K5 裸属性折叠由后续任务以零样式计算方式重新引入）
+  // （原步骤 19 R6 juice 隐藏折叠已废除：样式检测管线整体移除，隐藏折叠由
+  //   上方 K5 以 hidden 裸属性零样式计算实现）
 
   return {
     html: '<!DOCTYPE html>\n' + document.documentElement.outerHTML,
-    stats: { hiddenCount: 0, runCount: 0 }
+    stats: { hiddenCount: hiddenCount, runCount: 0 }
   };
 }
