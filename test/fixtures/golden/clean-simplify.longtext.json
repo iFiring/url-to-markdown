@@ -1,0 +1,1 @@
+{"1":"这是一段足够长的中文文本，用来触发行内文本的占位行为与还原清单的生成逻辑。","2":"This paragraph contains a fairly long English sentence that exceeds twelve words to trigger the placeholder mechanism."}
