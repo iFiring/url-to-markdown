@@ -730,3 +730,14 @@ test('K8: <title> 不 token 化——长中文标题保留作步骤 3 识别线�
   } finally { cleanup(); }
 });
 
+test('带样式版注入 <meta charset="utf-8">——清洗版不注入', async () => {
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body><div data-u2m-id="1"><p data-u2m-id="2">正文段落。</p></div></body></html>`;
+  const { cleaned, styled, cleanup } = await runClean(snapshot, 'charset-meta');
+  try {
+    assert.ok(/<head><meta charset="utf-8">/.test(styled), '带样式版 head 首位应注入 meta charset');
+    assert.ok(!/meta charset/i.test(cleaned), '清洗版不注入 meta');
+  } finally { cleanup(); }
+});
+

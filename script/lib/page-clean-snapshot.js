@@ -196,6 +196,13 @@ function __u2mCleanSnapshot(cfg) {
       }
     }
 
+    // 注入 <meta charset="utf-8">（仅带样式版）：head 内 meta 已被共享清洗删除，而
+    // extract_styled 以 file:// 加载本产物——无 charset 声明时解码依赖 chromium 嗅探，
+    // 环境敏感（曾把 UTF-8 嗅成 Windows-1252 产出双重编码乱码）。清洗版无浏览器加载方，不注入。
+    var metaCharset = document.createElement('meta');
+    metaCharset.setAttribute('charset', 'utf-8');
+    document.head.insertBefore(metaCharset, document.head.firstChild);
+
     return {
       html: '<!DOCTYPE html>\n' + document.documentElement.outerHTML,
       longTextCount: k,
