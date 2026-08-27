@@ -584,7 +584,7 @@ test('K7: pre 折叠为 {{pre>code>N_chars}}——data-language 提升到 pre，
 <body>
   <div data-u2m-id="1">
     <pre data-u2m-id="2" class="shiki" tabindex="0"><code data-u2m-id="3" data-language="javascript"><span data-u2m-id="4" class="syntax-highlighter-line"><span data-u2m-id="5" class="shiki-token">import</span><span data-u2m-id="6" class="shiki-token"> OpenAI </span></span></code></pre>
-    <p data-u2m-id="7">行内 <code data-u2m-id="8">client.create()</code> 代码</p>
+    <p data-u2m-id="7">inline <code data-u2m-id="8">client.create()</code> code</p>
   </div>
 </body></html>`;
   const { cleaned, styled, cleanup } = await runClean(snapshot, 'k7-pre');
@@ -595,6 +595,9 @@ test('K7: pre 折叠为 {{pre>code>N_chars}}——data-language 提升到 pre，
     );
     assert.ok(!cleaned.includes('data-u2m-id="3"') && !cleaned.includes('data-u2m-id="4"'), 'pre 内部 id 随子树删除');
     assert.ok(!cleaned.includes('shiki-token'), 'token span 应删除');
+    // p7 外围 filler 特意用英文短词（原中文 filler「行内 … 代码」使 run 达 21 字
+    // > K8 阈值 16、会被 K8 整段折叠）——本断言守护 K7 不动行内 code，短 run
+    // 原文保留（K8 阈值下同理）
     assert.ok(cleaned.includes('<code data-u2m-id="8">client.create()</code>'), '行内 code 不动');
     assert.ok(styled.includes('shiki-token') && styled.includes('import'), '带样式版完整保留代码');
     assert.ok(!styled.includes('{{pre&gt;') && !styled.includes('{{pre>'), '守卫: 带样式版不得出现新 token');
@@ -644,6 +647,72 @@ test('守卫: 清洗版是终端视图——不含 {{LONG_TEXT_，步骤 2 不�
     assert.equal(out.longTextCount, 1, '恢复清单仍从带样式版产出');
     const src = fs.readFileSync(path.resolve('script/clean_snapshot.mjs'), 'utf8');
     assert.ok(!src.includes("from 'juice'"), '步骤 2 不再 import juice');
+  } finally { cleanup(); }
+});
+
+test('K8: 行内 run token 化——阈值边界、构成、链接 run 整段吞噬、短 run 保留', async () => {
+  const zh17 = '汉'.repeat(17);                       // 17 字 > 16 → token
+  const zh16 = '汉'.repeat(16);                       // 16 字 → 保留
+  const en13 = Array(13).fill('word').join(' ');      // 13 词 > 12 → token
+  const en12 = Array(12).fill('word').join(' ');      // 12 词 → 保留
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-u2m-id="1">
+    <p data-u2m-id="2">${zh17}</p>
+    <p data-u2m-id="3">${zh16}</p>
+    <p data-u2m-id="4">${en13}</p>
+    <p data-u2m-id="5">${en12}</p>
+    <p data-u2m-id="6">Use the <a data-u2m-id="7" href="/x">Prompt Caching Dashboard</a> to monitor cache hit rates and usage over time.</p>
+    <p data-u2m-id="8">x <a data-u2m-id="9">链接</a> y</p>
+  </div>
+</body></html>`;
+  const { cleaned, styled, cleanup } = await runClean(snapshot, 'k8-run');
+  try {
+    assert.ok(/<p data-u2m-id="2">\{\{17_chars\}\}<\/p>/.test(cleaned), '17 字 run 应折叠');
+    assert.ok(cleaned.includes(zh16), '16 字 run 保留原文');
+    assert.ok(/<p data-u2m-id="4">\{\{13_words\}\}<\/p>/.test(cleaned), '13 词 run 折叠');
+    assert.ok(cleaned.includes(en12), '12 词 run 保留原文');
+    const mixed = cleaned.match(/<p data-u2m-id="6">([\s\S]*?)<\/p>/)[1];
+    assert.ok(/^\{\{14_words;1_a\}\}$/.test(mixed), `混合 run 整段折叠为 {{n;1_a}}: ${mixed}`);
+    const short = cleaned.match(/<p data-u2m-id="8">([\s\S]*?)<\/p>/)[1];
+    assert.ok(short.includes('x <a') && short.includes('> y'), `短 run 保留原文与行内间空白: ${JSON.stringify(short)}`);
+    assert.ok(styled.includes('Prompt Caching Dashboard') && styled.includes('href="/x"'), '带样式版不受影响');
+  } finally { cleanup(); }
+});
+
+test('K8: 含 img 的 run 不折叠——图片 id 与 alt 保持可引用', async () => {
+  const long = '这是一段超过十六个汉字的长文本配上图片，构成图注场景。';
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-u2m-id="1">
+    <p data-u2m-id="2">${long}<img data-u2m-id="3" src="x.png" alt="配图"></p>
+    <p data-u2m-id="4">正文对照段落。</p>
+  </div>
+</body></html>`;
+  const { cleaned, cleanup } = await runClean(snapshot, 'k8-img');
+  try {
+    const seg = cleaned.match(/<p data-u2m-id="2">([\s\S]*?)<\/p>/)[1];
+    assert.ok(seg.includes(long), '含 img 的 run 保留原文');
+    assert.ok(seg.includes('<img data-u2m-id="3" alt="配图">') || /<img data-u2m-id="3"[^>]*alt="配图"[^>]*>/.test(seg), 'img 元素与 alt 保留');
+  } finally { cleanup(); }
+});
+
+test('K8: 行内元素嵌行内集外标签（含 svg）切断 run、保守保留', async () => {
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-u2m-id="1">
+    <button data-u2m-id="2"><span data-u2m-id="3"><svg data-u2m-id="4"></svg></span> <span data-u2m-id="5">Copy Page</span></button>
+  </div>
+</body></html>`;
+  const { cleaned, cleanup } = await runClean(snapshot, 'k8-break');
+  try {
+    const seg = cleaned.match(/<button data-u2m-id="2">([\s\S]*?)<\/button>/)[1];
+    assert.ok(seg.includes('<svg data-u2m-id="4"></svg>'), 'icon span 内的 svg 保留');
+    assert.ok(seg.includes('Copy Page'), '短文本保留原文');
+    assert.ok(!/\{\{\d+_/.test(seg), `病态结构不折叠: ${seg}`);
   } finally { cleanup(); }
 });
 

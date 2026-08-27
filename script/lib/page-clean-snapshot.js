@@ -14,12 +14,16 @@
  *
  * 清洗版瘦身规则 K1-K9（class 语义过滤 K1 → 属性白名单 K2 → SVG 清空 K3 →
  * astro 解包 K4 → hidden 裸属性折叠 K5 → table 折叠 K6 → pre 折叠 K7 →
- * 行内 run token 化 K8 → 空白压缩 K9）逐任务落地：K1-K7 已就位；K8 未做、
- * 空白压缩暂沿用旧 R5 保守实现（K9 落地后替换），见各步骤注释与 spec。
+ * 行内 run token 化 K8 → 空白压缩 K9）逐任务落地：K1-K9 已就位，
+ * 见各步骤注释与 spec。
  */
 function __u2mCleanSnapshot(cfg) {
   cfg = cfg || {};
   var mode = cfg.mode === 'clean' ? 'clean' : 'styled';
+
+  // CJK 统一表意文字基本区（U+4E00–U+9FFF）——两趟共用：styled 趟占位与
+  // clean 趟 K5/K8 的中英文判据
+  var CJK_RE = /[一-鿿]/;
 
   // 1. 删除所有 <link> 标签（stylesheet/preconnect/icon 等，对结构识别是纯噪声）
   var links = document.querySelectorAll('link');
@@ -137,7 +141,6 @@ function __u2mCleanSnapshot(cfg) {
     //    <style> 文本在带样式版中原样保留，SVG 文本两版都不保留
     var MIN_CHARS = typeof cfg.minChars === 'number' ? cfg.minChars : 16;
     var MIN_WORDS = typeof cfg.minWords === 'number' ? cfg.minWords : 12;
-    var CJK_RE = /[一-鿿]/; // CJK 统一表意文字基本区（U+4E00–U+9FFF）
     function skipPlaceholder(textNode) {
       var p = textNode.parentElement;
       return !!(p && p.closest && p.closest('svg, style'));
@@ -199,6 +202,11 @@ function __u2mCleanSnapshot(cfg) {
       longTexts: longTexts
     };
   }
+
+  // clean 趟阈值（K5 构成 token / K8 行内 run 共用，与 styled 趟占位同源的
+  // cfg 默认：16 汉字 / 12 词）
+  var MIN_CHARS = typeof cfg.minChars === 'number' ? cfg.minChars : 16;
+  var MIN_WORDS = typeof cfg.minWords === 'number' ? cfg.minWords : 12;
 
   // 11. SVG 清空子树（仅清洗版）：属性由 K2 白名单统一裁剪，data-u2m-id 等存活
   var svgs = document.querySelectorAll('svg');
@@ -292,7 +300,6 @@ function __u2mCleanSnapshot(cfg) {
   // K5. hidden 裸属性折叠（仅清洗版）：HTML 规范里属性存在即隐藏（任意值），
   //     无需样式计算。最外层折叠、子树清空放构成 token；根保留 id 可引用，
   //     原文在带样式版（listFlow 引用即可还原 FAQ 折叠答案等）。
-  var CJK_RE = /[一-鿿]/;
   function sizeSuffix(text) {
     var t = (text || '').trim();
     var cjk = CJK_RE.test(t);
@@ -351,7 +358,68 @@ function __u2mCleanSnapshot(cfg) {
     pre.appendChild(document.createTextNode('{{pre>code>' + codeChars + '_chars}}'));
   }
 
-  // 18. R5 保守空白压缩（仅清洗版；K9 落地后替换）：删纯空白文本节点，当且仅当
+  // K8. 行内 run token 化（仅清洗版）：块容器内连续行内兄弟序列（裸文本 +
+  //     行内集元素），合计文本超阈值 → 整段替换为一个元数据 token（构成按
+  //     成员元素标签计数、降序至多 4 项）。含 img 的 run 不折叠（图片 id 需
+  //     可引用）；行内元素子树内出现行内集外标签（病态）→ 该元素视作块、
+  //     切断 run（保守保留）。svg/iframe/canvas 不在行内集内、天然切断。
+  var INLINE_TAGS_RUN = { A: 1, SPAN: 1, CODE: 1, STRONG: 1, EM: 1, B: 1, I: 1, U: 1, S: 1,
+    MARK: 1, SMALL: 1, SUB: 1, SUP: 1, ABBR: 1, CITE: 1, Q: 1, KBD: 1, SAMP: 1, TIME: 1, IMG: 1, BR: 1 };
+  function isInlineUnit(el) {
+    if (!INLINE_TAGS_RUN[el.tagName.toUpperCase()]) return false;
+    var inner = el.querySelectorAll('*');
+    for (var i = 0; i < inner.length; i++) {
+      if (!INLINE_TAGS_RUN[inner[i].tagName.toUpperCase()]) return false;
+    }
+    return true;
+  }
+  var runCount = 0;
+  var containers = Array.prototype.slice.call(document.querySelectorAll('*'));
+  for (var ci = 0; ci < containers.length; ci++) {
+    var cont = containers[ci];
+    if (!cont.parentNode) continue;
+    var snapNodes = Array.prototype.slice.call(cont.childNodes);
+    var runsList = [];
+    var current = [];
+    function flushRun() { if (current.length) { runsList.push(current); current = []; } }
+    for (var ni = 0; ni < snapNodes.length; ni++) {
+      var nd = snapNodes[ni];
+      var member = nd.nodeType === 3 || (nd.nodeType === 1 && isInlineUnit(nd));
+      if (member) current.push(nd); else flushRun();
+    }
+    flushRun();
+    for (var ri = 0; ri < runsList.length; ri++) {
+      var run = runsList[ri];
+      var text = '';
+      var imgHit = false;
+      var memberCounts = {};
+      for (var mi = 0; mi < run.length; mi++) {
+        var m = run[mi];
+        text += m.textContent;
+        if (m.nodeType === 1) {
+          var mt = m.tagName.toLowerCase();
+          memberCounts[mt] = (memberCounts[mt] || 0) + 1;
+          if (mt === 'img' || m.querySelector('img')) imgHit = true;
+        }
+      }
+      if (text.trim() === '' || imgHit) continue;      // 纯空白交 K9；img run 豁免
+      var cjk = CJK_RE.test(text.trim());
+      var n = cjk ? text.trim().length : text.trim().split(/\s+/).filter(Boolean).length;
+      if (n <= (cjk ? MIN_CHARS : MIN_WORDS)) continue; // 阈值下保留原文
+      var mcomp = topTags(memberCounts);
+      var mtoken = '{{' + n + '_' + (cjk ? 'chars' : 'words') + (mcomp ? ';' + mcomp : '') + '}}';
+      var parent = run[0].parentNode;
+      if (!parent) continue;
+      var insertBefore = run[run.length - 1].nextSibling;
+      for (var di = 0; di < run.length; di++) {
+        if (run[di].parentNode) run[di].parentNode.removeChild(run[di]);
+      }
+      parent.insertBefore(document.createTextNode(mtoken), insertBefore);
+      runCount++;
+    }
+  }
+
+  // K9. 保守空白压缩（仅清洗版）：删纯空白文本节点，当且仅当
   //     前后兄弟都不是行内文本敏感节点（非空白文本或行内元素）——行内相邻
   //     节点间的空白承载词间分隔，保留。pre 内部已被 K7 折叠清空，天然不涉及。
   var INLINE_TAGS = { A: 1, SPAN: 1, CODE: 1, STRONG: 1, EM: 1, B: 1, I: 1, U: 1, S: 1,
@@ -376,6 +444,6 @@ function __u2mCleanSnapshot(cfg) {
 
   return {
     html: '<!DOCTYPE html>\n' + document.documentElement.outerHTML,
-    stats: { hiddenCount: hiddenCount, runCount: 0 }
+    stats: { hiddenCount: hiddenCount, runCount: runCount }
   };
 }
