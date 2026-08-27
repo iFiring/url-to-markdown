@@ -716,3 +716,17 @@ test('K8: 行内元素嵌行内集外标签（含 svg）切断 run、保守保�
   } finally { cleanup(); }
 });
 
+test('K8: <title> 不 token 化——长中文标题保留作步骤 3 识别线索', async () => {
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>提示缓存使用指南与最佳实践完全详解手册</title></head>
+<body>
+  <div data-u2m-id="1"><p data-u2m-id="2">正文段落。</p></div>
+</body></html>`;
+  const { cleaned, styled, cleanup } = await runClean(snapshot, 'k8-title');
+  try {
+    assert.ok(cleaned.includes('<title>提示缓存使用指南与最佳实践完全详解手册</title>'), 'title 原文应保留，不折叠为 token');
+    assert.ok(!/<title>\{\{/.test(cleaned), 'title 内不应出现 run token');
+    assert.ok(styled.includes('提示缓存使用指南与最佳实践完全详解手册'), '带样式版不受影响');
+  } finally { cleanup(); }
+});
+

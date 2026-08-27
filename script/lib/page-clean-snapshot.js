@@ -363,6 +363,7 @@ function __u2mCleanSnapshot(cfg) {
   //     成员元素标签计数、降序至多 4 项）。含 img 的 run 不折叠（图片 id 需
   //     可引用）；行内元素子树内出现行内集外标签（病态）→ 该元素视作块、
   //     切断 run（保守保留）。svg/iframe/canvas 不在行内集内、天然切断。
+  //     title 容器豁免：title 是步骤 3 识别线索，不 token 化（spec §4）。
   var INLINE_TAGS_RUN = { A: 1, SPAN: 1, CODE: 1, STRONG: 1, EM: 1, B: 1, I: 1, U: 1, S: 1,
     MARK: 1, SMALL: 1, SUB: 1, SUP: 1, ABBR: 1, CITE: 1, Q: 1, KBD: 1, SAMP: 1, TIME: 1, IMG: 1, BR: 1 };
   function isInlineUnit(el) {
@@ -377,7 +378,7 @@ function __u2mCleanSnapshot(cfg) {
   var containers = Array.prototype.slice.call(document.querySelectorAll('*'));
   for (var ci = 0; ci < containers.length; ci++) {
     var cont = containers[ci];
-    if (!cont.parentNode) continue;
+    if (!cont.parentNode || cont.tagName === 'TITLE') continue;
     var snapNodes = Array.prototype.slice.call(cont.childNodes);
     var runsList = [];
     var current = [];
