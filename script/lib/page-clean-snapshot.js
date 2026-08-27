@@ -235,15 +235,15 @@ function __u2mCleanSnapshot(cfg) {
 
   // K1. class 语义过滤（仅清洗版）：样式强相关 token 删、语义 token 留。
   //     原则：拿不准保留——漏删只费字节，误删语义 token 才伤步骤 3 判读。
-  //     2026-08-27 在旧 R2 基础上补漏：负号前缀位移类、CSS-modules、!
-  //     important 变体、overflow/appearance、裸 border/shadow/prose、工具名类。
+  //     2026-08-27 在上版 class 过滤（2026-08-25 瘦身设计）基础上补漏：负号前缀位移类、
+  //     CSS-modules、! important 变体、overflow/appearance、裸 border/shadow/prose、工具名类。
   var HASH_PREFIX_RE = /^(?:astro|css|sc|jsx|chakra|emotion|styled|mui|next|module)-[-0-9a-zA-Z]+$/;
-  var CSS_MODULE_RE = /^_[A-Za-z][A-Za-z0-9]*_[a-z0-9]+(?:_\d+)?$/;
+  var CSS_MODULE_RE = /^_[A-Za-z][A-Za-z0-9]*_(?=[a-z0-9]*[0-9])[a-z0-9]+(?:_\d+)?$/;
   function isHashSuffix(s) {
     return s.length >= 5 && /^[0-9a-zA-Z]+$/.test(s) && /[0-9]/.test(s) && /[a-zA-Z]/.test(s);
   }
   var UTILITY_RES = [
-    /^(?:[mp][trblxy]?)-.+$/, /^-(?:[mp][trblxy]?)-.+$/,
+    /^(?:[mp][trblxy]?)-.+$/,
     /^(?:w|h|min-w|min-h|max-w|max-h|size|basis|top|bottom|left|right|inset|z|order|gap|gap-x|gap-y|grow|shrink|flex|grid-cols|grid-rows|col-span|col-start|col-end|row-span|row-start|row-end)-.+$/,
     /^(?:flex|grid|block|inline|inline-block|inline-flex|hidden|table|contents|flow-root|list-item|isolate)$/,
     /^(?:relative|absolute|fixed|sticky|static)$/,
@@ -341,21 +341,25 @@ function __u2mCleanSnapshot(cfg) {
     hiddenCount++;
   }
 
-  // K6. table 折叠（仅清洗版）：整树清空、只统计字数；步骤 7 从带样式版读全表
+  // K6. table 折叠（仅清洗版）：整树清空、只统计字数；步骤 7 从带样式版读全表。
+  //     带 hidden 的 table 由 K5 独占折叠（其构成 token 已就位），跳过防二次覆盖
   var tables = document.querySelectorAll('table');
   for (var i = 0; i < tables.length; i++) {
     var tb = tables[i];
     if (!tb.parentNode) continue;
+    if (tb.hasAttribute('hidden')) continue;
     var tsz = sizeSuffix(tb.textContent);
     while (tb.firstChild) tb.removeChild(tb.firstChild);
     tb.appendChild(document.createTextNode('{{table>' + tsz.n + '_' + tsz.unit + '}}'));
   }
 
-  // K7. pre 折叠（仅清洗版）：data-language 从 code 壳提升到 pre；代码一律按字符数
+  // K7. pre 折叠（仅清洗版）：data-language 从 code 壳提升到 pre；代码一律按字符数。
+  //     带 hidden 的 pre 由 K5 独占折叠（其构成 token 已就位），跳过防二次覆盖
   var pres = document.querySelectorAll('pre');
   for (var i = 0; i < pres.length; i++) {
     var pre = pres[i];
     if (!pre.parentNode) continue;
+    if (pre.hasAttribute('hidden')) continue;
     var langShell = pre.querySelector('code[data-language]');
     if (langShell && !pre.hasAttribute('data-language')) {
       pre.setAttribute('data-language', langShell.getAttribute('data-language'));
@@ -365,19 +369,21 @@ function __u2mCleanSnapshot(cfg) {
     pre.appendChild(document.createTextNode('{{pre>code>' + codeChars + '_chars}}'));
   }
 
+  // 行内标签集（K8/K9 共用）：K8 判 run 成员归属、K9 判行间空白是否敏感
+  var INLINE_TAGS = { A: 1, SPAN: 1, CODE: 1, STRONG: 1, EM: 1, B: 1, I: 1, U: 1, S: 1,
+    MARK: 1, SMALL: 1, SUB: 1, SUP: 1, ABBR: 1, CITE: 1, Q: 1, KBD: 1, SAMP: 1, TIME: 1, IMG: 1, BR: 1 };
+
   // K8. 行内 run token 化（仅清洗版）：块容器内连续行内兄弟序列（裸文本 +
   //     行内集元素），合计文本超阈值 → 整段替换为一个元数据 token（构成按
   //     成员元素标签计数、降序至多 4 项）。含 img 的 run 不折叠（图片 id 需
   //     可引用）；行内元素子树内出现行内集外标签（病态）→ 该元素视作块、
   //     切断 run（保守保留）。svg/iframe/canvas 不在行内集内、天然切断。
   //     title 容器豁免：title 是步骤 3 识别线索，不 token 化（spec §4）。
-  var INLINE_TAGS_RUN = { A: 1, SPAN: 1, CODE: 1, STRONG: 1, EM: 1, B: 1, I: 1, U: 1, S: 1,
-    MARK: 1, SMALL: 1, SUB: 1, SUP: 1, ABBR: 1, CITE: 1, Q: 1, KBD: 1, SAMP: 1, TIME: 1, IMG: 1, BR: 1 };
   function isInlineUnit(el) {
-    if (!INLINE_TAGS_RUN[el.tagName.toUpperCase()]) return false;
+    if (!INLINE_TAGS[el.tagName.toUpperCase()]) return false;
     var inner = el.querySelectorAll('*');
     for (var i = 0; i < inner.length; i++) {
-      if (!INLINE_TAGS_RUN[inner[i].tagName.toUpperCase()]) return false;
+      if (!INLINE_TAGS[inner[i].tagName.toUpperCase()]) return false;
     }
     return true;
   }
@@ -385,7 +391,7 @@ function __u2mCleanSnapshot(cfg) {
   var containers = Array.prototype.slice.call(document.querySelectorAll('*'));
   for (var ci = 0; ci < containers.length; ci++) {
     var cont = containers[ci];
-    if (!cont.parentNode || cont.tagName === 'TITLE') continue;
+    if (!cont.parentNode || !cont.isConnected || cont.tagName === 'TITLE') continue;
     var snapNodes = Array.prototype.slice.call(cont.childNodes);
     var runsList = [];
     var current = [];
@@ -430,8 +436,6 @@ function __u2mCleanSnapshot(cfg) {
   // K9. 保守空白压缩（仅清洗版）：删纯空白文本节点，当且仅当
   //     前后兄弟都不是行内文本敏感节点（非空白文本或行内元素）——行内相邻
   //     节点间的空白承载词间分隔，保留。pre 内部已被 K7 折叠清空，天然不涉及。
-  var INLINE_TAGS = { A: 1, SPAN: 1, CODE: 1, STRONG: 1, EM: 1, B: 1, I: 1, U: 1, S: 1,
-    MARK: 1, SMALL: 1, SUB: 1, SUP: 1, ABBR: 1, CITE: 1, Q: 1, KBD: 1, SAMP: 1, TIME: 1, IMG: 1, BR: 1 };
   function inlineSensitive(node) {
     if (!node) return false;
     if (node.nodeType === 3) return node.textContent.trim() !== '';

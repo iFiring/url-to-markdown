@@ -503,7 +503,7 @@ test('K1: class 语义过滤——工具/哈希/CSS-modules/变体剥除，语�
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
   <div data-u2m-id="1">
-    <section data-u2m-id="2" class="article flex px-4 astro-3ef6ksr2 h-[30rem] text-xs hover:bg-x md:flex -top-0.5 !h-9 _Button_6dmow_1 overflow-x-hidden shiki">正文内容</section>
+    <section data-u2m-id="2" class="article flex px-4 astro-3ef6ksr2 h-[30rem] text-xs hover:bg-x md:flex -top-0.5 !h-9 _Button_6dmow_1 overflow-x-hidden shiki _tab_active">正文内容</section>
     <div data-u2m-id="3" class="page-header btn-primary expn-content">语义类元素</div>
     <div data-u2m-id="4" class="flex px-4 rounded overflow-auto border">全是噪声</div>
   </div>
@@ -511,7 +511,8 @@ test('K1: class 语义过滤——工具/哈希/CSS-modules/变体剥除，语�
   const { cleaned, styled, cleanup } = await runClean(snapshot, 'k1-class');
   try {
     const sec = cleaned.match(/<section[^>]*>/)[0];
-    assert.ok(sec.includes('class="article"'), `语义 token article 应保留: ${sec}`);
+    // _tab_active：纯语义下划线类（尾段不含数字）保留；_Button_6dmow_1（尾段含数字）仍删
+    assert.ok(sec.includes('class="article _tab_active"'), `语义 token article 与纯语义下划线类 _tab_active 应保留: ${sec}`);
     assert.ok(!/(flex|px-4|astro-|30rem|text-xs|hover:|md:|top-0|!h-9|_Button_|overflow|shiki)/.test(sec), `噪声 token 应剥除: ${sec}`);
     const keep = cleaned.match(/<div data-u2m-id="3"[^>]*>/)[0];
     for (const tok of ['page-header', 'btn-primary', 'expn-content']) {
@@ -604,6 +605,29 @@ test('K7: pre 折叠为 {{pre>code>N_chars}}——data-language 提升到 pre，
   } finally { cleanup(); }
 });
 
+test('K6/K7: 带 hidden 的 table/pre 由 K5 独占折叠——不被二次覆盖', async () => {
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-u2m-id="1">
+    <table data-u2m-id="2" hidden="true"><tr><td>隐藏表格单元甲</td></tr></table>
+    <pre data-u2m-id="3" hidden><code>hidden code block</code></pre>
+    <p data-u2m-id="4">正文段落。</p>
+  </div>
+</body></html>`;
+  const { cleaned, cleanup } = await runClean(snapshot, 'k67-hidden-skip');
+  try {
+    const tbl = cleaned.match(/<table data-u2m-id="2"[^>]*>([\s\S]*?)<\/table>/)[1];
+    // chromium 解析 <table><tr> 时按规范自动插入 tbody，K5 构成含 1_tbody
+    assert.ok(/^\{\{\d+_(chars|words);1_tbody\/1_tr\/1_td\}\}$/.test(tbl), `hidden table 保留 K5 构成 token: ${tbl}`);
+    assert.ok(!tbl.includes('table&gt;'), '不得被 K6 覆盖');
+    const pre = cleaned.match(/<pre data-u2m-id="3"[^>]*>([\s\S]*?)<\/pre>/)[1];
+    assert.ok(/^\{\{\d+_(chars|words);1_code\}\}$/.test(pre), `hidden pre 保留 K5 构成 token: ${pre}`);
+    assert.ok(!pre.includes('pre&gt;code'), '不得被 K7 覆盖');
+    assert.ok(cleaned.includes('正文段落'), '可见正文不受影响');
+  } finally { cleanup(); }
+});
+
 test('R4+R5: astro 包装解包；安全位置空白删除、行内间空白保留', async () => {
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
@@ -645,7 +669,7 @@ test('守卫: 清洗版是终端视图——不含 {{LONG_TEXT_，步骤 2 不�
     assert.ok(!cleaned.includes('{{LONG_TEXT_'), '清洗版不应含 LONG_TEXT 占位');
     assert.ok(styled.includes('{{LONG_TEXT_'), '带样式版保留 LONG_TEXT 占位');
     assert.equal(out.longTextCount, 1, '恢复清单仍从带样式版产出');
-    const src = fs.readFileSync(path.resolve('script/clean_snapshot.mjs'), 'utf8');
+    const src = fs.readFileSync(path.resolve(thisDir, '../../script/clean_snapshot.mjs'), 'utf8');
     assert.ok(!src.includes("from 'juice'"), '步骤 2 不再 import juice');
   } finally { cleanup(); }
 });
