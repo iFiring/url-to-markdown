@@ -239,3 +239,7 @@ U2M_DEBUG：删 juice 耗时行与护栏警告行；保留/新增一行汇总
 | 表格折叠丢失表头判读 | 步骤 7 从带样式版读全表；token 规模可判流价值 |
 | 两趟加载同一 file:// 文档 | 子资源全 abort，纯本地解析；趟间无共享状态 |
 | 步骤 3 指引未跟上 token 形态导致判读退化 | §8 guide 改写与实现同批交付，参考页验收兜底 |
+
+## 11. 修订记录
+
+- 2026-08-28（实施后修订）：带样式版 head 注入 `<meta charset="utf-8">`。动机：extract_styled 以 file:// 加载 `2_clean_style_snapshot.html`，共享清洗删除全部 meta 后无 charset 声明，解码依赖 chromium 嗅探——曾把 UTF-8 嗅成 Windows-1252 产出双重编码乱码（参考产物 4/5/6 实证）。§2「带样式版逐字节不变」约束按此修订：差异仅注入行。同批终审遗留清理：K6/K7 跳过带 hidden 的 table/pre（K5 独占折叠，防计数 token 被覆盖）、CSS-modules 尾段须含数字（`_tab_active` 类纯语义类保留）、K8 跳过已分离子树（runCount 不虚高）、行内标签集 K8/K9 合一、golden 测试按夹具拆分并改 Buffer 字节比较。
