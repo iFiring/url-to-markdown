@@ -120,5 +120,5 @@ pnpm test:all             # 全量
 | 步骤 4-6 | 样式裁剪 → juice 内联 → 文章视图 | 已完成 |
 | 步骤 8 `screenshot_trans.mjs` | 占位符还原 + 图片下载 + trans2img 截图 | 已完成 |
 | 步骤 9 `render_skeleton.mjs` | 骨架回填 markdown | 已完成 |
-| 测试 | 单测 + 集成 138 项 | 已完成 |
+| 测试 | 单测 + 集成 150 项 | 已完成 |
 | 真实 URL 冒烟 | 手动清单 `test/smoke/SMOKE.md` | 场景 1 已记录通过（产生于旧双稿管线，新 9 步管线待重验）；场景 2/3 待人工 |
