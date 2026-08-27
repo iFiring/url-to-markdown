@@ -7,7 +7,8 @@
  *     滚动裁剪（overflow、overflow-x/y）、transform、font-size 与
  *     font-weight（步骤 7 LLM 判标题层级的信号）；长属性按前缀匹配覆盖
  *     （如 border- 前缀同时覆盖 border-radius 等长属性）。
- *     其余全删：盒模型几何（box-sizing、宽高、min/max、margin、padding）、
+ *     其余全删：盒模型几何（box-sizing、宽高、min/max、margin、padding；
+ *     唯一例外——<img> 的 width/height 保留，见下）、
  *     定位（position、inset、z-index）、浮动、多栏、
  *     替换元素几何（aspect-ratio、object-fit）、块级视觉（opacity、
  *     clip-path）、字体与文本类其余（font-family、font-style、
@@ -16,7 +17,8 @@
  *     （cursor、user-select）、动画（transition、animation）、厂商前缀、
  *     自定义属性；值为 inherit 的声明同样删除。清空后移除 style 属性。
  *     白名单按属性判定而非按元素——行内元素（如高亮 span）的背景同样
- *     保留。
+ *     保留；唯一元素级例外是 <img>：宽高保留（步骤 7 LLM 判图片权重的
+ *     信号——小图标 / 大图 / 图片组）。
  *  2. 删除全部 <style> 标签与 class 属性
  * 供 juice 版输出收尾（juice 已内联规则并移除 <style>，此处清理与兜底）。
  * 在浏览器里删而非在 Node 里正则替换：正文若含字面 class="..." 等文本，
@@ -48,11 +50,16 @@ function __u2mFinalizeInline() {
   var styled = document.querySelectorAll('[style]');
   for (var i = 0; i < styled.length; i++) {
     var st = styled[i].style;
+    // 唯一元素级例外：<img> 的宽高保留——步骤 7 LLM 判图片权重的
+    // 语义信号（小图标 / 大图 / 图片组）；值为 inherit 的照样删
+    var isImg = styled[i].tagName === 'IMG';
     var dirty = false;
     for (var j = st.length - 1; j >= 0; j--) {
       var prop = st.item(j).toLowerCase();
       var val = st.getPropertyValue(prop);
-      if (!keep(prop) || val === 'inherit') {
+      var keepThis = keep(prop) ||
+        (isImg && (prop === 'width' || prop === 'height'));
+      if (!keepThis || val === 'inherit') {
         st.removeProperty(prop);
         dirty = true;
       }

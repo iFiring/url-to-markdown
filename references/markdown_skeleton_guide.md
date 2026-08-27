@@ -156,6 +156,7 @@ DOM 结构示例：
 - `<img>` / `<picture>` 元素：value 统一写 `![img](图片绝对URL)`（URL 为快照阶段已绝对化的 src） → `img`；
 - `<figure><img>` + `<figcaption>`：展开为两条——`img` 条 + figcaption 的 `p` 条 → `img`；
 - 伴随文本的行内小图标 / 装饰图标不单独成 `img` 条
+- `<img>` 保留的 `style` 宽高（`width`/`height`，步骤 5 唯一元素级例外）是判图片权重的信号：小尺寸（图标级）→ 行内小图标不单独成条；大尺寸 → 独立 `img` 条；多张中等尺寸聚集 → 倾向 `trans2img` 图片组
 - 多图组成视觉整体，文本较少（图片组、图文拼贴）→ 判定 `trans2img`，不逐张拆 `img`；CSS 背景图同理（取不到独立 URL）
 
 DOM 示例：

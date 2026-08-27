@@ -107,6 +107,36 @@ test('compute_styles.mjs: juice 内联并删净 <style> 与 class，只产一份
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
+// img 宽高例外：白名单唯一的元素级例外——<img> 的 width/height 保留
+// （步骤 7 LLM 判图片权重的语义信号：小图标 / 大图 / 图片组），其余规则
+// 不变：img 的 margin 照删、其他元素的宽高照删
+const IMG_SIZE_EXTRACT = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>img 宽高</title><style>body{transition:opacity .2s}</style></head><body><figure data-u2m-id="1"><img src="https://example.com/a/pic.png" style="width:120px;height:80px;margin:10px" data-u2m-id="2"><figcaption data-u2m-id="3">图注</figcaption></figure><div style="width:100%;height:40px;border:1px solid black" data-u2m-id="4">文本</div></body></html>`;
+
+test('compute_styles.mjs: img 的 style 宽高保留（步骤 7 语义信号），其余元素宽高仍删', async () => {
+  const { tmpRoot } = setupTmp('img-size', { extractHtml: IMG_SIZE_EXTRACT });
+  const r = await runScript(process.execPath, [scriptPath, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+
+  const juiced = fs.readFileSync(out.juiceStyles, 'utf8');
+  // img 宽高保留（元素级例外）；img 的 margin 照删
+  assert.ok(juiced.includes('width: 120px'), 'img 的 width 声明应保留');
+  assert.ok(juiced.includes('height: 80px'), 'img 的 height 声明应保留');
+  assert.ok(!juiced.includes('margin'), 'img 的 margin 声明应删除');
+  // 例外仅限 img：div 的宽高照删、白名单内样式照留
+  assert.ok(!juiced.includes('width: 100%'), 'div 的 width 声明应删除');
+  assert.ok(!juiced.includes('height: 40px'), 'div 的 height 声明应删除');
+  assert.ok(juiced.includes('1px solid'), 'div 的 border 声明应保留');
+  assert.equal(out.styledCount, 2, '带内联样式的元素应为 2 个（img / div）');
+
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
 // 复现真实站点（微信公众号）踩到的坑：行内 style 属性里的引号以 &quot; 实体
 // 编码（font-family: Optima, &quot;Microsoft YaHei&quot;, serif），而文档含
 // <style> 标签时 juice 的 cheerio 载入不解码属性实体，实体原样进入行内样式
