@@ -28,6 +28,7 @@ description: "将 URL（网页）的主体内容转换成 Markdown；在需要�
 ```
 SKILL.md                 # Skill 主体文件
 script/                  # 脚本
+references/              # 步骤 3/7 的任务说明（渐进披露）
 package.json
 
 working/                 # 工作目录
