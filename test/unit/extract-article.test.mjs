@@ -9,6 +9,7 @@ import { urlToDirName } from '../../script/lib/env.mjs';
 
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
 const pageScriptPath = path.resolve(thisDir, '../../script/lib/page-extract-article.js');
+const pageSlimScriptPath = path.resolve(thisDir, '../../script/lib/page-slim-article.js');
 
 test('page-extract-article.js: 文件存在且包含 __u2mExtractArticle 函数', () => {
   const src = fs.readFileSync(pageScriptPath, 'utf8');
@@ -18,6 +19,17 @@ test('page-extract-article.js: 文件存在且包含 __u2mExtractArticle 函数'
 test('page-extract-article.js: 函数可被 evaluate 格式调用', () => {
   const src = fs.readFileSync(pageScriptPath, 'utf8');
   const wrapped = `(${src})({titleIds:[1]})`;
+  assert.doesNotThrow(() => new Function('return ' + wrapped));
+});
+
+test('page-slim-article.js: 文件存在且包含 __u2mSlimArticle 函数', () => {
+  const src = fs.readFileSync(pageSlimScriptPath, 'utf8');
+  assert.ok(src.includes('function __u2mSlimArticle'), '应定义 __u2mSlimArticle');
+});
+
+test('page-slim-article.js: 函数可被 evaluate 格式调用', () => {
+  const src = fs.readFileSync(pageSlimScriptPath, 'utf8');
+  const wrapped = `(${src})([])`;
   assert.doesNotThrow(() => new Function('return ' + wrapped));
 });
 
@@ -376,4 +388,40 @@ test('extract_article.mjs: 缺步骤 5 产物 / 缺 key_ids 时报 error 并指�
   assert.equal(r2.code, 1);
   assert.ok(JSON.parse(r2.stdout).reason.includes('步骤 3'));
   fs.rmSync(noKeyIds.tmpRoot, { recursive: true, force: true });
+});
+
+// 瘦身规则① data-*：保留白名单 {data-u2m-id, data-language}（后者是
+// 步骤 7 判代码围栏语言的机械信号），其余 data-*（组件库脚手架/交互
+// 状态）全删——白名单而非黑名单，陌上站点的 data-* 安全默认删除
+const DATASTAR_JUICED = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>瘦身</title></head><body><h1 data-u2m-id="1">标题</h1><div data-u2m-id="4"><p data-variant="lead" data-u2m-id="5">段落<span data-color="accent" data-u2m-id="6">行内</span></p><code data-language="python" data-wrap-long-lines="false" data-u2m-id="7">print(1)</code></div></body></html>`;
+
+test('extract_article.mjs: 瘦身规则①——data-* 只留 data-u2m-id 与 data-language', async () => {
+  const { tmpRoot, urlDir } = setupTmp('datastar', { titleIds: [1], descriptionIds: [], listFlowIds: [4] });
+  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), DATASTAR_JUICED);
+  const script = path.resolve('script/extract_article.mjs');
+  const r = await runScript(process.execPath, [script, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+
+  const html = fs.readFileSync(out.article, 'utf8');
+  assert.ok(!html.includes('data-variant'), 'data-variant 应删除');
+  assert.ok(!html.includes('data-color'), 'data-color 应删除');
+  assert.ok(!html.includes('data-wrap-long-lines'), 'data-wrap-long-lines 应删除');
+  assert.ok(html.includes('data-language="python"'), 'data-language 应保留');
+  for (const id of [1, 5, 6, 7]) {
+    assert.ok(html.includes(`data-u2m-id="${id}"`), `id ${id} 应保留`);
+  }
+  // emit 新增 slim 统计（加法式契约，单行 JSON 不变）
+  assert.equal(out.slim.attrsDropped, 3, '应删除 3 个非白名单 data-* 属性');
+  assert.deepEqual(
+    Object.keys(out.slim).sort(),
+    ['attrsDropped', 'buttonsRemoved', 'buttonsUnwrapped', 'linksStripped', 'mathReplaced', 'spansUnwrapped', 'svgsRemoved'],
+    'slim 应含七项计数'
+  );
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
 });

@@ -21,6 +21,9 @@
  *   - 去重：同一元素被指名两次（如 description 同时是 flow 子元素）只出现一次
  *   - 排序：全部收选节点按文档序（compareDocumentPosition）统一迁入，
  *     key_ids 的列出顺序与流层级嵌套都不影响输出顺序
+ *   - 瘦身 pass：迁移与噪音剔除完成后，同页 setContent 内存往返执行
+ *     lib/page-slim-article.js 的六条结构规则（见其头注），emit 增 slim
+ *     计数对象（加法式契约）
  *   - head：保留原文 <title>；<html lang> 照抄
  *   - 新 <body> 带阅读布局内联样式 max-width: 768px; margin: 4rem auto
  *     （限宽、水平居中）
@@ -93,6 +96,7 @@ async function main() {
   debug(`key_ids: title=${keyIds.titleIds?.length ?? 0} desc=${keyIds.descriptionIds?.length ?? 0} standalone=${keyIds.standaloneIds?.length ?? 0} flow=${keyIds.listFlowIds.length} delete=${deleteIds.length}`);
 
   const pageExtractFn = await readSharedScript('page-extract-article.js');
+  const pageSlimFn = await readSharedScript('page-slim-article.js');
 
   let browser;
   try {
@@ -116,9 +120,22 @@ async function main() {
       );
     }
 
+    // 瘦身 pass：迁移后的文章视图在内存中重载（同页 setContent，不落盘），
+    // 六条结构规则见 page-slim-article.js 头注。保护集 =
+    // titleIds∪descriptionIds∪standaloneIds（listFlowIds 容器不迁移，不入）
+    await page.setContent(result.html, { waitUntil: 'domcontentloaded' });
+    const protectedIds = [
+      ...(keyIds.titleIds || []),
+      ...(keyIds.descriptionIds || []),
+      ...(keyIds.standaloneIds || []),
+    ];
+    const { html: slimHtml, ...slimStats } = await page.evaluate(
+      `(${pageSlimFn})(${JSON.stringify(protectedIds)})`
+    );
+
     const articlePath = path.join(dir, '6_article.html');
-    await fsPromises.writeFile(articlePath, result.html, 'utf8');
-    log(`文章视图提取完成: ${articlePath} (${result.count} 个元素, 剔除噪音 ${result.removedNoise} 个)`);
+    await fsPromises.writeFile(articlePath, slimHtml, 'utf8');
+    log(`文章视图提取完成: ${articlePath} (${result.count} 个元素, 剔除噪音 ${result.removedNoise} 个, 瘦身 ${JSON.stringify(slimStats)})`);
 
     // 先关浏览器再 emit
     await context.close();
@@ -129,6 +146,7 @@ async function main() {
       article: articlePath,
       elementCount: result.count,
       removedNoiseCount: result.removedNoise,
+      slim: slimStats,
     });
   } catch (e) {
     await browser?.close().catch(() => {});
