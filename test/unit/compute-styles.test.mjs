@@ -9,6 +9,7 @@ import { urlToDirName } from '../../script/lib/env.mjs';
 
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
 const pageScriptPath = path.resolve(thisDir, '../../script/lib/page-finalize-inline.js');
+const unwrapScriptPath = path.resolve(thisDir, '../../script/lib/page-unwrap-layers.js');
 const scriptPath = path.resolve(thisDir, '../../script/compute_styles.mjs');
 
 test('page-finalize-inline.js: 文件存在且包含 __u2mFinalizeInline 函数', () => {
@@ -18,6 +19,17 @@ test('page-finalize-inline.js: 文件存在且包含 __u2mFinalizeInline 函数'
 
 test('page-finalize-inline.js: 函数可被 evaluate 格式调用', () => {
   const src = fs.readFileSync(pageScriptPath, 'utf8');
+  const wrapped = `(${src})()`;
+  assert.doesNotThrow(() => new Function('return ' + wrapped));
+});
+
+test('page-unwrap-layers.js: 文件存在且包含 __u2mUnwrapLayers 函数', () => {
+  const src = fs.readFileSync(unwrapScriptPath, 'utf8');
+  assert.ok(src.includes('function __u2mUnwrapLayers'), '应定义 __u2mUnwrapLayers');
+});
+
+test('page-unwrap-layers.js: 函数可被 evaluate 格式调用', () => {
+  const src = fs.readFileSync(unwrapScriptPath, 'utf8');
   const wrapped = `(${src})()`;
   assert.doesNotThrow(() => new Function('return ' + wrapped));
 });
@@ -215,6 +227,105 @@ test('compute_styles.mjs: data-style 等后缀属性不被引号处理波及', a
   // data-style 原样存活：实体不被解码（outerHTML 序列化仍以 &quot; 表达）
   assert.ok(juiced.includes('data-style='), 'data-style 属性应保留');
   assert.ok(juiced.includes('&quot;theme&quot;'), 'data-style 值内的引号实体应原样保留');
+
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+// Tailwind v4 形态：工具类规则包在 @layer 级联层里（真实站点
+// developers.openai.com 实测 56% 的 CSS 在 @layer utilities 内），而 juice
+// 不解析 @layer 块——不解包则工具类样式一条都内联不进去，只靠工具类表达
+// 样式的元素（figure 卡片边框/圆角/背景）在步骤 5 后一丝样式不剩。
+// 夹具含两种 layer 形态：声明形（@layer a, b;）与块形（@layer name { … }），
+// 块内再嵌 @media（md:p-5 形态）与递归嵌套 layer。
+const LAYERED_EXTRACT = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>layer 解包</title><style>
+@layer theme, base, components, utilities;
+@layer theme { :root { --radius-lg: 8px; --color-border: #d4d4d8; --color-surface: #fafafa } }
+@layer utilities {
+  .rounded-lg { border-radius: var(--radius-lg) }
+  .border { border-style: var(--tw-border-style); border-width: 1px }
+  .border-default { border-color: var(--color-border) }
+  .bg-surface { background-color: var(--color-surface) }
+  .p-4 { padding: 1rem }
+  @media (min-width: 768px) { .md\\:p-5 { padding: 1.25rem } }
+  @layer nested { .nested-deep { border-width: 2px } }
+}
+.direct { outline: 1px solid blue }
+</style></head><body>
+<figure class="rounded-lg border border-default bg-surface p-4" data-u2m-id="1872">图</figure>
+<div class="nested-deep" data-u2m-id="2">嵌套层</div>
+<div class="direct" data-u2m-id="3">顶层规则</div>
+</body></html>`;
+
+test('compute_styles.mjs: @layer 内的工具类规则解包后正常内联（Tailwind v4）', async () => {
+  const { tmpRoot } = setupTmp('layered', { extractHtml: LAYERED_EXTRACT });
+  const r = await runScript(process.execPath, [scriptPath, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+
+  const juiced = fs.readFileSync(out.juiceStyles, 'utf8');
+  // figure 的工具类样式全部内联进来。:root 变量定义随层解包提升到顶层后，
+  // juice 会把已定义的 var() 解析为具体值（border-radius: 8px、
+  // border-color: #d4d4d8 → CSSOM 归一 rgb(…）；未定义的 var（--tw-border-style
+  // 真实站点由 @property 注册、夹具未注册）由函数值真实化链路以浏览器计算值
+  // 替换（无注册值时计算为 none）——结构信号「带边框圆角的盒子」对步骤 7
+  // LLM 成立
+  assert.ok(/border-radius:\s*8px/.test(juiced), 'figure 应内联 border-radius（已解析变量值）');
+  assert.ok(/border-width:\s*1px/.test(juiced), 'figure 应内联 border-width');
+  assert.ok(/border-color:\s*rgb\(212, ?212, ?216\)/.test(juiced), 'figure 应内联 border-color（已解析变量值）');
+  assert.ok(/background-color:\s*rgb\(250, ?250, ?250\)/.test(juiced), 'figure 应内联 background-color（已解析变量值）');
+  // 盒模型几何照旧走白名单删除（解包不改变白名单行为）
+  assert.ok(!juiced.includes('padding'), 'padding 声明应删除');
+  // 递归嵌套 layer 同样解包内联
+  assert.ok(juiced.includes('border-width: 2px'), '嵌套层规则应内联');
+  // 顶层规则不受影响（回归护栏）
+  assert.ok(juiced.includes('outline'), '顶层规则的 outline 应照常内联');
+  // 终态无 @layer 残留、无 <style>、无 class
+  assert.ok(!juiced.includes('@layer'), '不应残留 @layer');
+  assert.ok(!juiced.includes('<style'), '不应含 <style> 标签');
+  assert.ok(!juiced.includes('class='), '不应含 class 属性');
+
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+// 函数值真实化：多级 var 链（--color-border → --alpha-10 → color-mix(in oklab, …)）
+// juice 递归解析会把 color-mix 的颜色空间参数弄丢（产出非法值，浏览器整条
+// 丢弃）；@property 注册的变量（--tw-border-style）与 calc() 同样留函数
+// 间接引用。要求终态全部替换为浏览器 getComputedStyle 计算出的真实值。
+const FUNCVAL_EXTRACT = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>函数值真实化</title><style>
+@property --tw-border-style { syntax: "*"; inherits: false; initial-value: solid }
+:root { --alpha-base: rgb(13, 13, 13); --alpha-10: color-mix(in oklab, var(--alpha-base) 10%, transparent); --color-border: var(--alpha-10); --font-big: calc(1.125rem * 2) }
+.bordered { border-style: var(--tw-border-style); border-width: 1px; border-color: var(--color-border) }
+.bigtext { font-size: var(--font-big) }
+</style></head><body>
+<div class="bordered" data-u2m-id="1">边框</div>
+<p class="bigtext" data-u2m-id="2">大字</p>
+</body></html>`;
+
+test('compute_styles.mjs: var/color-mix/calc 残留替换为浏览器计算的真实值', async () => {
+  const { tmpRoot } = setupTmp('funcval', { extractHtml: FUNCVAL_EXTRACT });
+  const r = await runScript(process.execPath, [scriptPath, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+
+  const juiced = fs.readFileSync(out.juiceStyles, 'utf8');
+  // @property 注册变量 → 计算值 solid；calc() → 具体 px（1.125rem×2 = 36px）
+  assert.ok(juiced.includes('border-style: solid'), 'border-style 应替换为计算值 solid');
+  assert.ok(juiced.includes('font-size: 36px'), 'font-size 的 calc 应替换为具体 px 值');
+  assert.ok(/border-color:\s*(?!.*color-mix)[^;"]+/.test(juiced), 'border-color 应为具体色值');
+  // 终态零函数间接引用
+  assert.ok(!juiced.includes('var('), '不应残留 var(');
+  assert.ok(!juiced.includes('color-mix('), '不应残留 color-mix(');
+  assert.ok(!juiced.includes('calc('), '不应残留 calc(');
 
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
