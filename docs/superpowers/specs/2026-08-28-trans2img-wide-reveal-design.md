@@ -27,9 +27,9 @@ spike 程序化验证数据（openai 文档页，production 等价 before → �
 - 不处理元素超 ~8000 CSS px 的情形（2x 下撞 chromium 合成表面 ~16384 设备 px 上限），维持现有 10s 超时 + 换页重试 + 汇总 error 兜底。
 - 不改 stdout 契约（emit 字段一个不动）、不碰 emit 延迟退出防护模式、不加新依赖。
 
-## 3. 方案：双层排除 + 三段手术
+## 3. 方案：双层排除 + 四段手术
 
-执行顺序：**分类层（每页一次，截图循环前）→ 逐 id 三段手术（3.2 纵向 → 3.3 横向 → 3.4 遮挡者）**。全部行内 `!important`、只动真实问题、幂等、跨 id 状态累积（与现状一致）。
+执行顺序：**分类层（每页一次，截图循环前）→ 逐 id 四段手术（3.2 纵向 → 3.3 横向 → 3.4 留白扩盒 → 3.5 遮挡者）**。全部行内 `!important`、只动真实问题、幂等、跨 id 状态累积（与现状一致）。
 
 ### 3.1 分类层页面级排除（新增）
 
@@ -56,7 +56,17 @@ spike 程序化验证数据（openai 文档页，production 等价 before → �
 - 用 `overflow` 简写一次覆写双轴——规范会把 `overflow-x:visible + overflow-y:hidden` 强制计算回 auto，简写绕开；
 - 不碰视口、不碰布局：视口保持 1280，百分比宽度元素零影响（spike 实证元素 bb 前后不变）。
 
-### 3.4 遮挡者隐藏（新增，相交规则覆盖一切定位形态）
+### 3.4 留白扩盒（2026-08-28 追加）
+
+截图四边留 20px 呼吸位（用户反馈：部分模块截图内容太贴边）。**单纯加 `padding: 20px` 会把内容挤窄 40px**——auto 宽块的内容宽 = 可用宽 − padding，文字重排换行、表格被压。用负 margin 抵消：
+
+- 每侧 `padding` := 原 computed 值 **+ 20**（保留模块自身不对称内边距设计，只外扩）；每侧 `margin` := 原 computed 值 **− 20**。推论：盒四向外扩 20px（背景延伸成环）、**内容像素级零移动零形变**、margin 盒尺寸不变（flex/grid 项、兄弟布局均不受扰动；margin 折叠形态下偏移与 padding 恰好抵消，结论相同）；
+- **自愈**：显式 `width`/`height`/百分比宽/`max-*`（border-box 常态）会把盒钉住、padding 反吃内容——扩盒后复查内容宽高，缩水（>0.5px）则补 `width/height = 原盒 + 40px`（border-box）+ `max-width/height: none`；
+- 执行位置：横向 reveal **之后**（clientWidth/scrollWidth 裁剪判据看原盒）、遮挡者扫描**之前**（盒大了 20px，新碰到环区的邻居才会在扫描中被藏掉，环才干净）；`display:contents` 无盒目标跳过；
+- `data-u2m-pad` 属性标记防重入（同一页同 id 只扩一次）；返回的 `box` 在扩盒后测量，择优 boundingBox 自然用扩盒后的尺寸；
+- 页 A 与页 B 走同一共享脚本，行为一致。padding 不适用的 display（table-row 等）无害降级为无环。
+
+### 3.5 遮挡者隐藏（新增，相交规则覆盖一切定位形态）
 
 对 `body` 下**非亲族**元素（既非目标子孙亦非祖先，双向 `contains` 排除——模块内的 fixed 徽标/吸顶表头是亲族，保留）：
 
@@ -67,7 +77,7 @@ spike 程序化验证数据（openai 文档页，production 等价 before → �
 - **不恢复**——导航对同页后续所有截图同样该藏；
 - 快速跳过 `SCRIPT/STYLE/NOSCRIPT/TEMPLATE/LINK/META` 标签控制成本（`body *` 全量 getComputedStyle 扫一遍在数千元素页面为每 id 数十 ms 量级，远小于截图本身）。
 
-### 3.5 返回值契约与调用侧
+### 3.6 返回值契约与调用侧
 
 ```js
 __u2mRevealHidden(id)                  → { found, touched, wideTouched, occluders, box, boxless }
@@ -89,11 +99,11 @@ __u2mExcludeNonContent(keepIds, deleteIds) → { hidden, kept }
 
 - **超宽裁剪夹具**：`html{overflow-x:auto} + body{overflow-x:hidden}` + 内部 `.wrap{overflow-x:auto;max-width:640px}` 装 2800px 表格 + 左右两条品红 `position:fixed; z-index:9999` 假导航横跨表格区域。**必须用真实盒裁剪形态**（见 §1）。
 - **亲族 fixed 夹具**：模块内 `position:fixed` 红色徽标（类比模块内吸顶表头）。
-- **分类层夹具**：快照含正文模块 + 带各自 `data-u2m-id` 的侧栏浮窗/推荐位（非 keep、非 keep 祖先），手写最小 `3_key_ids.json` 只标正文 → 断言浮窗特征像素 = 0、正文模块内容像素 > 阈值（完整未误伤）。`page-exclude-noncontent.js` 另配直接 evaluate 的**语义单测**（真实浏览器 setContent + 注入脚本，断言保护规则矩阵：keep 自身/祖先/子孙保、非内容藏、delete 在 keep 子树内藏、delete 为 keep 祖先时保优先）。
+- **分类层夹具**：快照含正文模块 + 带各自 `data-u2m-id` 的侧栏浮窗/推荐位（非 keep、非 keep 祖先），手写最小 `3_key_ids.json` 只标正文 → 断言浮窗特征像素 = 0、正文模块内容像素 > 阈值（完整未误伤）。`page-exclude-noncontent.js` 另配直接 evaluate 的**语义单测**（真实浏览器 setContent + 注入脚本，断言保护规则矩阵：keep 自身/祖先/子孙保、非内容藏、delete 在 keep 子树内藏、delete 为 keep 祖先时保优先）。`page-reveal-hidden.js` 的留白扩盒同样配语义单测（auto 宽块内容探针零移动/盒恰 +40/原不对称内边距保留、显式 border-box 宽自愈、幂等、display:contents 跳过）。
 
 断言（`pixelStats` 辅助：产物 webp 装进 chromium canvas，逐像素统计——颜色匹配每通道 ±40 容差抗 webp 有损压缩；带密度 = 超视口带内与带内众色不同的像素占比）：
 
-1. 截图宽 = 5600 设备 px（2800 CSS × 2，截全）；
+1. 截图宽 = 5680 设备 px（2800 + 40 留白 CSS × 2，截全且含环——表格显式 border-box 宽同时是自愈路径的端到端证明）；
 2. 超视口带（x ≥ 2600 设备 px）内容密度 > 1%（空白回归守卫：纯色带 ≈ 0%）；
 3. 品红像素 = 0（非亲族 fixed 导航已隐藏）；
 4. 模块内红徽标像素 > 1000（亲族不被误伤）；
@@ -120,8 +130,10 @@ __u2mExcludeNonContent(keepIds, deleteIds) → { hidden, kept }
 - **分类层 id 对齐**：keep 数字 id 在页 A（`1_snapshot`）与页 B（live 重标记）间只在两次渲染结构一致时对位——签名严校验本就保证结构漂移时不用 B 截图；漂移场景由几何层兜底。
 - **分类层误伤**：keep 子孙保护规则封死"模块内部挖空"；`listFlowDeleteIds` 藏错的风险与步骤 6 删除同源（同一 LLM 分类事实源），可接受。
 - **双层叠加**：两层幂等覆写同一 `visibility:hidden` 声明，无冲突、无顺序依赖（分类层先执行只是语义整洁）。
+- **留白扩盒长尾**：padding 不适用的 display（table-row/column 等）无环但无害；`position:absolute` 目标在 `left/right` 单边定位下环可能不对称（margin 补偿方向随定位边）——不裁内容，可接受；环区透明背景的模块在 markdown 白底上呈现为白边，即预期效果。
 
 ## 8. 修订记录
 
 - 2026-08-28：初稿。方案经 spike 实证（`.temp/spike-wide-reveal.mjs`，gitignored throwaway：live 页复现空白 → 横向 reveal 修复 → 遮挡两方案对照）与库调研（satori / dom-to-image-more / dom-to-svg / dom2svg / node-html-to-image / html-to-image / modern-screenshot，结论见 §2 非目标）后定稿。
 - 2026-08-28：二稿。并入两项决策：视口维持 1280×3000（iPad Air 竖屏 820×1180 方案否决，记入非目标）；非文章内容排除升级为**双层**——新增分类层 `page-exclude-noncontent.js`（keep 集 = 四类正文 id ∪ trans2img id；隐藏集 = id 全集 − keep − 祖先 − 子孙，并入 listFlowDeleteIds；visibility:hidden 落地），几何层（原 3.3）相交规则从仅 absolute 泛化到一切定位形态。章节重排：分类层为 3.1，三段手术顺延为 3.2-3.4，返回值契约并为 3.5。同日精化（写实施计划时）：分类层签名补 `deleteIds` 参；子代显式 `visibility:visible` 穿透与几何层同式覆写；测试计划补分类层语义单测。
+- 2026-08-28：三改。用户反馈截图内容太贴边——新增 **3.4 留白扩盒**（每侧 padding +20 / 负 margin −20 抵消，内容零重排；显式宽高钉盒时自愈；`data-u2m-pad` 防重入；遮挡者扫描前执行），遮挡者顺延为 3.5、返回值契约为 3.6，标题改"四段手术"。测试：超宽断言 5600 → 5680（自愈路径端到端证明），新增 `test/integration/page-reveal-hidden.test.mjs` 语义矩阵（auto 宽零移动 / border-box 自愈 / 幂等 / contents 跳过）。文档同步：page-reveal-hidden.js 与 screenshot_trans.mjs 头注、CLAUDE.md 步骤 8 括注、SMOKE.md 1b 节。

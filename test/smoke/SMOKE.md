@@ -26,12 +26,14 @@
 - 1 个 passthrough_svg 实为装饰性背景（aria-hidden 网格线），其引用被 Readability 剔除——无害；manifest 悬挂 done 条目属已知遗留观察
 - 步骤 3 无 pending；步骤 4 完成；步骤 5 首跑 120s 内无人点击 → timeout（用户重跑即可）
 
-## 1b. 步骤 8 双层排除 + 三段手术（超宽截全 + 非文章内容不进图）
+## 1b. 步骤 8 双层排除 + 四段手术（超宽截全 + 非文章内容不进图 + 截图留白）
 
 对已有全产物的工作目录单独重跑步骤 8（`U2M_WORKING_ROOT` 指向副本，不动原始数据）：
 `U2M_WORKING_ROOT=<副本根> U2M_DEBUG=1 node script/screenshot_trans.mjs --url <URL>`，
 检查 stdout 单行 ok、stderr 三类 debug 行（分类层排除 / 横向裁剪 reveal / 遮挡者隐藏）、
 超宽元素（>1280 CSS px）截图的视口外带（设备 px x≥2560）内容密度由 ≈0 变为 >1%、无导航像素。
+2026-08-28 起新增留白扩盒：每张 trans 截图四边多 20px 呼吸位（内容零重排），
+重跑后抽验 1-2 张 webp 目检边缘不再贴边。
 
 ### 执行记录（2026-08-28，openai 文档页）
 

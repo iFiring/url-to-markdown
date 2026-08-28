@@ -414,7 +414,7 @@ test('screenshot_trans.mjs: 超宽表格横向 reveal 截全 + 遮挡者隐藏 +
       { name: 'purple', kind: 'count', rgb: [75, 0, 130] },
       { name: 'cyan', kind: 'count', rgb: [0, 255, 255] },
     ]);
-    assert.equal(s.width, 5600, `2800 CSS × 2 应截全: ${s.width}`);
+    assert.equal(s.width, 5680, `2800+40 留白 CSS × 2 应截全: ${s.width}`);
     assert.ok(s.beyondDensity > 0.01, `超视口带（x≥2600 设备px）内容密度>1%: ${s.beyondDensity}`);
     assert.equal(s.magenta, 0, `非亲族 fixed 导航应隐藏: ${s.magenta}`);
     assert.ok(s.red > 1000, `亲族红徽标应保留: ${s.red}`);

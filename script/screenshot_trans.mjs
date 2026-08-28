@@ -47,8 +47,9 @@
  *      titleIds∪descriptionIds∪standaloneIds∪listFlowIds∪trans2img id，
  *      隐藏集 = id 全集 − keep − keep 祖先 − keep 子孙，并入
  *      listFlowDeleteIds，保优先；visibility:hidden 零重排），几何层
- *      即上述 page-reveal-hidden.js 逐 id 三段（纵向展开 + 横向裁剪 reveal +
- *      非亲族遮挡者隐藏——fixed/sticky 一律、其余盒相交即藏，亲族保留）；
+ *      即上述 page-reveal-hidden.js 逐 id 四段（纵向展开 + 横向裁剪 reveal +
+ *      留白扩盒（四边 20px 呼吸位，负 margin 抵消内容零重排）+ 非亲族遮挡者
+ *      隐藏——fixed/sticky 一律、其余盒相交即藏，亲族保留）；
  *      首选页盒无效或截图失败（有界超时 10s，不整页挂死）换
  *      另一页再试，仍失败汇总 error 列出 id。live 页与 1_snapshot
  *      都是真实文本，无需任何页面内占位符还原。链上每个 id 各截一张并
