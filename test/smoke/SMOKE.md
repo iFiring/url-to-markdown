@@ -71,3 +71,5 @@ URL：https://developers.openai.com/api/docs/guides/prompt-caching（复用既�
 - 步骤 8 截图 source：mixed（9 张）
 - 9_markdown 代码围栏逐字相同 11/11 块，公式 $…$ 命中 6 处
 - mathReplaced=0 说明：该页 19 个 `<math>` 的 annotation 均无 `encoding="application/x-tex"`（非 KaTeX 双胞胎形态），规则②按"无 annotation 保留原树"正确放行；公式在骨架中由 annotation 文本手工转写，9_markdown 命中不受影响
+
+- 2026-08-29 追记：`__u2mLatexText` 分级信任扩展（未声明 encoding 的裸 annotation 也信；显式声明非 TeTeX 编码仍拒）后重跑步骤 6——`mathReplaced` 0→19、MathML 残留 0、`6_article.html` 110.5KB→96.7KB（累计 -59%）。工作目录中 7/8/9 产物仍为扩展前生成（公式内容一致——LLM 转录与机械替换等价），下次完整跑批自然对齐

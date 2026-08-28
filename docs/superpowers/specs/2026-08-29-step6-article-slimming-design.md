@@ -143,8 +143,8 @@ data-color、data-actions-placement、data-state、data-selected——全是
    `script[type=math/tex]` / 前邻 script），零改动。
 2. latex 为 null → **保留 MathML 原树**（兜底，分析文档要求）。
 3. 孪生识别（KaTeX 标准输出结构；注意参考页本身 0 个 katex 孪生——其
-   annotation 无 `encoding` 属性，规则② 在该页全部走第 4 条兜底，见修订
-   记录）：el 的父 span **仅含 el 一个元素子**（空白文本子忽略；
+   annotation 未声明 encoding，规则② 经分级信任扩展后在该页 19 个公式
+   全部以裸 math 路径替换，见修订记录）：el 的父 span **仅含 el 一个元素子**（空白文本子忽略；
    katex-mathml）**且** 祖父 span **恰有两个元素子**、其一为该父、另一
    为 span（katex-html 孪生）**且父/祖父的直文本子纯空白**（终审补的
    守卫——带文字的包装整体替换会丢文本，全分支唯一内容丢失路径）→
@@ -247,6 +247,12 @@ linksStripped, mathReplaced, attrsDropped}`。agent 决策表按 `status`
 
 ## 修订记录
 
+- 2026-08-29（用户决策——高度还原原则）：`__u2mLatexText` 分级信任扩展
+  ——未声明 encoding 的裸 `<annotation>` 也信（实践中是渲染器省略属性、
+  内容即原文；参考页 19 个公式全此方言、内容经核实为 LaTeX）；显式声明
+  **非 TeX** encoding 者仍拒（内容可能是其他格式，替换即失真）。参考页
+  `mathReplaced` 0→19、MathML 汤清零、`6_article` 110.5KB→96.7KB。
+  本条同时解除前文"原样复用 page-latex.js 零改动"约束（本条即改动依据）。
 - 2026-08-29：初版。范围 = 分析文档 3.1/3.2/3.3/3.4/3.5 + 3.6 的
   data-\* 与空 svg（低透明度背景经用户决定不做；代码块占位符经用户决定
   后续单独立项，见 `.docs/2026-08-29-code-block-placeholder-design.md`）。

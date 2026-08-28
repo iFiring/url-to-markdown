@@ -434,7 +434,7 @@ test('extract_article.mjs: 瘦身规则①——data-* 只留 data-u2m-id 与 da
 // $…$ 单美元内联形式（与参考页 9_markdown 既有约定一致）。annotation
 // 里的实体（&lt;）经 textContent 解码、序列化时重新转义
 const MATH_JUICED = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>公式</title></head><body><h1 data-u2m-id="1">标题</h1><div data-u2m-id="4"><p data-u2m-id="5">设 <span data-u2m-id="60"><span data-u2m-id="61"><math data-u2m-id="62"><semantics><mrow><mi>M</mi></mrow><annotation encoding="application/x-tex">M</annotation></semantics></math></span><span data-u2m-id="63"><span data-u2m-id="64">M</span></span></span> 为最小长度，</p><p data-u2m-id="8">裸公式 <math data-u2m-id="70"><semantics><mrow><mi>L</mi></mrow><annotation encoding="application/x-tex">L &lt; M</annotation></semantics></math> 成立，</p><p data-u2m-id="9">无源公式 <math data-u2m-id="80"><mrow><mi>x</mi></mrow></math> 保留。</p><p data-u2m-id="10">带文字的包装 <span data-u2m-id="90"><span data-u2m-id="91">see <math data-u2m-id="92"><semantics><mrow><mi>M</mi></mrow><annotation encoding="application/x-tex">M</annotation></semantics></math></span><span data-u2m-id="93"><span data-u2m-id="94">M</span></span></span> 尾部</p></div></body></html>`;
+<html lang="zh-CN"><head><title>公式</title></head><body><h1 data-u2m-id="1">标题</h1><div data-u2m-id="4"><p data-u2m-id="5">设 <span data-u2m-id="60"><span data-u2m-id="61"><math data-u2m-id="62"><semantics><mrow><mi>M</mi></mrow><annotation encoding="application/x-tex">M</annotation></semantics></math></span><span data-u2m-id="63"><span data-u2m-id="64">M</span></span></span> 为最小长度，</p><p data-u2m-id="8">裸公式 <math data-u2m-id="70"><semantics><mrow><mi>L</mi></mrow><annotation encoding="application/x-tex">L &lt; M</annotation></semantics></math> 成立，</p><p data-u2m-id="9">无源公式 <math data-u2m-id="80"><mrow><mi>x</mi></mrow></math> 保留。</p><p data-u2m-id="10">带文字的包装 <span data-u2m-id="90"><span data-u2m-id="91">see <math data-u2m-id="92"><semantics><mrow><mi>M</mi></mrow><annotation encoding="application/x-tex">M</annotation></semantics></math></span><span data-u2m-id="93"><span data-u2m-id="94">M</span></span></span> 尾部</p><p data-u2m-id="11">未声明编码 <math data-u2m-id="95"><semantics><mrow><mi>r</mi></mrow><annotation style="display: block;">r</annotation></semantics></math> 换，他声明 <math data-u2m-id="96"><semantics><mrow><mi>q</mi></mrow><annotation encoding="application/mathml-presentation+xml">not-latex</annotation></semantics></math> 不换。</p></div></body></html>`;
 
 test('extract_article.mjs: 瘦身规则②——MathML 按三档替换为 $LaTeX$', async () => {
   const { tmpRoot, urlDir } = setupTmp('math', { titleIds: [1], descriptionIds: [70], listFlowIds: [4] });
@@ -461,7 +461,13 @@ test('extract_article.mjs: 瘦身规则②——MathML 按三档替换为 $LaTeX
   assert.ok(html.includes('<math data-u2m-id="80"'), '无 annotation 的 math 应保留原树');
   assert.ok(html.includes('see $M$') && html.includes('尾部'),
     '孪生守卫：带文字包装回退只换 <math>，前后文字不随整体替换丢失');
-  assert.equal(out.slim.mathReplaced, 3, '应替换 3 处（双胞胎整体 + 裸 math + 守卫回退）');
+  // 分级信任（高度还原）：未声明 encoding 的裸 annotation 也信——参考页
+  // 19 个公式全是此方言（style 无 encoding 属性）；显式声明非 TeTeX 编码
+  // 的不信（内容可能是其他格式，当 LaTeX 替换即失真）
+  assert.ok(html.includes('未声明编码 $r$ 换'), '裸 annotation（无 encoding）应替换');
+  assert.ok(!html.includes('data-u2m-id="95"'), '裸 annotation 的 math id 应消失');
+  assert.ok(html.includes('<math data-u2m-id="96"'), '声明非 TeTeX 编码的 annotation 不信、原树保留');
+  assert.equal(out.slim.mathReplaced, 4, '应替换 4 处（双胞胎 + 裸 math + 守卫回退 + 裸 annotation）');
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
