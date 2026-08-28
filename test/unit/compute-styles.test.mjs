@@ -330,6 +330,70 @@ test('compute_styles.mjs: var/color-mix/calc 残留替换为浏览器计算的�
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
+// 隐藏声明剥离：收起的元素（class 规则 / <style> 规则 / 内联 style / 裸 hidden
+// 属性 / 变量驱动）在计算样式前剥离隐藏声明、展开为可见——只删隐藏声明本身，
+// 规则其余声明保留（.row{display:flex} 不被 display:block 盲改，flex 结构
+// 信号流到步骤 7）。
+const HIDDEN_STRIP_EXTRACT = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>隐藏剥离</title><style>
+:root { --gone: none }
+.panel { display: none }
+.row { display: flex; gap: 8px }
+.collapse { display: none }
+.invis { visibility: hidden; border: 2px solid green }
+.byvar { display: var(--gone); border: 1px solid red }
+.attrhide { border: 3px solid blue }
+</style></head><body>
+<div class="panel" data-u2m-id="1"><p>类规则收起的中文内容</p></div>
+<div class="row collapse" data-u2m-id="2"><span>自然恢复 flex</span></div>
+<div class="invis" data-u2m-id="3">可见化并保留边框</div>
+<div class="byvar" data-u2m-id="4">变量驱动收起的内容</div>
+<div class="attrhide" hidden="true" data-u2m-id="5">裸 hidden 属性收起的内容</div>
+<div style="display: none; border: 4px solid purple" data-u2m-id="6">内联收起的内容</div>
+<p data-u2m-id="7">正文段落</p>
+</body></html>`;
+
+test('compute_styles.mjs: 隐藏声明剥离——收起元素展开、自然 display 恢复', async () => {
+  const { tmpRoot } = setupTmp('hidden-strip', { extractHtml: HIDDEN_STRIP_EXTRACT });
+  const r = await runScript(process.execPath, [scriptPath, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+
+  const juiced = fs.readFileSync(out.juiceStyles, 'utf8');
+  // 终态零隐藏声明（display:none / visibility:hidden 一处不留）
+  assert.ok(!juiced.includes('display: none'), '不应残留 display: none');
+  assert.ok(!juiced.includes('visibility: hidden'), '不应残留 visibility: hidden');
+  // 收起内容全部展开、进入产物
+  for (const text of ['类规则收起的中文内容', '自然恢复 flex', '可见化并保留边框', '变量驱动收起的内容', '裸 hidden 属性收起的内容', '内联收起的内容']) {
+    assert.ok(juiced.includes(text), `收起内容应展开保留: ${text}`);
+  }
+  // 只删隐藏声明、规则其余声明保留：collapse 剥除后 .row 的 flex 自然恢复
+  // （不是 display:block 盲改——flex 结构信号对步骤 7 LLM 完整）。
+  // 逐元素断言用整标签匹配（style 属性可能排在 data-u2m-id 之前，从 id
+  // 往后切片会切掉它）
+  const tagOf = (id) => juiced.match(new RegExp(`<[^>]*data-u2m-id="${id}"[^>]*>`))?.[0] || '';
+  assert.ok(tagOf(2).includes('display: flex'), `自然 display:flex 应恢复: ${tagOf(2)}`);
+  assert.ok(tagOf(2).includes('gap'), `row 的其余声明（gap）应保留: ${tagOf(2)}`);
+  // visibility:hidden 剥除但同规则 border 保留
+  assert.ok(tagOf(3).includes('border') || tagOf(3).includes('rgb('), `invis 的边框应保留: ${tagOf(3)}`);
+  // 变量驱动兜底：内联覆写为可见（display:block）
+  assert.ok(tagOf(4).includes('display: block'), `var 驱动收起应兜底覆写 display:block: ${tagOf(4)}`);
+  assert.ok(tagOf(4).includes('border') || tagOf(4).includes('rgb('), `byvar 的边框应保留: ${tagOf(4)}`);
+  // 裸 hidden 属性摘除后元素可见、属性不残留
+  assert.ok(tagOf(5).includes('border') || tagOf(5).includes('rgb('), `attrhide 的边框应保留: ${tagOf(5)}`);
+  assert.ok(!/hidden/.test(tagOf(5)), `hidden 属性应摘除: ${tagOf(5)}`);
+  // 内联 display:none 剥除、同属性其余声明保留
+  assert.ok(tagOf(6).includes('border') || tagOf(6).includes('rgb('), `内联收起元素的边框应保留: ${tagOf(6)}`);
+  // 可见正文不受影响
+  assert.ok(juiced.includes('正文段落'), '可见正文保留');
+
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
 test('compute_styles.mjs: 缺步骤 4 产物时报 error 指路步骤 4', async () => {
   const { tmpRoot, urlDir } = setupTmp('miss', { withExtract: false });
   const r = await runScript(process.execPath, [scriptPath, '--url', URL], {

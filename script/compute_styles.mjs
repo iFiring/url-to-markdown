@@ -11,6 +11,13 @@
  *   node compute_styles.mjs --url <url>
  *
  * 三段处理：
+ *  -1. 隐藏声明剥离（浏览器，lib/page-strip-hidden.js）：收起的元素展开为
+ *      可见——CSSOM 删样式表规则与内联 style 的 display:none/
+ *      visibility:hidden 声明（只删隐藏声明、规则其余声明保留——
+ *      display:flex 等自然布局信号不被 block 盲改），规则集 cssText 写回
+ *      <style> 文本（CSSOM 改写不回写文本节点，不物化即被后续序列化还原）；
+ *      [hidden] 属性摘除；var 驱动（display:var(--gone)）兜底内联覆写
+ *      display:block。产物零隐藏声明，内容与自然样式流进步骤 7
  *   0. 字符串规范化（浏览器，lib/page-normalize-styles.js）：style 属性
  *      字符串 token 重引为单引号 + 内层引号转义——juice 写回会把值内 "
  *      无条件换成 '，引号混排形状（"D'Nealian"、'a"b'）会被改写成未闭合
@@ -99,6 +106,7 @@ async function main() {
   const unwrapFn = await readSharedScript('page-unwrap-layers.js');
   const collectFn = await readSharedScript('page-collect-fn-values.js');
   const resolveFn = await readSharedScript('page-resolve-computed.js');
+  const stripHiddenFn = await readSharedScript('page-strip-hidden.js');
   debug(`读入 ${extractPath}（${extractHtml.length} 字节）`);
 
   let browser;
@@ -109,11 +117,18 @@ async function main() {
     await context.route(/^https?:/, (route) => route.abort());
     const page = await context.newPage();
 
+    // 阶段零：隐藏声明剥离（page-strip-hidden.js）——收起的元素展开为可见，
+    // 只删 display:none / visibility:hidden 声明本身（规则其余声明保留，
+    // 自然 display:flex 等结构信号完整），内容流进步骤 7。CSSOM 改写即时
+    // 反映到 <style> 序列化文本，后续各阶段与 juice 看到的即剥除后的样式表
+    await page.setContent(extractHtml, { waitUntil: 'domcontentloaded' });
+    const stripStats = await page.evaluate(`(${stripHiddenFn})()`);
+    debug(`隐藏声明剥离: 规则/内联删 ${stripStats.decl} · hidden 属性摘 ${stripStats.attrs} · var 兜底覆写 ${stripStats.fallback}`);
+
     // 阶段一：style 属性字符串 token 规范化（机制与动机见
     // page-normalize-styles.js 头注——juice 写回把值内 " 无条件换成 '，
     // 引号混排形状会损毁后续声明；DOM 圈选只碰 style 属性）。
-    // 与阶段二共用同一次页面加载：两个 evaluate 先后就地改 DOM，只序列化一次
-    await page.setContent(extractHtml, { waitUntil: 'domcontentloaded' });
+    // 与后续阶段共用同一次页面加载：各 evaluate 先后就地改 DOM，只序列化一次
     await page.evaluate(`(${normalizeFn})()`);
 
     // 阶段二：解包 <style> 里的 @layer 级联层（Tailwind v4 把工具类规则包在

@@ -92,6 +92,7 @@ working/                 # 运行时工作目录（gitignore，仅保留骨架�
 - **astro 解包两趟共享 + 带样式版属性白名单**：`astro-` 前缀脚手架标签（astro-island/slot 等，携带巨量序列化 props）两趟都解包——脚手架不再流进步骤 4-7（曾实测 `6_article.html` 残留 59 个 astro 标签、27KB 属性噪音）；带样式版另有属性白名单（22 静态属性 = clean K2 八属性 + style/href/src/width/height + 内容信号 colspan/rowspan/start/aria-label/data-src/srcset/datetime/open/lang，`<style>` 标签豁免）+ **`<style>` 选择器引用属性的动态保留集**（删属性即断 juice 级联——曾实测 article-1 丢 45 条 border/background/display 声明）。主流框架中仅 Astro 在 SSR 产物留持久化自定义标签（Vue/Nuxt/Qwik 等走属性或 script，由白名单/步骤 1 覆盖），解包集钉在 `astro-` 前缀、永不外溢到真实 web component（GitHub/YouTube 的内容型自定义标签）
 - **@layer 级联层解包（步骤 5 前置）**：Tailwind v4 站点把工具类规则全包在 `@layer utilities` 里而 juice 不进层——不解包则卡片边框/圆角/背景等工具类样式零内联（实测某站点 56% 的 CSS 在层内、带样式元素仅 579 个）。步骤 5 内联前先在浏览器侧解包（块形层体原位递归提升、`@layer a, b;` 层序声明丢弃，DOM 圈选不误伤正文代码示例），`:root` 变量定义随层提升后 juice 把已定义 var() 解析为具体值——实测同站点带样式元素 579 → 2632
 - **函数值真实化（步骤 5）**：juice 对多级 var 链的递归解析会弄丢 color-mix 颜色空间参数（产出非法值、浏览器整条丢弃），@property 注册变量与 calc() 保持函数引用——步骤 5 收集残留声明对，在原始样式页（完整 CSS+class+@property）取 getComputedStyle 计算值替换（无值则删净），终态零 var()/color-mix()/calc()，全部是浏览器计算出的真实值
+- **隐藏声明剥离（步骤 5 前置）**：收起的元素（手风琴面板/折叠区/抽屉）在计算样式前展开——CSSOM 只删 display:none/visibility:hidden 声明本身，规则其余声明保留，自然 display:flex/grid/table 等结构信号完整流进步骤 7（不盲改 block）；`[hidden]` 摘属性、var 驱动收起兜底覆写。实测参考页 27 处 display:none 清零，展开元素带自然布局
 
 ### 环境变量
 
@@ -124,5 +125,5 @@ pnpm test:all             # 全量
 | 步骤 4-6 | 样式裁剪 → juice 内联 → 文章视图 | 已完成 |
 | 步骤 8 `screenshot_trans.mjs` | 占位符还原 + 图片下载 + trans2img 截图 | 已完成 |
 | 步骤 9 `render_skeleton.mjs` | 骨架回填 markdown | 已完成 |
-| 测试 | 单测 + 集成 166 项 | 已完成 |
+| 测试 | 单测 + 集成 167 项 | 已完成 |
 | 真实 URL 冒烟 | 手动清单 `test/smoke/SMOKE.md` | 场景 1 已记录通过（产生于旧双稿管线，新 9 步管线待重验）；场景 2/3 待人工 |
