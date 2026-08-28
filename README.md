@@ -93,6 +93,8 @@ working/                 # 运行时工作目录（gitignore，仅保留骨架�
 - **@layer 级联层解包（步骤 5 前置）**：Tailwind v4 站点把工具类规则全包在 `@layer utilities` 里而 juice 不进层——不解包则卡片边框/圆角/背景等工具类样式零内联（实测某站点 56% 的 CSS 在层内、带样式元素仅 579 个）。步骤 5 内联前先在浏览器侧解包（块形层体原位递归提升、`@layer a, b;` 层序声明丢弃，DOM 圈选不误伤正文代码示例），`:root` 变量定义随层提升后 juice 把已定义 var() 解析为具体值——实测同站点带样式元素 579 → 2632
 - **函数值真实化（步骤 5）**：juice 对多级 var 链的递归解析会弄丢 color-mix 颜色空间参数（产出非法值、浏览器整条丢弃），@property 注册变量与 calc() 保持函数引用——步骤 5 收集残留声明对，在原始样式页（完整 CSS+class+@property）取 getComputedStyle 计算值替换（无值则删净），终态零 var()/color-mix()/calc()，全部是浏览器计算出的真实值
 - **隐藏声明剥离（步骤 5 前置）**：收起的元素（手风琴面板/折叠区/抽屉）在计算样式前展开——CSSOM 只删 display:none/visibility:hidden 声明本身，规则其余声明保留，自然 display:flex/grid/table 等结构信号完整流进步骤 7（不盲改 block）；`[hidden]` 摘属性、var 驱动收起兜底覆写。实测参考页 27 处 display:none 清零，展开元素带自然布局
+- **零值声明过滤（步骤 5 finalize）**：白名单内值等于全元素初始值的声明删除——边框按"边"语义判无效（宽 0 或样式 none 的边整条不可见，三件全删），Tailwind preflight 被 juice 内联出的海量 `border: 0px solid` 即此类；实信号（非零边框/圆角+背景、flex、font-size/weight 相对对比）全保留。实测参考页 5_juice 约 -26%
+- **文章视图瘦身 pass（步骤 6）**：迁移后同页内存往返执行六条结构规则——data-* 白名单清理、MathML→LaTeX（KaTeX 双胞胎整体替换）、无文本/纯符号 button 与空 svg 删除、有文本 button 解包、非白名单协议 `<a>` 解包（codex:// 营销链接不再漏进产物）、空壳 span 迭代拆包（语法高亮 token 塌缩为纯文本）。保护集跳过 key 元素、`1_snapshot` 零接触。实测参考页 6_article 239.5KB → 110.5KB
 
 ### 环境变量
 
@@ -127,3 +129,4 @@ pnpm test:all             # 全量
 | 步骤 9 `render_skeleton.mjs` | 骨架回填 markdown | 已完成 |
 | 测试 | 单测 + 集成 167 项 | 已完成 |
 | 真实 URL 冒烟 | 手动清单 `test/smoke/SMOKE.md` | 场景 1 已记录通过（产生于旧双稿管线，新 9 步管线待重验）；场景 2/3 待人工 |
+| 2026-08-29 | 步骤 5/6 文章视图瘦身（零值过滤 + 六条结构规则） | ✅ |

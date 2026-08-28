@@ -55,3 +55,19 @@
 ## 3. 特殊元素页（含 canvas/图表/公式/Mermaid 的公开页）
 
 验证 manifest 分派与步骤 3 产物（SVG 语义等价性人工评审）。
+
+## 2. 文章视图瘦身（步骤 5 零值过滤 + 步骤 6 瘦身 pass）
+
+URL：https://developers.openai.com/api/docs/guides/prompt-caching（复用既有步骤 0-4 产物，1_snapshot 未重跑）
+
+| 产物 | 改动前 | 改动后 |
+|---|---|---|
+| 5_juice_styles.html | 241.4KB | 177.9KB（-26.3%） |
+| 6_article.html | 239.5KB | 110.5KB |
+| 9_markdown.md codex:// 链接 | 2 处 | 0 处 |
+
+- 1_snapshot.html sha256 前后一致（步骤 8 零冲击）
+- slim 计数：spansUnwrapped=1483 / buttonsRemoved=7 / buttonsUnwrapped=28 / svgsRemoved=30 / linksStripped=2 / attrsDropped=43 / mathReplaced=0
+- 步骤 8 截图 source：mixed（9 张）
+- 9_markdown 代码围栏逐字相同 11/11 块，公式 $…$ 命中 6 处
+- mathReplaced=0 说明：该页 19 个 `<math>` 的 annotation 均无 `encoding="application/x-tex"`（非 KaTeX 双胞胎形态），规则②按"无 annotation 保留原树"正确放行；公式在骨架中由 annotation 文本手工转写，9_markdown 命中不受影响
