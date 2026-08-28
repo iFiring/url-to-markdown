@@ -85,7 +85,7 @@ inline 声明推断规则：juice 已把全级联解析进 style 属性，缺省
 | `box-shadow: none` | 删 |
 | `background-color: transparent`（含计算形 `rgba(0, 0, 0, 0)`） | 删 |
 | `background-image: none` | 删 |
-| `border-image`/`border-image-*: none` | 删 |
+| `border-image`/`border-image-*` 初始值残影 | 仅当**四边全 void** 时连残影一并删（`border: 0px solid` 经 CSSOM 展开为 17 个 longhand，slice/width/outset/repeat 初始值是残留）；有实边时保留——它们是维持 `border: 2px solid red` 紧凑简写序列化的 CSSOM 工件，删了会把实边框降级为 longhand 串 |
 | `outline` 三件（无分边）按 §4.1 同语义：style 为 none（显式或缺省）或 width ∈ {`0px`, `0`} → 三件全删 | 同边框 |
 | `overflow`/`overflow-x`/`overflow-y`: `visible` | 删（全元素初始值；分析文档未列，本设计补入同类） |
 
@@ -246,6 +246,12 @@ linksStripped, mathReplaced, attrsDropped}`。agent 决策表按 `status`
 - 2026-08-29：初版。范围 = 分析文档 3.1/3.2/3.3/3.4/3.5 + 3.6 的
   data-\* 与空 svg（低透明度背景经用户决定不做；代码块占位符经用户决定
   后续单独立项，见 `.docs/2026-08-29-code-block-placeholder-design.md`）。
+- 2026-08-29（Task 1 实施时）：§4.2 border-image 行收紧——实测
+  `border: 0px solid` 在 CSSOM 展开为 17 个 longhand，无条件按值删
+  border-image-\* 会破坏实边框的简写序列化；改为"四边全 void 时连残影
+  删、有实边保留（纯序列化工件）"。实施另将白名单循环拆为两趟（先函数值
+  替换落定、再零值过滤）——简写带 var 的 longhand 在 CSSOM 读作空串，
+  融合单趟会把待替换的边误判为缺省 none 而删掉真实宽。
 - 2026-08-29（写实施计划时）：§5.4 规则③ 扩为"无文本**或纯符号**"——
   实测参考页 7 个 `⋮` 按钮的 textContent 恰为 `⋮`（有文本但零字母
   数字），原"无文本"字面规则够不着自己的动机案例。判定标准
