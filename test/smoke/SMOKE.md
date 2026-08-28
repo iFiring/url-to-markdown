@@ -26,6 +26,21 @@
 - 1 个 passthrough_svg 实为装饰性背景（aria-hidden 网格线），其引用被 Readability 剔除——无害；manifest 悬挂 done 条目属已知遗留观察
 - 步骤 3 无 pending；步骤 4 完成；步骤 5 首跑 120s 内无人点击 → timeout（用户重跑即可）
 
+## 1b. 步骤 8 双层排除 + 三段手术（超宽截全 + 非文章内容不进图）
+
+对已有全产物的工作目录单独重跑步骤 8（`U2M_WORKING_ROOT` 指向副本，不动原始数据）：
+`U2M_WORKING_ROOT=<副本根> U2M_DEBUG=1 node script/screenshot_trans.mjs --url <URL>`，
+检查 stdout 单行 ok、stderr 三类 debug 行（分类层排除 / 横向裁剪 reveal / 遮挡者隐藏）、
+超宽元素（>1280 CSS px）截图的视口外带（设备 px x≥2560）内容密度由 ≈0 变为 >1%、无导航像素。
+
+### 执行记录（2026-08-28，openai 文档页）
+
+- URL：https://developers.openai.com/api/docs/guides/prompt-caching（spec spike 同页；副本自 `working/developers.openai.com_api_docs_guides_prompt-caching/`，其 `assets/trans/*.webp` 为修复前产物，构成 before/after 对照）
+- 结果：`ok`，count=10，**source=live**（签名命中 10/10）；stdout 单行 JSON 契约保持
+- debug 行实测：`分类层排除（live）: 隐藏 1860 / keep 命中 68`（快照侧同值）；`横向裁剪 reveal` 触发于 1870（3 处）/3046（1 处）；`隐藏态强制展开` 触发于 3044/3348；无 `遮挡者隐藏` 行——分类层已把 fixed 侧栏整体隐藏、几何层按设计跳过已隐藏元素（两层协同，非缺陷；几何层路径由单测品红断言覆盖）
+- 像素对照（pixelStats，2x 设备 px）：**3047（2864px 宽 benchmark 表）超视口带密度 0.0000 → 0.2969**，目检全宽有内容、无导航像素；其余元素窄于视口（带不存在、密度 0 为平凡值），宽度与修复前一致无回归
+- 结论：超视口空白 bug 在真实页面修复；分类层按步骤 3 事实源正确清洗 1860 个非内容元素
+
 ## 2. 真实登录墙页
 
 1. `node script/snapshot.mjs --url <登录页URL>` → viewer 弹出（内部 snapshot-login.mjs 检测到需登录）
