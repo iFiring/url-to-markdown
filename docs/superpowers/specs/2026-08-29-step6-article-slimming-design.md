@@ -70,7 +70,7 @@ URL-encoded prompt）已验证漏进 `9_markdown.md`（grep 2 处）。
 
 | 判定 | 动作 |
 |---|---|
-| `border-*-style: none`（有值或**缺省**——缺省即 initial none）且 width 缺省，**或** width ∈ {`0px`, `0`} | 该边 width/style/color 三件全删 |
+| style 为 `none`（显式或**缺省**——缺省即 initial none），**或** width ∈ {`0px`, `0`} | 该边 width/style/color 三件全删（style none 无论 width 多宽都不可见；width 0 无论 style 什么都不可见） |
 | style 为实值（solid 等）**且** width 非零 | 保留（实边框） |
 | style 为实值 **且** width 缺省（initial medium + solid = 可见边框） | 保留 |
 
@@ -86,7 +86,7 @@ inline 声明推断规则：juice 已把全级联解析进 style 属性，缺省
 | `background-color: transparent`（含计算形 `rgba(0, 0, 0, 0)`） | 删 |
 | `background-image: none` | 删 |
 | `border-image`/`border-image-*: none` | 删 |
-| `outline` 按 4.1 同边语义 | 同边框 |
+| `outline` 三件（无分边）按 §4.1 同语义：style 为 none（显式或缺省）或 width ∈ {`0px`, `0`} → 三件全删 | 同边框 |
 | `overflow`/`overflow-x`/`overflow-y`: `visible` | 删（全元素初始值；分析文档未列，本设计补入同类） |
 
 ### 4.3 明确不删的"初始值"
@@ -114,9 +114,10 @@ inline 声明推断规则：juice 已把全级联解析进 style 属性，缺省
 `protectedIds = titleIds ∪ descriptionIds ∪ standaloneIds`（listFlowIds
 不需要——容器本身不迁移）。保护语义分两档：
 
-- **删除/解包类**（①③④⑤⑥ 涉及元素删除或解包的）：跳过 id ∈ 保护集的
-  元素**本身**；其后代照常瘦身（key 内容里的噪音还是噪音）。防的是步骤 3
-  把手风琴标题 button 标成 descriptionId 之类边角。
+- **删除/解包类**（③④⑤⑥）：跳过 id ∈ 保护集的元素**本身**；其后代照常
+  瘦身（key 内容里的噪音还是噪音）。防的是步骤 3 把手风琴标题 button 标成
+  descriptionId 之类边角。规则①（属性清理）不受保护集约束——脚手架属性
+  对保护元素同样是噪音。
 - **保真替换类**（② MathML→LaTeX）：不受保护集约束——替换保留内容只换
   形态；保护的目的是防丢内容，不是防换形态。否则被标成 key 的公式永远
   留在 MathML 汤里。
@@ -142,9 +143,9 @@ data-color、data-actions-placement、data-state、data-selected——全是
    `script[type=math/tex]` / 前邻 script），零改动。
 2. latex 为 null → **保留 MathML 原树**（兜底，分析文档要求）。
 3. 孪生识别（参考页已验证此结构）：el 的父 span **仅含 el 一个元素子**
-   （katex-mathml）**且** 祖父 span **恰有两个元素子**、其一为该父、另一
-   为 span（katex-html 孪生）→ **祖父整体替换为 `$latex$` 文本节点**——
-   孪生一并消灭，公式只出现一遍。
+   （空白文本子忽略；katex-mathml）**且** 祖父 span **恰有两个元素子**、
+   其一为该父、另一为 span（katex-html 孪生）→ **祖父整体替换为 `$latex$`
+   文本节点**——孪生一并消灭，公式只出现一遍。
 4. 结构不匹配（裸 MathML、KaTeX 变体）→ 只替换 `<math>` 本身为 `$latex$`；
    孪生残留由规则⑥解体为文本，公式文本可能重复一次——与今日现状相同
    （参考页 9_markdown 证明 LLM 今天就能从双胞胎正确择一），冒烟验证。
