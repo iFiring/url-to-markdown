@@ -393,8 +393,9 @@ test('extract_article.mjs: 缺步骤 5 产物 / 缺 key_ids 时报 error 并指�
 // 瘦身规则① data-*：保留白名单 {data-u2m-id, data-language}（后者是
 // 步骤 7 判代码围栏语言的机械信号），其余 data-*（组件库脚手架/交互
 // 状态）全删——白名单而非黑名单，陌上站点的 data-* 安全默认删除
+// span 6 带 style 是刻意防拆——规则① 删 data-color 后裸 span 会成空壳被规则⑥ 拆掉（spec §5.7 设计行为），本用例只测 data-* 白名单
 const DATASTAR_JUICED = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>瘦身</title></head><body><h1 data-u2m-id="1">标题</h1><div data-u2m-id="4"><p data-variant="lead" data-u2m-id="5">段落<span data-color="accent" data-u2m-id="6">行内</span></p><code data-language="python" data-wrap-long-lines="false" data-u2m-id="7">print(1)</code></div></body></html>`;
+<html lang="zh-CN"><head><title>瘦身</title></head><body><h1 data-u2m-id="1">标题</h1><div data-u2m-id="4"><p data-variant="lead" data-u2m-id="5">段落<span data-color="accent" style="background-color: rgb(255, 255, 0)" data-u2m-id="6">行内</span></p><code data-language="python" data-wrap-long-lines="false" data-u2m-id="7">print(1)</code></div></body></html>`;
 
 test('extract_article.mjs: 瘦身规则①——data-* 只留 data-u2m-id 与 data-language', async () => {
   const { tmpRoot, urlDir } = setupTmp('datastar', { titleIds: [1], descriptionIds: [], listFlowIds: [4] });
@@ -517,5 +518,31 @@ test('extract_article.mjs: 瘦身规则⑤——非白名单协议 <a> 解包、
   assert.ok(html.includes('mailto:x@example.com'), 'mailto 应保留');
   assert.ok(html.includes('href="#anchor"'), '#锚点（无 scheme）应保留');
   assert.equal(out.slim.linksStripped, 2, '应解包 2 个（codex + javascript）');
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+// 瘦身规则⑥：属性只剩 data-u2m-id 的 span 解包，嵌套 token span 迭代
+// 塌缩到不动点；带 style 的 span 与保护集中的 span 保留
+const SPAN_JUICED = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>空壳</title></head><body><h1 data-u2m-id="1">标题</h1><div data-u2m-id="4"><pre data-u2m-id="30"><code data-language="python" data-u2m-id="31"><span data-u2m-id="32"><span data-u2m-id="33">print</span>(<span data-u2m-id="34">1</span>)</span></code></pre><p data-u2m-id="5">段落<span style="background-color: rgb(255, 255, 0)" data-u2m-id="35">高亮</span>与<span data-u2m-id="36">空壳</span></p></div></body></html>`;
+
+test('extract_article.mjs: 瘦身规则⑥——空壳 span 塌缩为纯文本、带样式与保护集 span 保留', async () => {
+  const { tmpRoot, urlDir } = setupTmp('span', { titleIds: [1], descriptionIds: [36], listFlowIds: [4] });
+  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), SPAN_JUICED);
+  const script = path.resolve('script/extract_article.mjs');
+  const r = await runScript(process.execPath, [script, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+
+  const html = fs.readFileSync(out.article, 'utf8');
+  assert.ok(html.includes('<pre data-u2m-id="30"><code data-language="python" data-u2m-id="31">print(1)</code></pre>'),
+    `嵌套空壳 span 应塌缩为纯文本: ${html.slice(html.indexOf('<body'))}`);
+  assert.ok(html.includes('background-color: rgb(255, 255, 0)'), '带 style 的 span 应保留');
+  assert.ok(html.includes('data-u2m-id="36"'), '保护集中的空壳 span 应保留');
+  assert.equal(out.slim.spansUnwrapped, 3, '应解包 3 层（32/33/34）');
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });

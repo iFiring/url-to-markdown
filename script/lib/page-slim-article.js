@@ -132,6 +132,28 @@ function __u2mSlimArticle(protectedIds) {
     }
   }
 
+  // ⑥ 空壳 span 拆包：属性只剩 data-u2m-id 的 span 解包。span 限定——
+  // div 等块级可能承载 trans2img 模块边界，不碰。嵌套 token span 需
+  // 迭代到不动点，防御性上限 10 轮（一轮内 parent 先解包、hoisted 的
+  // 子 span 仍在静态列表内同轮处理，通常一轮收敛）
+  for (var round = 0; round < 10; round++) {
+    var spans = document.querySelectorAll('body span');
+    var changed = false;
+    for (var i = 0; i < spans.length; i++) {
+      var el = spans[i];
+      if (!el.isConnected || isProtected(el)) continue;
+      var bare = true;
+      for (var j = 0; j < el.attributes.length; j++) {
+        if (el.attributes[j].name !== 'data-u2m-id') { bare = false; break; }
+      }
+      if (!bare) continue;
+      unwrap(el);
+      stats.spansUnwrapped++;
+      changed = true;
+    }
+    if (!changed) break;
+  }
+
   return {
     html: '<!DOCTYPE html>\n' + document.documentElement.outerHTML,
     attrsDropped: stats.attrsDropped,
