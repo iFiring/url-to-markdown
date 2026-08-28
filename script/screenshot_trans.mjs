@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * screenshot_trans.mjs —— 步骤 8：占位符还原 + 图片下载 + trans2img 截图。
- * 读 7_skeleton.json + 1_snapshot.html + 2_long_text.json，产出：
+ * 读 7_skeleton.json + 1_snapshot.html + 2_long_text.json + 3_key_ids.json，产出：
  * 
  *   8_resolved_skeleton.json  结构同步骤 7，所有 {{LONG_TEXT_k[|suffix]}}
  *                             替换为真实文本；img 条目（![img](url) 形态）在
@@ -42,7 +42,13 @@
  *      A 侧也未命中的 id → error（骨架与视图不匹配）。折叠模块（手风琴
  *      收起等）两侧同为隐藏态——每个 id 截图前先跑 page-reveal-hidden.js
  *      强制展开（只覆写正在隐藏的属性，可见时零改动；签名在展开前算好，
- *      不受影响），首选页盒无效或截图失败（有界超时 10s，不整页挂死）换
+ *      不受影响），截图前双层排除：分类层 page-exclude-noncontent.js 每页一次（keep
+ *      = titleIds∪descriptionIds∪standaloneIds∪listFlowIds∪trans2img id，
+ *      隐藏集 = id 全集 − keep − keep 祖先 − keep 子孙，并入
+ *      listFlowDeleteIds，保优先；visibility:hidden 零重排），几何层
+ *      page-reveal-hidden.js 逐 id 三段（纵向展开 + 横向裁剪 reveal +
+ *      非亲族遮挡者隐藏——fixed/sticky 一律、其余盒相交即藏，亲族保留）；
+ *      首选页盒无效或截图失败（有界超时 10s，不整页挂死）换
  *      另一页再试，仍失败汇总 error 列出 id。live 页与 1_snapshot
  *      都是真实文本，无需任何页面内占位符还原。链上每个 id 各截一张并
  *      记录 boundingBox（展开后的真实尺寸），随后逐条目择优——宽度优先、
@@ -166,6 +172,11 @@ async function main() {
   if (!fs.existsSync(longTextPath)) {
     return emitError(`找不到 ${longTextPath}，请先运行步骤 2`);
   }
+  const keyIdsPath = path.join(dir, '3_key_ids.json');
+  if (!fs.existsSync(keyIdsPath)) {
+    return emitError(`找不到 ${keyIdsPath}，请先运行步骤 3`);
+  }
+  const keyIds = JSON.parse(await fsPromises.readFile(keyIdsPath, 'utf8'));
 
   const skeleton = JSON.parse(await fsPromises.readFile(skeletonPath, 'utf8'));
   const longText = JSON.parse(await fsPromises.readFile(longTextPath, 'utf8'));
@@ -207,6 +218,15 @@ async function main() {
     transEntries.push(v);
   }
   const transIds = [...new Set(transEntries.flat())];
+  // 分类层 keep 集（spec §3.1）：四类正文 id ∪ trans2img id（截图目标必须保）
+  const keepIds = [...new Set([
+    ...(keyIds.titleIds || []),
+    ...(keyIds.descriptionIds || []),
+    ...(keyIds.standaloneIds || []),
+    ...(keyIds.listFlowIds || []),
+    ...transIds,
+  ])];
+  const noiseIds = Array.isArray(keyIds.listFlowDeleteIds) ? keyIds.listFlowDeleteIds : [];
   const imgUrls = [];
   for (const entry of resolvedSkeleton) {
     const img = unpackImgEntry(entry.img);
@@ -222,6 +242,7 @@ async function main() {
   const sigFn = await readSharedScript('page-element-signature.js');
   const prepareFn = await readSharedScript('page-prepare.js');
   const revealFn = await readSharedScript('page-reveal-hidden.js');
+  const excludeFn = await readSharedScript('page-exclude-noncontent.js');
   const pageInitSrc = await readSharedScript('page-init.js');
 
   let browser;
@@ -319,6 +340,14 @@ async function main() {
     fs.mkdirSync(transDir, { recursive: true });
 
     const srcLabel = (pg) => (pg === pageB ? 'live' : 'snapshot');
+    // ── 分类层：非文章内容元素页面级排除（双层第一层，spec §3.1）──
+    // 签名计算之后、截图循环之前执行（visibility 不动 tag/children/
+    // textContent，签名不受影响；零重排，boundingBox 择优不受影响）
+    for (const page of [pageA, pageB]) {
+      if (!page) continue;
+      const ex = await page.evaluate(`(${excludeFn})(${JSON.stringify(keepIds)}, ${JSON.stringify(noiseIds)})`);
+      debug(`分类层排除（${srcLabel(page)}）: 隐藏 ${ex.hidden} / keep 命中 ${ex.kept}`);
+    }
     const screenshots = [];
     const boxes = {}; // id → boundingBox（CSS px）——择优依据
     const failedIds = [];

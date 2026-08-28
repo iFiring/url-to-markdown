@@ -95,7 +95,11 @@ const LONG_TEXT = {
 // 死端口 URL：live 重渲染即时失败；其派生目录名与测试预置目录一致
 const LIVE_URL = 'http://127.0.0.1:9/test-sstrans';
 
-function setupTmp(name, { snapshot = SNAPSHOT, skeleton = SKELETON, longText = LONG_TEXT } = {}) {
+// 步骤 3 产物默认值：与基础 SNAPSHOT 的正文对应（标题 1、流 2/20）。
+// 其余夹具按各自快照传覆盖值；trans2img id 由 CLI 自行并入 keep 集。
+const KEY_IDS = { titleIds: [1], descriptionIds: [], standaloneIds: [], listFlowIds: [2, 20], listFlowDeleteIds: [] };
+
+function setupTmp(name, { snapshot = SNAPSHOT, skeleton = SKELETON, longText = LONG_TEXT, keyIds = KEY_IDS } = {}) {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), `u2m-sstrans-${name}-`));
   const urlDir = path.join(tmpRoot, urlToDirName(LIVE_URL));
   const assetsDir = path.join(urlDir, 'assets');
@@ -104,6 +108,7 @@ function setupTmp(name, { snapshot = SNAPSHOT, skeleton = SKELETON, longText = L
   if (snapshot !== null) fs.writeFileSync(path.join(urlDir, '1_snapshot.html'), snapshot);
   if (skeleton !== null) fs.writeFileSync(path.join(urlDir, '7_skeleton.json'), JSON.stringify(skeleton));
   if (longText !== null) fs.writeFileSync(path.join(urlDir, '2_long_text.json'), JSON.stringify(longText));
+  if (keyIds !== null) fs.writeFileSync(path.join(urlDir, '3_key_ids.json'), JSON.stringify(keyIds));
   return { tmpRoot, urlDir, assetsDir };
 }
 
@@ -149,6 +154,7 @@ test('screenshot_trans.mjs: 择优按宽度优先——内层更宽时选内层'
   const { tmpRoot, urlDir } = setupTmp('innerwider', {
     snapshot: SNAPSHOT_INNER_WIDER,
     skeleton: [{ trans2img: [30, 31] }],
+    keyIds: { titleIds: [], descriptionIds: [], standaloneIds: [], listFlowIds: [], listFlowDeleteIds: [] },
   });
   const script = path.resolve('script/screenshot_trans.mjs');
   const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
@@ -171,6 +177,7 @@ test('screenshot_trans.mjs: 宽高全同的平局选最外层', async () => {
   const { tmpRoot, urlDir } = setupTmp('tie', {
     snapshot: SNAPSHOT_TIE,
     skeleton: [{ trans2img: [40, 41] }],
+    keyIds: { titleIds: [], descriptionIds: [], standaloneIds: [], listFlowIds: [], listFlowDeleteIds: [] },
   });
   const script = path.resolve('script/screenshot_trans.mjs');
   const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
@@ -219,6 +226,7 @@ test('screenshot_trans.mjs: display:none 折叠模块强制展开后出图，不
   const { tmpRoot, urlDir, assetsDir } = setupTmp('accordion', {
     snapshot: SNAPSHOT_ACCORDION,
     skeleton: [{ trans2img: [50, 51, 52] }],
+    keyIds: { titleIds: [1], descriptionIds: [], standaloneIds: [], listFlowIds: [60], listFlowDeleteIds: [] },
   });
   const script = path.resolve('script/screenshot_trans.mjs');
   const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
@@ -255,6 +263,7 @@ test('screenshot_trans.mjs: max-height:0 裁剪模块强制展开后出真实内
   const { tmpRoot, urlDir, assetsDir } = setupTmp('maxheight', {
     snapshot: SNAPSHOT_MAXHEIGHT,
     skeleton: [{ trans2img: [71, 72] }],
+    keyIds: { titleIds: [1], descriptionIds: [], standaloneIds: [], listFlowIds: [60], listFlowDeleteIds: [] },
   });
   const script = path.resolve('script/screenshot_trans.mjs');
   const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
@@ -299,6 +308,7 @@ test('screenshot_trans.mjs: display:contents 透明包装跳过不报错，视�
   const { tmpRoot, urlDir, assetsDir } = setupTmp('contents', {
     snapshot: SNAPSHOT_CONTENTS,
     skeleton: [{ trans2img: [83, 84] }],
+    keyIds: { titleIds: [1], descriptionIds: [], standaloneIds: [], listFlowIds: [60], listFlowDeleteIds: [] },
   });
   const script = path.resolve('script/screenshot_trans.mjs');
   const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
@@ -325,6 +335,7 @@ test('screenshot_trans.mjs: 条目全部 id 结构性无盒时报 error 指明�
   const { tmpRoot } = setupTmp('contents-only', {
     snapshot: SNAPSHOT_CONTENTS,
     skeleton: [{ trans2img: [83] }],
+    keyIds: { titleIds: [1], descriptionIds: [], standaloneIds: [], listFlowIds: [60], listFlowDeleteIds: [] },
   });
   const script = path.resolve('script/screenshot_trans.mjs');
   const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
@@ -357,6 +368,7 @@ const SNAPSHOT_WIDE = `<!DOCTYPE html>
 </style></head><body>
 <h1 data-u2m-id="1">超宽模块测试</h1>
 <p data-u2m-id="2">正文段落。</p>
+<div data-u2m-id="97" style="position: absolute; top: 160px; right: 0; width: 120px; height: 400px; background: rgb(75, 0, 130); z-index: 100"></div>
 <div style="position: fixed; top: 0; left: 0; width: 40px; height: 100%; background: rgb(255, 0, 255); z-index: 9999"></div>
 <div style="position: fixed; top: 0; right: 0; width: 40px; height: 100%; background: rgb(255, 0, 255); z-index: 9999"></div>
 <div class="wrap" data-u2m-id="91">
@@ -364,6 +376,7 @@ const SNAPSHOT_WIDE = `<!DOCTYPE html>
 <tr>${wideCells('rgb(200, 220, 240)')}</tr>
 <tr>${wideCells('rgb(225, 235, 250)')}</tr>
 <tr>${wideCells('rgb(200, 220, 240)')}</tr>
+<tr><td colspan="28" style="height: 40px; border: 1px solid rgb(120, 120, 120); background: rgb(200, 220, 240)"><div data-u2m-id="98" style="height: 40px; background: rgb(0, 255, 255)">广告位</div></td></tr>
 <tr><td colspan="28" style="height: 40px; border: 1px solid rgb(120, 120, 120); background: rgb(225, 235, 250)"><span data-u2m-id="95" style="position: absolute; top: 200px; left: 300px; width: 60px; height: 60px; background: rgb(255, 0, 0); z-index: 9999"></span></td></tr>
 </table>
 </div>
@@ -375,6 +388,7 @@ test('screenshot_trans.mjs: 超宽表格横向 reveal 截全 + 遮挡者隐藏 +
   const { tmpRoot, urlDir, assetsDir } = setupTmp('wide', {
     snapshot: SNAPSHOT_WIDE,
     skeleton: [{ trans2img: [91, 92] }],
+    keyIds: { titleIds: [1], descriptionIds: [], standaloneIds: [], listFlowIds: [2, 60], listFlowDeleteIds: [98] },
   });
   const script = path.resolve('script/screenshot_trans.mjs');
   try {
@@ -397,12 +411,16 @@ test('screenshot_trans.mjs: 超宽表格横向 reveal 截全 + 遮挡者隐藏 +
       { name: 'magenta', kind: 'count', rgb: [255, 0, 255] },
       { name: 'red', kind: 'count', rgb: [255, 0, 0] },
       { name: 'orange', kind: 'count', rgb: [255, 165, 0] },
+      { name: 'purple', kind: 'count', rgb: [75, 0, 130] },
+      { name: 'cyan', kind: 'count', rgb: [0, 255, 255] },
     ]);
     assert.equal(s.width, 5600, `2800 CSS × 2 应截全: ${s.width}`);
     assert.ok(s.beyondDensity > 0.01, `超视口带（x≥2600 设备px）内容密度>1%: ${s.beyondDensity}`);
     assert.equal(s.magenta, 0, `非亲族 fixed 导航应隐藏: ${s.magenta}`);
     assert.ok(s.red > 1000, `亲族红徽标应保留: ${s.red}`);
     assert.equal(s.orange, 0, `relative 负 margin 重叠块应隐藏: ${s.orange}`);
+    assert.equal(s.purple, 0, `非内容侧栏（双层共同路径）应隐藏: ${s.purple}`);
+    assert.equal(s.cyan, 0, `keep 子树内 delete 噪音（分类层独有路径）应隐藏: ${s.cyan}`);
   } finally {
     await closePixelStats();
     fs.rmSync(tmpRoot, { recursive: true, force: true });
@@ -559,6 +577,16 @@ test('screenshot_trans.mjs: 缺前置产物时报 error', async () => {
   assert.equal(r3.code, 1);
   assert.ok(JSON.parse(r3.stdout).reason.includes('步骤 2'));
   fs.rmSync(noLt.tmpRoot, { recursive: true, force: true });
+
+  // 缺步骤 3（3_key_ids.json）
+  const noKey = setupTmp('nokey', { keyIds: null });
+  const r4 = await runScript(process.execPath, [script, '--url', LIVE_URL], {
+    env: { U2M_WORKING_ROOT: noKey.tmpRoot },
+    timeoutMs: 60000,
+  });
+  assert.equal(r4.code, 1);
+  assert.ok(JSON.parse(r4.stdout).reason.includes('步骤 3'));
+  fs.rmSync(noKey.tmpRoot, { recursive: true, force: true });
 });
 
 // ── 图片下载（assets/images/）──
