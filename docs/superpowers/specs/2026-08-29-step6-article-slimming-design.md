@@ -142,10 +142,13 @@ data-color、data-actions-placement、data-state、data-selected——全是
    `script/lib/page-latex.js`（查 `annotation[encoding="application/x-tex"]` /
    `script[type=math/tex]` / 前邻 script），零改动。
 2. latex 为 null → **保留 MathML 原树**（兜底，分析文档要求）。
-3. 孪生识别（参考页已验证此结构）：el 的父 span **仅含 el 一个元素子**
-   （空白文本子忽略；katex-mathml）**且** 祖父 span **恰有两个元素子**、
-   其一为该父、另一为 span（katex-html 孪生）→ **祖父整体替换为 `$latex$`
-   文本节点**——孪生一并消灭，公式只出现一遍。
+3. 孪生识别（KaTeX 标准输出结构；注意参考页本身 0 个 katex 孪生——其
+   annotation 无 `encoding` 属性，规则② 在该页全部走第 4 条兜底，见修订
+   记录）：el 的父 span **仅含 el 一个元素子**（空白文本子忽略；
+   katex-mathml）**且** 祖父 span **恰有两个元素子**、其一为该父、另一
+   为 span（katex-html 孪生）**且父/祖父的直文本子纯空白**（终审补的
+   守卫——带文字的包装整体替换会丢文本，全分支唯一内容丢失路径）→
+   **祖父整体替换为 `$latex$` 文本节点**——孪生一并消灭，公式只出现一遍。
 4. 结构不匹配（裸 MathML、KaTeX 变体）→ 只替换 `<math>` 本身为 `$latex$`；
    孪生残留由规则⑥解体为文本，公式文本可能重复一次——与今日现状相同
    （参考页 9_markdown 证明 LLM 今天就能从双胞胎正确择一），冒烟验证。
@@ -176,7 +179,8 @@ mailto/tel 是对分析文档"非 http(s) 全剥"的**收窄**：短且 markdown
 ### 5.7 规则⑥ 空壳 span 拆壳（不动点）
 
 属性集 ⊆ {`data-u2m-id`} 的 span → 解包。**迭代到不动点**（嵌套 token
-span 逐层塌缩），防御性上限 10 轮、触顶记日志。span 限定——div 等块级
+span 逐层塌缩），防御性上限 10 轮（实测通常一轮收敛，上限纯防御性、
+静默）。span 限定——div 等块级
 元素可能承载 trans2img 模块边界，不碰。id 随元素消失只影响 6/7 血统：
 步骤 8 用 `1_snapshot`/live 的 id 对位，零影响（分析文档 §3.2 论证，
 探索复核）。保护集跳过。
@@ -246,6 +250,13 @@ linksStripped, mathReplaced, attrsDropped}`。agent 决策表按 `status`
 - 2026-08-29：初版。范围 = 分析文档 3.1/3.2/3.3/3.4/3.5 + 3.6 的
   data-\* 与空 svg（低透明度背景经用户决定不做；代码块占位符经用户决定
   后续单独立项，见 `.docs/2026-08-29-code-block-placeholder-design.md`）。
+- 2026-08-29（终审收口）：§5.3 孪生识别补"父/祖父直文本纯空白"守卫
+  （带文字包装整体替换丢文本——全分支唯一内容丢失路径，merge 前必修，
+  随附夹具锁定与"key 的 math 照换"第二档测试）；§5.3 措辞纠正——参考页
+  0 个 katex 孪生（annotation 无 `encoding` 属性，规则② 在该页零命中、
+  公式由步骤 7 转录，与改造前一致；是否扩 `__u2mLatexText` 选择器接受
+  无 encoding 的 annotation 留作用户决策）；§5.7 去掉未实现的"触顶记
+  日志"。终审其余 14 项递延 minor 裁定 ride。
 - 2026-08-29（Task 1 实施时）：§4.2 border-image 行收紧——实测
   `border: 0px solid` 在 CSSOM 展开为 17 个 longhand，无条件按值删
   border-image-\* 会破坏实边框的简写序列化；改为"四边全 void 时连残影
