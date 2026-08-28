@@ -34,8 +34,12 @@ test('log: 走 stderr 不污染 stdout', async () => {
 });
 
 test('debug: 默认静默，U2M_DEBUG 时输出到 stderr 且带耗时前缀', async () => {
-  // 默认（未设 U2M_DEBUG）：无输出
-  const off = await node("m.debug('调试信息'); m.emit({status:'ok'}, 0)");
+  // 默认（未设 U2M_DEBUG）：无输出。用空串覆盖而非 delete——runScript 内部
+  // 是 { ...process.env, ...env } 合并，只能覆值不能删键；用户终端调试时
+  // 导出的 U2M_DEBUG=1 会渗进子进程，而 contract.mjs 按真值判定，空串即静默
+  const off = await runScript(process.execPath,
+    ['-e', `import('${mod}').then(m => { m.debug('调试信息'); m.emit({status:'ok'}, 0) })`],
+    { env: { U2M_DEBUG: '' } });
   assert.equal(off.stdout, '{"status":"ok"}\n');
   assert.equal(off.stderr, '', '未设 U2M_DEBUG 时 debug 应静默');
 
