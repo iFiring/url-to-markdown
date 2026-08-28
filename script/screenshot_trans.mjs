@@ -42,11 +42,12 @@
  *      A 侧也未命中的 id → error（骨架与视图不匹配）。折叠模块（手风琴
  *      收起等）两侧同为隐藏态——每个 id 截图前先跑 page-reveal-hidden.js
  *      强制展开（只覆写正在隐藏的属性，可见时零改动；签名在展开前算好，
- *      不受影响），截图前双层排除：分类层 page-exclude-noncontent.js 每页一次（keep
- *      = titleIds∪descriptionIds∪standaloneIds∪listFlowIds∪trans2img id，
+ *      不受影响）。截图循环之前另有双层排除：分类层
+ *      page-exclude-noncontent.js 每页一次（keep =
+ *      titleIds∪descriptionIds∪standaloneIds∪listFlowIds∪trans2img id，
  *      隐藏集 = id 全集 − keep − keep 祖先 − keep 子孙，并入
  *      listFlowDeleteIds，保优先；visibility:hidden 零重排），几何层
- *      page-reveal-hidden.js 逐 id 三段（纵向展开 + 横向裁剪 reveal +
+ *      即上述 page-reveal-hidden.js 逐 id 三段（纵向展开 + 横向裁剪 reveal +
  *      非亲族遮挡者隐藏——fixed/sticky 一律、其余盒相交即藏，亲族保留）；
  *      首选页盒无效或截图失败（有界超时 10s，不整页挂死）换
  *      另一页再试，仍失败汇总 error 列出 id。live 页与 1_snapshot

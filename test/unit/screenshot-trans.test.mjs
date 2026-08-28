@@ -355,8 +355,8 @@ test('screenshot_trans.mjs: 条目全部 id 结构性无盒时报 error 指明�
 // 普通盒裁剪（视口传播形态测不到 bug，见 spec §1）；.wrap 再叠一层
 // overflow-x:auto（宽表格站点的标准写法）。表 2800px 超视口（1280）。
 // 品红 fixed 假导航×2 横跨表格区域（非亲族 → 遮挡者隐藏）；
-// 红徽标在表内（亲族 absolute → 保留）；橙色 relative 负 margin 块压在
-// 表上（非亲族、非 fixed → 泛化相交规则隐藏）
+// 红徽标在表内（亲族 absolute → 保留）；非 fixed 的 relative 负 margin
+// 橙色重叠块压在表上（未打标——分类层盲视，仅几何层泛化相交规则可藏）
 const wideCells = (bg) =>
   `<td style="width: 100px; height: 40px; border: 1px solid rgb(120, 120, 120); background: ${bg}">cell</td>`.repeat(28);
 const SNAPSHOT_WIDE = `<!DOCTYPE html>
@@ -380,7 +380,7 @@ const SNAPSHOT_WIDE = `<!DOCTYPE html>
 <tr><td colspan="28" style="height: 40px; border: 1px solid rgb(120, 120, 120); background: rgb(225, 235, 250)"><span data-u2m-id="95" style="position: absolute; top: 200px; left: 300px; width: 60px; height: 60px; background: rgb(255, 0, 0); z-index: 9999"></span></td></tr>
 </table>
 </div>
-<div data-u2m-id="96" style="position: relative; margin-top: -120px; height: 60px; background: rgb(255, 165, 0); z-index: 50"></div>
+<div style="position: relative; margin-top: -120px; height: 60px; background: rgb(255, 165, 0); z-index: 50"></div>
 <p data-u2m-id="60">结尾段落。</p>
 </body></html>`;
 

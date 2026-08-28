@@ -24,7 +24,7 @@ test('page-exclude-noncontent.js: 函数可被 evaluate 格式调用', () => {
 
 // 矩阵夹具：
 //   #1 keep 标题（子孙 #2 保、#8 delete 在子树内→藏）
-//   #3 非内容侧栏（→藏），内含 #9 显式 visibility:visible（穿透→一并藏）
+//   #3 非内容侧栏（→藏），内含未打标子代 span（显式 visibility:visible，穿透→一并藏，不计入 hidden 计数）
 //   #4 非内容包装（→藏），内含 #5 delete（→藏）
 //   #6 delete 但同时是 keep #7 的祖先（保优先→保），#7 keep（→保）
 const MATRIX_HTML = `<!DOCTYPE html><html><body>
