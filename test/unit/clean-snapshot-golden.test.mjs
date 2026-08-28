@@ -6,9 +6,10 @@ import os from 'node:os';
 import { runScript } from '../helpers/run-script.mjs';
 import { urlToDirName } from '../../script/lib/env.mjs';
 
-// 带样式版 golden 基线：步骤 2 重构（2026-08-27 极致简化）的硬约束是
-// 2_clean_style_snapshot.html 与 2_long_text.json 与 golden 逐字节一致、
-// 步骤 4-9 零影响（golden 已含 2026-08-28 的 meta charset 注入行）。
+// 带样式版 golden 基线：钉住 2_clean_style_snapshot.html 与 2_long_text.json
+// 的逐字节形态（golden 已含 2026-08-28 的 meta charset 注入行、astro 解包
+// 两趟共享与 styled 属性白名单——见 2026-08-27 spec 修订记录）。styled 产物
+// 按设计流进步骤 4-7，本基线防的是这些简化规则的意外回退与漂移。
 // 每个夹具一个具名测试：article-1 失败不再遮蔽 clean-simplify。
 for (const name of ['article-1', 'clean-simplify']) {
   test(`golden: ${name} 带样式版与恢复清单逐字节一致`, async () => {

@@ -546,7 +546,9 @@ test('K2: 属性白名单——八属性存活，href/src/aria/style 等删净�
     }
     assert.ok(!/tabindex|draggable/.test(div), `白名单外属性应删净: ${div}`);
     assert.ok(!cleaned.includes('lang='), 'html lang 应删（白名单外）');
-    assert.ok(styled.includes('href="https://example.com/x"') && styled.includes('data-1p-ignore'), '带样式版不受影响');
+    // 2026-08-28 起 styled 趟有自己的属性白名单：href 留（URL 源）、data-1p-ignore 删
+    assert.ok(styled.includes('href="https://example.com/x"'), '带样式版保留 href（URL 源）');
+    assert.ok(!styled.includes('data-1p-ignore'), '带样式版 data-* 脚手架属性应删净');
   } finally { cleanup(); }
 });
 
@@ -654,7 +656,9 @@ test('R4+R5: astro 包装解包；安全位置空白删除、行内间空白保�
     // 行内相邻文本/元素之间的空白保留
     const inline = cleaned.match(/<p data-u2m-id="9">([\s\S]*?)<\/p>/)[1];
     assert.ok(inline.includes('x <a') && inline.includes('> z'), `行内间空白应保留: ${JSON.stringify(inline)}`);
-    assert.ok(styled.includes('<astro-island'), '带样式版不受影响');
+    // 2026-08-28 起 astro 解包两趟共享：带样式版同样解包（脚手架不流进步骤 4-7）
+    assert.ok(!/<astro-[a-z]/.test(styled), '带样式版 astro 包装同样解包');
+    assert.ok(styled.includes('data-u2m-id="3"') && styled.includes('data-u2m-id="5"'), '带样式版子元素上提保留');
   } finally { cleanup(); }
 });
 
@@ -751,6 +755,114 @@ test('K8: <title> 不 token 化——长中文标题保留作步骤 3 识别线�
     assert.ok(cleaned.includes('<title>提示缓存使用指南与最佳实践完全详解手册</title>'), 'title 原文应保留，不折叠为 token');
     assert.ok(!/<title>\{\{/.test(cleaned), 'title 内不应出现 run token');
     assert.ok(styled.includes('提示缓存使用指南与最佳实践完全详解手册'), '带样式版不受影响');
+  } finally { cleanup(); }
+});
+
+test('S1: astro- 前缀解包提升至两趟——带样式版同样解包，LONG_TEXT 编号不受影响', async () => {
+  // 2026-08-28 起 K4 从清洗版独占提升为两趟共享：带样式版是步骤 4-7 的输入源，
+  // astro 脚手架（含巨量 props 属性）曾一路流进 6_article.html（LLM 输入）。
+  // 枚举扩展为 astro- 前缀匹配——该前缀是框架保留命名空间，static-slot 变体一并解包。
+  const longZh = '这是一段放在岛屿里的超长中文文本，用于验证占位编号不受解包扰动。';
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-u2m-id="1">
+    <astro-island data-u2m-id="2" component-url="/x.js" props="{&quot;a&quot;:1}"><p data-u2m-id="3">${longZh}</p></astro-island>
+    <astro-slot data-u2m-id="4"><span data-u2m-id="5">槽内容</span></astro-slot>
+    <astro-static-slot data-u2m-id="6"><em data-u2m-id="7">静态槽</em></astro-static-slot>
+    <p data-u2m-id="8">正文段落。</p>
+  </div>
+</body></html>`;
+  const { out, cleaned, styled, cleanup } = await runClean(snapshot, 's1-astro-styled');
+  try {
+    // 两版都无 astro- 前缀标签（文本节点里的 < 会被序列化转义，开标签匹配不会误报）
+    assert.ok(!/<astro-[a-z]/.test(styled), '带样式版 astro- 前缀标签应解包');
+    assert.ok(!/<astro-[a-z]/.test(cleaned), '清洗版 astro- 前缀标签应解包（既有行为不回退）');
+    // 包装 id 弃置、子元素上提
+    assert.ok(!styled.includes('data-u2m-id="2"') && !styled.includes('data-u2m-id="4"') && !styled.includes('data-u2m-id="6"'), '包装自身 id 随包装弃置');
+    for (const [id, what] of [['3', '岛内 p'], ['5', 'slot span'], ['7', 'static-slot em'], ['8', '正文 p']]) {
+      assert.ok(styled.includes(`data-u2m-id="${id}"`), `${what} 带样式版上提保留`);
+    }
+    // 巨型脚手架属性随包装消失
+    assert.ok(!styled.includes('component-url') && !styled.includes('props='), 'astro 脚手架属性随包装消失');
+    // 岛内长文本仍正常占位、编号从 1 起（解包不增删文本节点、文档序不变）
+    assert.ok(styled.includes('{{LONG_TEXT_1|'), '岛内长文本占位编号从 1 起');
+    assert.equal(JSON.parse(fs.readFileSync(out.longText, 'utf8'))[1], longZh, '恢复清单内容完整');
+  } finally { cleanup(); }
+});
+
+test('S2: 带样式版属性白名单——22 个内容/级联属性存活，脚手架属性删净，<style> 豁免', async () => {
+  // 带样式版保留集 = clean K2 八属性 + style/href/src/width/height（juice 输入、
+  // 步骤 7 链接/图片 URL 源、img 权重信号）+ 内容信号属性（colspan/rowspan/
+  // start/aria-label/data-src/srcset/datetime/open/lang——跨格表格、ol 起始
+  // 编号、icon-only 可达名、懒加载 URL、details 展开态、语言信号）。
+  // <style> 标签整体豁免（media 等级联线索），注入的 meta charset 在白名单
+  // 之后、天然存活。
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title><style data-astro-raw="1" media="screen">.x{color:red}</style></head>
+<body>
+  <div data-u2m-id="1">
+    <a data-u2m-id="2" href="https://example.com/x" target="_blank" rel="noopener" aria-label="链接说明" data-v-1234abcd>链接文本</a>
+    <img data-u2m-id="3" src="https://example.com/i.png" alt="示意图" width="640" height="360" srcset="i@2x.png 2x" loading="lazy" data-src="lazy.png">
+    <div data-u2m-id="4" style="display:grid" role="button" type="button" hidden="true" id="anchor" data-language="python" class="keep-me" tabindex="0" draggable="true" lang="zh-CN">内容</div>
+    <table data-u2m-id="5"><tr><td data-u2m-id="6" colspan="2" rowspan="3">单元格</td></tr></table>
+    <ol data-u2m-id="7" start="5"><li data-u2m-id="8">条款</li></ol>
+    <details data-u2m-id="9" open><summary data-u2m-id="10">细节</summary></details>
+    <time data-u2m-id="11" datetime="2026-08-28">8月28日</time>
+  </div>
+</body></html>`;
+  const { styled, cleanup } = await runClean(snapshot, 's2-styled-attrs');
+  try {
+    const a = styled.match(/<a data-u2m-id="2"[^>]*>/)[0];
+    assert.ok(a.includes('href="https://example.com/x"'), `href 应保留（步骤 7 链接源）: ${a}`);
+    assert.ok(a.includes('aria-label="链接说明"'), `aria-label 应保留（icon-only 可达名）: ${a}`);
+    assert.ok(!/target|rel=|data-v-/.test(a), `a 的脚手架属性应删净: ${a}`);
+    const img = styled.match(/<img data-u2m-id="3"[^>]*>/)[0];
+    for (const attr of ['src="https://example.com/i.png"', 'alt="示意图"', 'width="640"', 'height="360"', 'srcset="i@2x.png 2x"', 'data-src="lazy.png"']) {
+      assert.ok(img.includes(attr), `img 白名单属性 ${attr} 应保留: ${img}`);
+    }
+    assert.ok(!img.includes('loading'), `img 的 loading 应删净: ${img}`);
+    const div = styled.match(/<div data-u2m-id="4"[^>]*>/)[0];
+    for (const attr of ['style="display:grid"', 'role="button"', 'type="button"', 'hidden="true"', 'id="anchor"', 'data-language="python"', 'class="keep-me"', 'lang="zh-CN"']) {
+      assert.ok(div.includes(attr), `白名单属性 ${attr} 应保留: ${div}`);
+    }
+    assert.ok(!/tabindex|draggable/.test(div), `白名单外属性应删净: ${div}`);
+    const td = styled.match(/<td data-u2m-id="6"[^>]*>/)[0];
+    assert.ok(td.includes('colspan="2"') && td.includes('rowspan="3"'), `跨格信号应保留（步骤 7 判复杂表格→trans2img）: ${td}`);
+    assert.ok(styled.includes('<ol data-u2m-id="7" start="5"'), 'ol start 应保留（起始编号）');
+    assert.ok(/<details data-u2m-id="9" open/.test(styled), 'details open 应保留（展开态）');
+    assert.ok(styled.includes('datetime="2026-08-28"'), 'time datetime 应保留（日期原文）');
+    // <style> 标签豁免：media 等级联线索与自身属性整体保留
+    assert.ok(/<style[^>]*media="screen"/.test(styled), '<style> 的 media 属性应豁免保留');
+    assert.ok(/<style[^>]*data-astro-raw/.test(styled), '<style> 标签属性整体豁免');
+    assert.ok(styled.includes('.x{color:red}'), '<style> 文本保留');
+    // html lang 保留（extract_article 照抄语言信号）；meta charset 注入在白名单之后
+    assert.ok(/<html lang="zh-CN">/.test(styled), 'html lang 应保留（语言信号，步骤 6 照抄）');
+    assert.ok(/<head><meta charset="utf-8">/.test(styled), 'meta charset 注入在白名单后仍存活');
+  } finally { cleanup(); }
+});
+
+test('S3: <style> 选择器引用的属性动态保留——未引用的 data-* 照删', async () => {
+  // 回归（code-review F2）：白名单静态删 data-theme 等曾断 juice 级联——
+  // article-1 实测丢 45 条 border/background/display 声明。规则：白名单执行
+  // 前扫 <style> 文本收集 attribute-selector 引用的属性名，引用即保留
+  // （data-theme/data-width/[open]/Vue scoped data-v-* 一并覆盖），未引用照删。
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title>
+<style>.card[data-theme="dark"]{border:1px solid #000}h1[data-v-abc123]{font-weight:700}</style>
+</head>
+<body>
+  <div data-u2m-id="1">
+    <p data-u2m-id="2" class="card" data-theme="dark" data-unref="x">深色卡片</p>
+    <h1 data-u2m-id="3" data-v-abc123>标题</h1>
+  </div>
+</body></html>`;
+  const { styled, cleanup } = await runClean(snapshot, 's3-selector-attrs');
+  try {
+    const p = styled.match(/<p data-u2m-id="2"[^>]*>/)[0];
+    assert.ok(p.includes('data-theme="dark"'), `选择器引用的 data-theme 应保留（juice 级联依赖）: ${p}`);
+    assert.ok(!p.includes('data-unref'), `未被选择器引用的 data-* 应照删: ${p}`);
+    assert.ok(styled.includes('data-v-abc123'), 'Vue scoped data-v-*（被 [data-v-abc123] 选择器引用）应保留');
   } finally { cleanup(); }
 });
 

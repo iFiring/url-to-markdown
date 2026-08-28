@@ -9,14 +9,14 @@ importers:
   .:
     dependencies:
       juice:
-        specifier: ^12.1.2
+        specifier: 12.1.2
         version: 12.1.2
       playwright:
-        specifier: ^1.49.0
+        specifier: 1.62.1
         version: 1.62.1
       ws:
-        specifier: ^8.18.0
-        version: 8.21.3
+        specifier: 8.18.0
+        version: 8.18.0
 
 packages:
 
@@ -204,8 +204,8 @@ packages:
     resolution: {integrity: sha512-QaKxh0eNIi2mE9p2vEdzfagOKHCcj1pJ56EEHGQOVxp8r9/iszLUUV7v89x9O1p/T+NlTM5W7jW6+cz4Fq1YVg==}
     engines: {node: '>=18'}
 
-  ws@8.21.3:
-    resolution: {integrity: sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw==}
+  ws@8.18.0:
+    resolution: {integrity: sha512-8VbfWfHLbbwu3+N6OKsOMpBdT4kXPDDB9cJk2bJ6mh9ucxdlnNvH1e+roYkKmN9Nxw2yjz7VzeO9oOz2zJ04Pw==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -409,4 +409,4 @@ snapshots:
 
   whatwg-mimetype@4.0.0: {}
 
-  ws@8.21.3: {}
+  ws@8.18.0: {}

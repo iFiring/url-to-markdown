@@ -88,7 +88,8 @@ working/                 # 运行时工作目录（gitignore，仅保留骨架�
 - **长文本占位**：步骤 2 把长文本替换为 `{{LONG_TEXT_k|n_chars}}` / `{{LONG_TEXT_k|n_words}}`，agent 只见结构不见内容，步骤 8 机械还原——语义判断不携带全文，token 可控。占位只写入带样式版（`2_clean_style_snapshot.html`）与 `2_long_text.json` 恢复清单；清洗版是终端视图、不含 LONG_TEXT 占位（见「清洗版瘦身」）。
 - **trans2img live 重渲染截图**：`data-u2m-id` 按文档序编号是 prepare 后 DOM 的纯函数——步骤 8 按 `--url` 参数重渲染原页面并重注入同一套标记脚本，两次渲染结构一致则 id 精确对位；与快照侧逐 id 签名严校验（假阴性偏向，宁降级不出错图），失配或重渲染失败自动降级快照渲染兜底，`source` 字段如实标注来源。
 - **核心参数单一事实源**：`<url-name>` 由 `lib/env.mjs urlToDirName(url)` 派生（非 `[A-Za-z0-9.-]` → `_`，超 120 字符截断 + sha256 前 8 位后缀）——步骤 0 的 init.sh 与步骤 1-9 的工作目录派生共用同一实现，保证两处目录名恒一致。
-- **清洗版瘦身**：步骤 2 对 `2_clean_snapshot.html` 走「单页两趟 + 九条机械规则」（K1 class 语义过滤、K2 属性白名单——URL/aria 清空、astro 解包、hidden 裸属性折叠 `{{n;构成}}`、table/pre 折叠、行内 run token 化、空白压缩），零样式计算、无检测管线；清洗版是终端视图（唯一消费者是步骤 3，不含 LONG_TEXT 占位），一切还原走带样式版——正文与带样式版零丢失
+- **清洗版瘦身**：步骤 2 对 `2_clean_snapshot.html` 走「单页两趟 + 九条机械规则」（K1 class 语义过滤、K2 属性白名单——URL/aria 清空、hidden 裸属性折叠 `{{n;构成}}`、table/pre 折叠、行内 run token 化、空白压缩），零样式计算、无检测管线；清洗版是终端视图（唯一消费者是步骤 3，不含 LONG_TEXT 占位），一切还原走带样式版——正文与带样式版零丢失
+- **astro 解包两趟共享 + 带样式版属性白名单**：`astro-` 前缀脚手架标签（astro-island/slot 等，携带巨量序列化 props）两趟都解包——脚手架不再流进步骤 4-7（曾实测 `6_article.html` 残留 59 个 astro 标签、27KB 属性噪音）；带样式版另有属性白名单（22 静态属性 = clean K2 八属性 + style/href/src/width/height + 内容信号 colspan/rowspan/start/aria-label/data-src/srcset/datetime/open/lang，`<style>` 标签豁免）+ **`<style>` 选择器引用属性的动态保留集**（删属性即断 juice 级联——曾实测 article-1 丢 45 条 border/background/display 声明）。主流框架中仅 Astro 在 SSR 产物留持久化自定义标签（Vue/Nuxt/Qwik 等走属性或 script，由白名单/步骤 1 覆盖），解包集钉在 `astro-` 前缀、永不外溢到真实 web component（GitHub/YouTube 的内容型自定义标签）
 
 ### 环境变量
 
@@ -116,7 +117,7 @@ pnpm test:all             # 全量
 |------|------|------|
 | 项目结构 | 目录 / package / `init.sh` 环境自检 | 已完成 |
 | 步骤 1 `snapshot.mjs` | 登录检测 + 渐进滚动 + 虚拟列表检测 + 全保真快照（单 chromium 贯穿） | 已完成 |
-| 步骤 2 `clean_snapshot.mjs` | 结构清洗（单页两趟：带样式版保真 + 清洗版 K1-K9 极致瘦身） | 已完成 |
+| 步骤 2 `clean_snapshot.mjs` | 结构清洗（单页两趟：astro 解包共享 + 带样式版属性白名单 + 清洗版 K1-K9 极致瘦身） | 已完成 |
 | 步骤 3 / 7 agent 语义操作 | key_ids 识别 / markdown 骨架生成（SKILL.md 手册） | 已完成 |
 | 步骤 4-6 | 样式裁剪 → juice 内联 → 文章视图 | 已完成 |
 | 步骤 8 `screenshot_trans.mjs` | 占位符还原 + 图片下载 + trans2img 截图 | 已完成 |

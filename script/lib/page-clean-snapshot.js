@@ -2,20 +2,26 @@
  * 步骤 2 页面内清洗函数。在浏览器 evaluate 中执行；clean_snapshot.mjs 对
  * 同一快照跑两趟，cfg.mode ∈ 'styled'（缺省）| 'clean' 分叉：
  *   styled 趟 —— 共享结构清洗 + 长文本占位（{{LONG_TEXT_k|n_chars|n_words}}）
- *                + SVG 瘦身为壳（仅留 id/class/data-u2m-id）→ 带样式版 +
- *                恢复清单（供步骤 4 裁剪与后续占位还原）
+ *                + SVG 瘦身为壳（仅留 id/class/data-u2m-id）+ 属性白名单
+ *                （22 静态属性 + <style> 选择器引用的动态属性集，<style> 豁免）
+ *                → 带样式版 + 恢复清单（供步骤 4 裁剪与后续占位还原）
  *   clean 趟   —— 共享结构清洗 + SVG 清空/样式剥除 + 瘦身规则 → 清洗版
- * 两趟共享同一套结构清洗（步骤 1-8：link/meta/base 删除、骨架删除、播放器
- * 删除、控件删除、空元素级联 + KEEP_EMPTY）。
+ * 两趟共享同一套结构清洗（步骤 1-9：link/meta/base 删除、骨架删除、播放器
+ * 删除、控件删除、空元素级联 + KEEP_EMPTY、astro- 前缀解包）。
  *
  * 终端视图不变量：清洗版（clean 趟产物）是步骤 3 LLM 的终端视图——不再含
  * LONG_TEXT 占位符（一切还原走带样式版与 2_long_text.json）；隐藏折叠不走
  * juice 样式检测，由 K5 以 hidden 裸属性零样式计算实现。
  *
  * 清洗版瘦身规则 K1-K9（全部就位）：class 语义过滤 K1 → 属性白名单 K2 →
- * SVG 清空 K3 → astro 解包 K4 → hidden 裸属性折叠 K5 → table 折叠 K6 →
- * pre 折叠 K7 → 行内 run token 化 K8（title 容器豁免——title 是步骤 3 的
- * 识别线索，不 token 化）→ 空白压缩 K9；详见各步骤注释与 spec。
+ * SVG 清空 K3 → astro 解包 K4（两趟共享，见共享段步骤 9）→ hidden 裸属性
+ * 折叠 K5 → table 折叠 K6 → pre 折叠 K7 → 行内 run token 化 K8（title 容器
+ * 豁免——title 是步骤 3 的识别线索，不 token 化）→ 空白压缩 K9；详见各
+ * 步骤注释与 spec。
+ *
+ * 带样式版简化（2026-08-28）：astro 解包两趟共享 + styled 属性白名单——
+ * 带样式版是步骤 4-7 的输入源，脚手架标签与属性（astro props、data-v-*、
+ * aria-* 等）曾一路流进 6_article.html（步骤 7 LLM 输入）。
  */
 function __u2mCleanSnapshot(cfg) {
   cfg = cfg || {};
@@ -100,6 +106,17 @@ function __u2mCleanSnapshot(cfg) {
     return KEEP_EMPTY[el.tagName.toUpperCase()] === 1;
   }
 
+  // 属性剥除 helper（svg 瘦身 / styled 白名单 / K2 三处共用）：keep(name)
+  // 返回 false 的属性删除。统一"先快照属性名再删"——迭代 NamedNodeMap 的
+  // 同时删属性会跳项
+  function stripAttrsExcept(el, keep) {
+    var names = [];
+    for (var j = 0; j < el.attributes.length; j++) names.push(el.attributes[j].name);
+    for (var j = 0; j < names.length; j++) {
+      if (!keep(names[j])) el.removeAttribute(names[j]);
+    }
+  }
+
   function hasContent(el) {
     var nodes = el.childNodes;
     for (var i = 0; i < nodes.length; i++) {
@@ -125,6 +142,25 @@ function __u2mCleanSnapshot(cfg) {
   for (var i = empties.length - 1; i >= 0; i--) {
     var emp = empties[i];
     if (emp.parentNode) emp.parentNode.removeChild(emp);
+  }
+
+  // astro 包装解包（K4，两趟共享）：astro- 前缀是 Astro 框架保留的脚手架
+  //    命名空间（astro-island/astro-slot/astro-static-slot 及未来变体），按前缀
+  //    匹配而非枚举；子元素原样上提，包装自身属性（含其 data-u2m-id 与巨量
+  //    序列化 props）弃置。两趟共享的意义：步骤 3 引用集来自清洗版（从不引用
+  //    包装 id），带样式版同步解包使两版 id 集对齐，脚手架不再流进步骤 4-7
+  //    （曾实证 6_article.html 残留 59 个 astro 标签、27KB props 噪音）。
+  //    置于空元素级联之后（与原清洗版执行顺序一致，清洗版输出逐字节不变）、
+  //    K5-K8 折叠之前——折叠统计的是解包后的真实子树。
+  var astroWraps = [];
+  var allShared = document.querySelectorAll('*');
+  for (var i = 0; i < allShared.length; i++) {
+    if (allShared[i].tagName.toLowerCase().indexOf('astro-') === 0) astroWraps.push(allShared[i]);
+  }
+  for (var i = astroWraps.length - 1; i >= 0; i--) {
+    var wrap = astroWraps[i];
+    while (wrap.firstChild) wrap.parentNode.insertBefore(wrap.firstChild, wrap);
+    wrap.parentNode.removeChild(wrap);
   }
 
   // ---- mode 分叉：styled 趟到占位 + SVG 瘦身即返回；clean 趟继续剥样式 ----
@@ -186,14 +222,46 @@ function __u2mCleanSnapshot(cfg) {
       while (svg.firstChild) {
         svg.removeChild(svg.firstChild);
       }
-      var attrNames = [];
-      for (var j = 0; j < svg.attributes.length; j++) attrNames.push(svg.attributes[j].name);
-      for (var j = 0; j < attrNames.length; j++) {
-        var name = attrNames[j];
-        if (name !== 'id' && name !== 'class' && name !== 'data-u2m-id') {
-          svg.removeAttribute(name);
-        }
-      }
+      stripAttrsExcept(svg, function (nm) {
+        return nm === 'id' || nm === 'class' || nm === 'data-u2m-id';
+      });
+    }
+
+    // 11. 属性白名单（styled 趟）：只留级联、还原链与内容信号所需——
+    //     (a) clean K2 八属性 + style（juice 输入）/href/src（步骤 7 链接与
+    //     图片 URL 源、步骤 8 下载源）/width/height（img 权重信号，与 style
+    //     声明互补）；
+    //     (b) 内容信号：colspan/rowspan（步骤 7 判复杂跨格表格→trans2img）、
+    //     start（ol 起始编号）、aria-label（icon-only 控件/链接的唯一可达名）、
+    //     data-src/srcset（懒加载图片 URL 通道——步骤 1 只规范 img[src]）、
+    //     datetime（time 日期原文）、open（details 展开态）、lang（语言信号，
+    //     步骤 6 照抄 <html lang>）；
+    //     (c) 动态集：<style> 选择器引用的属性——删属性即断 juice 级联
+    //     （article-1 曾实测丢 45 条 border/background/display 声明，
+    //     [data-theme]/[data-width]/Vue scoped [data-v-*] 一并覆盖）。
+    //     其余（target/rel/tabindex/loading/未被引用的 data-* 等）删净。
+    //     <style> 标签整体豁免——media 等属性是 juice 级联线索。置于 meta
+    //     charset 注入之前，注入的 charset 属性天然存活。
+    var STYLED_ATTR_KEEP = { 'class': 1, 'id': 1, 'style': 1, 'data-u2m-id': 1, 'data-language': 1,
+      'hidden': 1, 'type': 1, 'role': 1, 'alt': 1, 'href': 1, 'src': 1, 'width': 1, 'height': 1,
+      'colspan': 1, 'rowspan': 1, 'start': 1, 'aria-label': 1, 'data-src': 1, 'srcset': 1,
+      'datetime': 1, 'open': 1, 'lang': 1 };
+    var styleSelAttrs = {};
+    var styleEls = document.querySelectorAll('style');
+    for (var i = 0; i < styleEls.length; i++) {
+      var cssText = styleEls[i].textContent || '';
+      var SEL_ATTR_RE = /\[([a-zA-Z][a-zA-Z0-9_-]*)/g;
+      var selM;
+      while ((selM = SEL_ATTR_RE.exec(cssText))) styleSelAttrs[selM[1].toLowerCase()] = 1;
+    }
+    var allStyled = document.querySelectorAll('*');
+    for (var i = 0; i < allStyled.length; i++) {
+      var sel = allStyled[i];
+      if (sel.tagName.toUpperCase() === 'STYLE') continue;
+      stripAttrsExcept(sel, function (nm) {
+        var n = nm.toLowerCase();
+        return STYLED_ATTR_KEEP[n] === 1 || styleSelAttrs[n] === 1;
+      });
     }
 
     // 注入 <meta charset="utf-8">（仅带样式版）：head 内 meta 已被共享清洗删除，而
@@ -281,28 +349,13 @@ function __u2mCleanSnapshot(cfg) {
   for (var i = 0; i < allEls.length; i++) {
     var el2 = allEls[i];
     var isSvg = el2.tagName && el2.tagName.toLowerCase() === 'svg';
-    var attrNames = [];
-    for (var j = 0; j < el2.attributes.length; j++) attrNames.push(el2.attributes[j].name);
-    for (var j = 0; j < attrNames.length; j++) {
-      var name = attrNames[j].toLowerCase();
-      if (isSvg) {
-        if (name !== 'data-u2m-id') el2.removeAttribute(attrNames[j]);
-      } else {
-        if (!ATTR_KEEP[name]) el2.removeAttribute(attrNames[j]);
-      }
-    }
+    stripAttrsExcept(el2, function (nm) {
+      var n = nm.toLowerCase();
+      return isSvg ? n === 'data-u2m-id' : ATTR_KEEP[n] === 1;
+    });
   }
 
-  // K4. astro 包装解包（仅清洗版）：astro-island/astro-slot 是框架脚手架标签，
-  //     子元素原样上提，包装自身属性（含其 data-u2m-id）弃置——清洗版不可见
-  //     即不可引用。带样式版保留（步骤 6 取子树不受影响）。置于 K5-K7 折叠
-  //     之前，折叠统计的是解包后的真实子树。
-  var wraps = document.querySelectorAll('astro-island, astro-slot');
-  for (var i = wraps.length - 1; i >= 0; i--) {
-    var wrap = wraps[i];
-    while (wrap.firstChild) wrap.parentNode.insertBefore(wrap.firstChild, wrap);
-    wrap.parentNode.removeChild(wrap);
-  }
+  // （K4 astro 解包已上移至两趟共享段——见上方步骤 9；本趟不再重复执行）
 
   // K5. hidden 裸属性折叠（仅清洗版）：HTML 规范里属性存在即隐藏（任意值），
   //     无需样式计算。最外层折叠、子树清空放构成 token；根保留 id 可引用，

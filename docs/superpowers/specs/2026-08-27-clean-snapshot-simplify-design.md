@@ -243,3 +243,12 @@ U2M_DEBUG：删 juice 耗时行与护栏警告行；保留/新增一行汇总
 ## 11. 修订记录
 
 - 2026-08-28（实施后修订）：带样式版 head 注入 `<meta charset="utf-8">`。动机：extract_styled 以 file:// 加载 `2_clean_style_snapshot.html`，共享清洗删除全部 meta 后无 charset 声明，解码依赖 chromium 嗅探——曾把 UTF-8 嗅成 Windows-1252 产出双重编码乱码（参考产物 4/5/6 实证）。§2「带样式版逐字节不变」约束按此修订：差异仅注入行。同批终审遗留清理：K6/K7 跳过带 hidden 的 table/pre（K5 独占折叠，防计数 token 被覆盖）、CSS-modules 尾段须含数字（`_tab_active` 类纯语义类保留）、K8 跳过已分离子树（runCount 不虚高）、行内标签集 K8/K9 合一、golden 测试按夹具拆分并改 Buffer 字节比较。
+- 2026-08-28（二次修订）：带样式版进一步简化——astro 解包两趟共享 + styled 属性白名单。动机：K4 原仅清洗版执行，带样式版残留的 astro-island/astro-slot（参考页 66 个标签、33KB 序列化 props）一路流进 `6_article.html`（步骤 7 LLM 输入，实测 59 个标签、27KB 噪音）。§2「带样式版逐字节不变」约束再次修订：差异 = astro 解包 + 属性白名单 + 既有 charset 注入行。两项规则：
+  - **astro 解包提升至共享段**（空元素级联后、mode 分叉前），枚举改 `astro-` 前缀匹配（框架保留命名空间，astro-island/slot/static-slot 及未来变体；永不外溢到真实 web component）。包装整体弃置含其 data-u2m-id——步骤 3 引用集来自清洗版从不引用包装 id，两版 id 集就此对齐。清洗版输出逐字节不变（新旧代码对参考页 414KB 产物 cmp 实证）；`2_long_text.json` 逐字节不变（解包不增删文本节点、文档序不变，golden 守护）。
+  - **styled 属性白名单**（SVG 瘦身后、charset 注入前）：保留 13 属性 = clean K2 八属性 + style（juice 输入）/ href / src（步骤 7 URL 源）/ width / height（img 权重信号）；`<style>` 标签整体豁免（media 等级联线索）；data-v-*、aria-*、tabindex、target/rel、loading/srcset、lang 等删净。K1 class 过滤不迁移（juice 靠 class 匹配选择器）；K5-K9 折叠不迁移（带样式版是唯一还原源）。
+  golden `*.styled.html` 按此再生成；参考页实测 styled 版 1461167 → 1386078 字节（-75KB），`6_article.html` astro 清零、剥标签后正文文本与改造前逐字相同（内容零丢失）。
+  背景查证：主流框架中仅 Astro 在 SSR 产物留持久化自定义脚手架标签——Vue/Nuxt（属性 + `<NuxtIsland>` 为编译期组件）、React/Next（RSC payload 在 script，步骤 1 已剥）、Qwik（`q:` 属性）、Deno Fresh（HTML 注释占位）、htmx/Alpine/Livewire（纯属性）均由属性白名单或步骤 1 覆盖。
+- 2026-08-28（三次修订，code-review 复核驱动）：styled 属性白名单两处收紧。
+  - **动态选择器集**：初版静态删 data-theme/data-width/aria-*/lang 等属性，但保留的 `<style>` 规则以 attribute-selector 引用它们——删属性即断 juice 级联（article-1 实测丢 45 条 border/background/display/font-weight 声明，恰是步骤 5 finalize 白名单保留、喂步骤 7 的信号）。修复：白名单执行前扫 `<style>` 文本收集 `[…` 引用的属性名（`/\[([a-zA-Z][a-zA-Z0-9_-]*)/`），引用即保留（Vue scoped `[data-v-*]` 同覆盖）、未引用照删。修复后 article-1 juice 四项声明计数与改造前基线完全一致（156/236/216/119）。
+  - **内容信号属性补集**（9 项）：colspan/rowspan（步骤 7 判「复杂跨行跨列表格→trans2img」的分派信号）、start（ol 起始编号）、aria-label（icon-only 控件/链接的唯一可达名——参考页实丢 21 处）、data-src/srcset（懒加载图片 URL 通道，步骤 1 只规范 img[src]）、datetime（time 日期原文）、open（details 展开态）、lang（extract_article 照抄 `<html lang>` 语言信号）。静态保留集 13 → 22。
+  - 附带：属性剥除循环三处（svg 瘦身/styled 白名单/K2）合一为 `stripAttrsExcept(el, keep)` helper；K2 重构经真实页 clean 逐字节 cmp 验证零漂移。golden `*.styled.html` 随之再生成（article-1 恢复 data-theme/lang/aria-label）。

@@ -2,7 +2,7 @@
 /**
  * clean_snapshot.mjs —— 步骤 2：结构清洗。单页两趟（同一 chromium 页面对
  * 同一 1_snapshot.html 先后渲染两次，cfg.mode 分叉）：
- *   趟 1（styled）结构清洗 + 长文本占位 + SVG 瘦身
+ *   趟 1（styled）结构清洗 + astro 解包 + 长文本占位 + SVG 瘦身 + 属性白名单
  *     → 2_clean_style_snapshot.html（供步骤 4 裁剪）+ 2_long_text.json
  *   趟 2（clean）结构清洗 + K1-K9 机械规则瘦身
  *     → 2_clean_snapshot.html（终端视图）
@@ -12,7 +12,7 @@
  * 清洗版是终端视图：不含 LONG_TEXT 占位符（一切还原走带样式版与恢复清单），
  * 步骤 3 的 LLM 在清洗版上读结构、不再需要二次还原。
  *
- * 共同结构清洗（两趟一致；实现在 lib/page-clean-snapshot.js，共享步骤 1-8）：
+ * 共同结构清洗（两趟一致；实现在 lib/page-clean-snapshot.js，共享步骤 1-9）：
  *   【整体删除】与正文结构无关的噪声，连子树一起删：
  *     - 文档级噪声：link / meta / base（title 保留，作步骤 3 识别线索）
  *     - 页面骨架：nav / footer / form 及 role="navigation"/"contentinfo"/"form"
@@ -32,18 +32,24 @@
  *     排版 br/hr/wbr、矢量/公式 svg/math、pre、h1-h6、表格结构 table/
  *     caption/colgroup/col/thead/tbody/tfoot/tr/td/th（删空单元格/列定义
  *     会让行列错位，单元格内的噪声照删、留空壳）
+ *   【astro 解包】astro- 前缀标签（框架保留命名空间：astro-island/
+ *     astro-slot/astro-static-slot 及变体）子元素上提、包装弃置——两趟共享
  *
  * 两趟分叉（page-clean-snapshot.js 内 mode 分支）：
  *   - styled 趟：保留 style 属性与 <style> 标签，SVG 瘦身为壳
  *     （仅留 id/class/data-u2m-id）；长文本占位（纯空白文本与 svg/style
  *     子树文本不占位）——中文（含汉字）字符数 > 16 → {{LONG_TEXT_k|n_chars}}，
- *     英文（不含汉字）单词数 > 12 → {{LONG_TEXT_k|n_words}}
+ *     英文（不含汉字）单词数 > 12 → {{LONG_TEXT_k|n_words}}；属性白名单
+ *     （22 静态属性 = clean K2 八属性 + style/href/src/width/height + 内容
+ *     信号 colspan/rowspan/start/aria-label/data-src/srcset/datetime/open/
+ *     lang，外加 <style> 选择器引用的动态属性集；<style> 标签豁免）——
+ *     target/rel/tabindex/loading/未被选择器引用的 data-* 等删净
  *   - clean 趟：删 style 属性与 <style> 标签，SVG 剥成裸 <svg></svg> 壳；
  *     K1-K9 机械规则全部就位——K1 class 语义过滤、K2 属性白名单（href/src/
- *     aria 全删）、K3 SVG 清空、K4 astro 解包、K5 hidden 裸属性折叠
- *     {{n;构成}}、K6/K7 table/pre 折叠 {{table>n}}/{{pre>code>n}}、K8 行内
- *     run token 化（title 容器豁免——title 是步骤 3 识别线索，不 token 化）、
- *     K9 空白压缩
+ *     aria 全删）、K3 SVG 清空、K4 astro 解包（两趟共享）、K5 hidden 裸属性
+ *     折叠 {{n;构成}}、K6/K7 table/pre 折叠 {{table>n}}/{{pre>code>n}}、
+ *     K8 行内 run token 化（title 容器豁免——title 是步骤 3 识别线索，
+ *     不 token 化）、K9 空白压缩
  *
  * stdout 输出（有且仅有一行 JSON，日志一律走 stderr）:
  *   {"status":"ok","cleanedSnapshot":"...","styledSnapshot":"...",
