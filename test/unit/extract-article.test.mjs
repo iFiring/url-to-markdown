@@ -490,3 +490,32 @@ test('extract_article.mjs: 瘦身规则③④——纯符号 button/空 svg 删�
   assert.equal(out.slim.buttonsUnwrapped, 1, '有文本 button 解包 1 个（24）');
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
+
+// 瘦身规则⑤：scheme ∉ {http,https,mailto,tel} 的 <a> 解包（codex:/
+// javascript: 等应用协议——参考页 codex:// 单个 ~1KB URL-encoded prompt
+// 曾漏进 9_markdown.md）；http(s)/mailto 与无协议（相对/#锚点）保留
+const HREF_JUICED = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>链接</title></head><body><h1 data-u2m-id="1">标题</h1><div data-u2m-id="4"><p data-u2m-id="5"><a href="codex://threads/new?prompt=%E6%8F%90%E7%A4%BA" data-u2m-id="30">深问</a>、<a href="https://example.com/a" data-u2m-id="31">正常链</a>、<a href="mailto:x@example.com" data-u2m-id="32">邮件</a>、<a href="javascript:void(0)" data-u2m-id="33">假链</a>、<a href="#anchor" data-u2m-id="34">锚点</a>。</p></div></body></html>`;
+
+test('extract_article.mjs: 瘦身规则⑤——非白名单协议 <a> 解包、合法链接保留', async () => {
+  const { tmpRoot, urlDir } = setupTmp('href', { titleIds: [1], descriptionIds: [], listFlowIds: [4] });
+  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), HREF_JUICED);
+  const script = path.resolve('script/extract_article.mjs');
+  const r = await runScript(process.execPath, [script, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+
+  const html = fs.readFileSync(out.article, 'utf8');
+  assert.ok(!html.includes('codex:'), 'codex 协议 href 应随解包消失');
+  assert.ok(!html.includes('javascript:'), 'javascript 协议应解包');
+  assert.ok(html.includes('深问'), '解包后文本应保留');
+  assert.ok(html.includes('href="https://example.com/a"'), 'https 链接应保留');
+  assert.ok(html.includes('mailto:x@example.com'), 'mailto 应保留');
+  assert.ok(html.includes('href="#anchor"'), '#锚点（无 scheme）应保留');
+  assert.equal(out.slim.linksStripped, 2, '应解包 2 个（codex + javascript）');
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});

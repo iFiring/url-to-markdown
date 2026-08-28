@@ -116,6 +116,22 @@ function __u2mSlimArticle(protectedIds) {
     stats.buttonsUnwrapped++;
   }
 
+  // ⑤ 非白名单协议 href 剥除：scheme ∉ {http,https,mailto,tel} 的 <a>
+  // 解包。mailto/tel 短且 markdown 合法，保留；无 scheme（相对/#锚点）
+  // 不匹配正则、保留
+  var SCHEME_KEEP = /^(https?|mailto|tel)$/i;
+  var links = document.querySelectorAll('a[href]');
+  for (var i = 0; i < links.length; i++) {
+    var el = links[i];
+    if (!el.isConnected || isProtected(el)) continue;
+    var href = el.getAttribute('href');
+    var m = /^([a-zA-Z][a-zA-Z0-9+.\-]*):/.exec(href);
+    if (m && !SCHEME_KEEP.test(m[1])) {
+      unwrap(el);
+      stats.linksStripped++;
+    }
+  }
+
   return {
     html: '<!DOCTYPE html>\n' + document.documentElement.outerHTML,
     attrsDropped: stats.attrsDropped,
