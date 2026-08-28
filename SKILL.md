@@ -110,7 +110,7 @@ node <skill-root>/script/clean_snapshot.mjs --url <url>
 #### 任务（提示词/Prompt）
 
 - 必须严格按照手册 `<skill-root>/references/analyze_html_guide.md` 的要求完成任务
-- 期间你只能调用 "Read/Write" 工具（读取 `2_clean_snapshot.html`，写入 `3_key_ids.json`），其他文件和你完全无关
+- 当前任务期间你只能使用 "Read/Write" 工具（读取 `2_clean_snapshot.html`，写入 `3_key_ids.json`），其他文件和你完全无关
 - 当前工作路径(<url-working-path>): `/path/to/XXX`
 
 #### 后续
@@ -163,7 +163,7 @@ node <skill-root>/script/extract_article.mjs --url <url>
 #### 任务（提示词/Prompt）
 
 - 必须严格按照手册 `<skill-root>/references/markdown_skeleton_guide.md` 的要求完成任务
-- 期间你只能调用 "Read/Write" 工具（读取 `6_article.html`，写入 `7_skeleton.json`），其他文件和你完全无关
+- 当前任务期间你只能使用 "Read/Write" 工具（读取 `6_article.html`，写入 `7_skeleton.json`），其他文件和你完全无关
 - 当前工作路径(<url-working-path>): `/path/to/XXX`
 
 #### 后续
