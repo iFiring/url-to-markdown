@@ -239,6 +239,7 @@ test('compute_styles.mjs: data-style 等后缀属性不被引号处理波及', a
 // 块内再嵌 @media（md:p-5 形态）与递归嵌套 layer。
 const LAYERED_EXTRACT = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>layer 解包</title><style>
+@property --tw-border-style { syntax: "*"; inherits: false; initial-value: solid }
 @layer theme, base, components, utilities;
 @layer theme { :root { --radius-lg: 8px; --color-border: #d4d4d8; --color-surface: #fafafa } }
 @layer utilities {
@@ -248,7 +249,7 @@ const LAYERED_EXTRACT = `<!DOCTYPE html>
   .bg-surface { background-color: var(--color-surface) }
   .p-4 { padding: 1rem }
   @media (min-width: 768px) { .md\\:p-5 { padding: 1.25rem } }
-  @layer nested { .nested-deep { border-width: 2px } }
+  @layer nested { .nested-deep { border-width: 2px; border-style: solid } }
 }
 .direct { outline: 1px solid blue }
 </style></head><body>
@@ -270,10 +271,11 @@ test('compute_styles.mjs: @layer 内的工具类规则解包后正常内联（Ta
   const juiced = fs.readFileSync(out.juiceStyles, 'utf8');
   // figure 的工具类样式全部内联进来。:root 变量定义随层解包提升到顶层后，
   // juice 会把已定义的 var() 解析为具体值（border-radius: 8px、
-  // border-color: #d4d4d8 → CSSOM 归一 rgb(…）；未定义的 var（--tw-border-style
-  // 真实站点由 @property 注册、夹具未注册）由函数值真实化链路以浏览器计算值
-  // 替换（无注册值时计算为 none）——结构信号「带边框圆角的盒子」对步骤 7
-  // LLM 成立
+  // border-color: #d4d4d8 → CSSOM 归一 rgb(…）；--tw-border-style 以
+  // @property 注册 initial-value solid（真实 Tailwind 形态——零值过滤会把
+  // style:none 的整边三件全删，不注册则计算为 none、边框断言对象被清理）
+  // 由函数值真实化链路以浏览器计算值替换为 solid——结构信号「带边框
+  // 圆角的盒子」对步骤 7 LLM 成立
   assert.ok(/border-radius:\s*8px/.test(juiced), 'figure 应内联 border-radius（已解析变量值）');
   assert.ok(/border-width:\s*1px/.test(juiced), 'figure 应内联 border-width');
   assert.ok(/border-color:\s*rgb\(212, ?212, ?216\)/.test(juiced), 'figure 应内联 border-color（已解析变量值）');
@@ -390,6 +392,64 @@ test('compute_styles.mjs: 隐藏声明剥离——收起元素展开、自然 di
   assert.ok(tagOf(6).includes('border') || tagOf(6).includes('rgb('), `内联收起元素的边框应保留: ${tagOf(6)}`);
   // 可见正文不受影响
   assert.ok(juiced.includes('正文段落'), '可见正文保留');
+
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+// 零值声明过滤：值等于全元素初始值的声明删除（写与不写等价的非信息）。
+// 边框按"边"语义：style none（显式或缺省——缺省即 initial none）或
+// width ∈ {0px, 0} → 该边三件全删——宽 0 或样式 none 的边无论其余声明
+// 什么都不可见；style 实值 + width 缺省 = medium+solid 可见边框，保留。
+// 参考页 1,946 个元素的 style 值只有 border: 0px solid（Tailwind preflight
+// 被 juice 内联的产物）。
+const ZERO_VOID_EXTRACT = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>零值</title><style>body{transition:opacity .2s}</style></head><body>
+<div style="border: 0px solid" data-u2m-id="1">零边框</div>
+<div style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none" data-u2m-id="2">medium加none</div>
+<div style="border: 1px solid red" data-u2m-id="3">实边框</div>
+<div style="border: solid" data-u2m-id="4">style实值width缺省</div>
+<div style="border-width: 5px" data-u2m-id="5">width有值style缺省</div>
+<div style="border-radius: 0px; background-color: rgb(249, 249, 249)" data-u2m-id="6">零圆角实背景</div>
+<div style="border-radius: 8px" data-u2m-id="7">实圆角</div>
+<div style="box-shadow: none" data-u2m-id="8">阴影none</div>
+<div style="background-color: transparent" data-u2m-id="9">透明背景</div>
+<div style="background-color: rgba(0, 0, 0, 0)" data-u2m-id="10">alpha零背景</div>
+<div style="overflow: visible" data-u2m-id="11">溢出可见</div>
+<div style="overflow: auto" data-u2m-id="12">滚动裁剪</div>
+<div style="flex: 0 0 auto" data-u2m-id="13">flex信号</div>
+<div style="outline: 1px solid blue" data-u2m-id="14">实outline</div>
+<div style="outline-width: 0px; outline-style: solid" data-u2m-id="15">零宽outline</div>
+</body></html>`;
+
+test('compute_styles.mjs: 零值声明过滤——等于全元素初始值的声明删除、实信号保留', async () => {
+  const { tmpRoot } = setupTmp('zero-void', { extractHtml: ZERO_VOID_EXTRACT });
+  const r = await runScript(process.execPath, [scriptPath, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+
+  const juiced = fs.readFileSync(out.juiceStyles, 'utf8');
+  const tagOf = (id) => juiced.match(new RegExp(`<[^>]*data-u2m-id="${id}"[^>]*>`))?.[0] || '';
+
+  // 只剩零值声明的元素：style 属性整体消失
+  for (const id of [1, 2, 5, 8, 9, 10, 11, 15]) {
+    assert.ok(!tagOf(id).includes('style='), `id ${id} 零值声明应清空 style 属性: ${tagOf(id)}`);
+  }
+  // 实信号保留
+  assert.ok(tagOf(3).includes('1px solid'), `实边框应保留: ${tagOf(3)}`);
+  assert.ok(tagOf(4).includes('border: solid') || tagOf(4).includes('border-style: solid'),
+    `style 实值 + width 缺省（medium+solid 可见）应保留: ${tagOf(4)}`);
+  assert.ok(tagOf(6).includes('rgb(249, 249, 249)') && !tagOf(6).includes('border-radius'),
+    `零圆角删、实背景留: ${tagOf(6)}`);
+  assert.ok(tagOf(7).includes('border-radius: 8px'), `非零圆角应保留: ${tagOf(7)}`);
+  assert.ok(tagOf(12).includes('overflow: auto'), `overflow:auto 应保留: ${tagOf(12)}`);
+  assert.ok(tagOf(13).includes('flex: 0 0 auto'), `flex 布局信号不是零值: ${tagOf(13)}`);
+  assert.ok(tagOf(14).includes('outline') && tagOf(14).includes('1px'),
+    `实 outline 应保留: ${tagOf(14)}`);
+  assert.equal(out.styledCount, 7, `应剩 7 个带样式元素（3/4/6/7/12/13/14），实得 ${out.styledCount}`);
 
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
