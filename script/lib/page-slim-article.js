@@ -54,6 +54,41 @@ function __u2mSlimArticle(protectedIds) {
     }
   }
 
+  // ② MathML→LaTeX：annotation 有 LaTeX 源才替换（__u2mLatexText 来自
+  // page-latex.js，由 extract_article.mjs 组合注入同一作用域；独立
+  // evaluate 时优雅降级跳过）。KaTeX 双胞胎结构识别：父 span 仅含 math
+  // 一个元素子（空白文本子忽略）且祖父恰两元素子、另一为 span →
+  // 祖父整体替换（katex-html 孪生一并消灭）；结构不匹配只换 <math>，
+  // 孪生残留由规则⑥解体为文本（同今日现状，LLM 能正确择一）。
+  // 不受保护集约束——保真替换保留内容只换形态
+  function elementChildren(el) {
+    var out = [];
+    for (var n = el.firstChild; n; n = n.nextSibling) if (n.nodeType === 1) out.push(n);
+    return out;
+  }
+  var maths = document.querySelectorAll('math');
+  for (var i = 0; i < maths.length; i++) {
+    var el = maths[i];
+    if (!el.parentNode) continue;
+    var latex = typeof __u2mLatexText === 'function' ? __u2mLatexText(el) : null;
+    if (!latex) continue;
+    var target = el;
+    var p = el.parentElement;
+    var g = p ? p.parentElement : null;
+    if (p && g && p.tagName === 'SPAN' && g.tagName === 'SPAN') {
+      var pKids = elementChildren(p);
+      var gKids = elementChildren(g);
+      var twin = null;
+      for (var k = 0; k < gKids.length; k++) if (gKids[k] !== p) twin = gKids[k];
+      if (pKids.length === 1 && pKids[0] === el && gKids.length === 2 &&
+          twin && twin.tagName === 'SPAN') {
+        target = g;
+      }
+    }
+    target.parentNode.replaceChild(document.createTextNode('$' + latex + '$'), target);
+    stats.mathReplaced++;
+  }
+
   return {
     html: '<!DOCTYPE html>\n' + document.documentElement.outerHTML,
     attrsDropped: stats.attrsDropped,

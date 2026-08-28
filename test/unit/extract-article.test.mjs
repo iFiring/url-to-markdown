@@ -425,3 +425,36 @@ test('extract_article.mjs: 瘦身规则①——data-* 只留 data-u2m-id 与 da
   );
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
+
+// 瘦身规则② MathML→LaTeX：KaTeX 双胞胎（父 span 仅含 math、祖父恰两
+// 元素子其一为父另一为 span）整体替换消灭 katex-html 重复；裸 math 只换
+// <math> 本身；无 annotation 保留原树。$…$ 单美元内联形式（与参考页
+// 9_markdown 既有约定一致）。annotation 里的实体（&lt;）经 textContent
+// 解码、序列化时重新转义
+const MATH_JUICED = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>公式</title></head><body><h1 data-u2m-id="1">标题</h1><div data-u2m-id="4"><p data-u2m-id="5">设 <span data-u2m-id="60"><span data-u2m-id="61"><math data-u2m-id="62"><semantics><mrow><mi>M</mi></mrow><annotation encoding="application/x-tex">M</annotation></semantics></math></span><span data-u2m-id="63"><span data-u2m-id="64">M</span></span></span> 为最小长度，</p><p data-u2m-id="8">裸公式 <math data-u2m-id="70"><semantics><mrow><mi>L</mi></mrow><annotation encoding="application/x-tex">L &lt; M</annotation></semantics></math> 成立，</p><p data-u2m-id="9">无源公式 <math data-u2m-id="80"><mrow><mi>x</mi></mrow></math> 保留。</p></div></body></html>`;
+
+test('extract_article.mjs: 瘦身规则②——MathML 按三档替换为 $LaTeX$', async () => {
+  const { tmpRoot, urlDir } = setupTmp('math', { titleIds: [1], descriptionIds: [], listFlowIds: [4] });
+  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), MATH_JUICED);
+  const script = path.resolve('script/extract_article.mjs');
+  const r = await runScript(process.execPath, [script, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+
+  const html = fs.readFileSync(out.article, 'utf8');
+  assert.ok(html.includes('设 $M$ 为最小长度'),
+    `KaTeX 双胞胎应整体替换为 $M$: ${html.slice(html.indexOf('<body'))}`);
+  for (const id of [60, 61, 62, 63, 64]) {
+    assert.ok(!html.includes(`data-u2m-id="${id}"`), `katex 包装 id ${id} 应随整体替换消失`);
+  }
+  assert.ok(html.includes('裸公式 $L &lt; M$ 成立'), '裸 math 应替换为 LaTeX 文本');
+  assert.ok(!html.includes('data-u2m-id="70"'), '裸 math 的 id 应消失');
+  assert.ok(html.includes('<math data-u2m-id="80"'), '无 annotation 的 math 应保留原树');
+  assert.equal(out.slim.mathReplaced, 2, '应替换 2 处（双胞胎整体 + 裸 math）');
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});

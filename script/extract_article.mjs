@@ -97,6 +97,7 @@ async function main() {
 
   const pageExtractFn = await readSharedScript('page-extract-article.js');
   const pageSlimFn = await readSharedScript('page-slim-article.js');
+  const latexFn = await readSharedScript('page-latex.js');
 
   let browser;
   try {
@@ -129,8 +130,10 @@ async function main() {
       ...(keyIds.descriptionIds || []),
       ...(keyIds.standaloneIds || []),
     ];
+    // page-latex.js 的 __u2mLatexText 以函数声明进入同一作用域，
+    // page-slim-article.js 规则② 闭包内可见
     const { html: slimHtml, ...slimStats } = await page.evaluate(
-      `(${pageSlimFn})(${JSON.stringify(protectedIds)})`
+      `(function(){ ${latexFn} return (${pageSlimFn})(${JSON.stringify(protectedIds)}); })()`
     );
 
     const articlePath = path.join(dir, '6_article.html');
