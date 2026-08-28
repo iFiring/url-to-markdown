@@ -58,13 +58,21 @@ function __u2mSlimArticle(protectedIds) {
   // page-latex.js，由 extract_article.mjs 组合注入同一作用域；独立
   // evaluate 时优雅降级跳过）。KaTeX 双胞胎结构识别：父 span 仅含 math
   // 一个元素子（空白文本子忽略）且祖父恰两元素子、另一为 span →
-  // 祖父整体替换（katex-html 孪生一并消灭）；结构不匹配只换 <math>，
-  // 孪生残留由规则⑥解体为文本（同今日现状，LLM 能正确择一）。
+  // 祖父整体替换（katex-html 孪生一并消灭）；孪生整体替换要求 p/g
+  // 直文本纯空白——防带文字包装的整体替换丢文本，守卫失败回退只换
+  // <math> 本体；结构不匹配只换 <math>，孪生残留由规则⑥解体为文本
+  // （同今日现状，LLM 能正确择一）。
   // 不受保护集约束——保真替换保留内容只换形态
   function elementChildren(el) {
     var out = [];
     for (var n = el.firstChild; n; n = n.nextSibling) if (n.nodeType === 1) out.push(n);
     return out;
+  }
+  function onlyWsText(el) {
+    for (var n = el.firstChild; n; n = n.nextSibling) {
+      if (n.nodeType === 3 && n.nodeValue.trim() !== '') return false;
+    }
+    return true;
   }
   var maths = document.querySelectorAll('math');
   for (var i = 0; i < maths.length; i++) {
@@ -81,7 +89,7 @@ function __u2mSlimArticle(protectedIds) {
       var twin = null;
       for (var k = 0; k < gKids.length; k++) if (gKids[k] !== p) twin = gKids[k];
       if (pKids.length === 1 && pKids[0] === el && gKids.length === 2 &&
-          twin && twin.tagName === 'SPAN') {
+          twin && twin.tagName === 'SPAN' && onlyWsText(p) && onlyWsText(g)) {
         target = g;
       }
     }

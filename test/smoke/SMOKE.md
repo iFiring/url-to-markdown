@@ -56,7 +56,7 @@
 
 验证 manifest 分派与步骤 3 产物（SVG 语义等价性人工评审）。
 
-## 2. 文章视图瘦身（步骤 5 零值过滤 + 步骤 6 瘦身 pass）
+## 4. 文章视图瘦身（步骤 5 零值过滤 + 步骤 6 瘦身 pass）
 
 URL：https://developers.openai.com/api/docs/guides/prompt-caching（复用既有步骤 0-4 产物，1_snapshot 未重跑）
 
