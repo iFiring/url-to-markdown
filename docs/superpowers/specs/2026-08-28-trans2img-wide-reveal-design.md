@@ -39,7 +39,7 @@ spike 程序化验证数据（openai 文档页，production 等价 before → �
 - **隐藏集** = 页内 `data-u2m-id` 全集 − keep − keep 的祖先 − **keep 的子孙**，再并入 `listFlowDeleteIds`（LLM 明判的菜单/导航/广告/推荐噪音，keep 子树内的也藏——藏的是分类已定性的噪音；`visibility` 留空位不破坏模块形状）。**保优先**：任何来源的隐藏候选与 keep 或 keep 祖先重叠时一律不藏（步骤 3 理论上可产出 delete id 是 keep 祖先的坏分类，藏了会把 keep 元素连坐藏空）；
   - **keep 的子孙不藏**是关键保护：模块/正文**内部**元素是模块视觉本身，naive 补集会把模块内部挖空；
   - keep 的祖先是容器与背景，藏了就毁模块；
-- 落地手段 `visibility:hidden !important`：与 DOM 删除像素等价、零重排（模块位置不变、boundingBox 择优不受影响）、页 A（无 JS 的 file://）同样适用。visibility 穿透问题按构造封闭：被藏元素子树内不可能有 keep 元素（有则它是 keep 的祖先，已在排除之列）；
+- 落地手段 `visibility:hidden !important`：与 DOM 删除像素等价、零重排（模块位置不变、boundingBox 择优不受影响）、页 A（无 JS 的 file://）同样适用。keep 穿透按构造封闭：被藏元素子树内不可能有 keep 元素（有则它是 keep 的祖先，已在排除之列）；子代**显式** `visibility:visible` 规则的穿透与几何层同式处理——对被藏元素的可见后代一并覆写 `visibility:hidden`；
 - 执行时机：页 A 在 gotoSettled 后、页 B 在 prepare 重标记 + 签名计算**之后**、截图循环之前（visibility 不动 tag/children/textContent，签名不受影响）；
 - `3_key_ids.json` 缺失 → error（与 `1_snapshot.html` 同等的前置产物待遇）；
 - 返回 `{hidden, kept}` 计数，仅供 `U2M_DEBUG` 观测。
@@ -70,8 +70,8 @@ spike 程序化验证数据（openai 文档页，production 等价 before → �
 ### 3.5 返回值契约与调用侧
 
 ```js
-__u2mRevealHidden(id)      → { found, touched, wideTouched, occluders, box, boxless }
-__u2mExcludeNonContent(keepIds) → { hidden, kept }
+__u2mRevealHidden(id)                  → { found, touched, wideTouched, occluders, box, boxless }
+__u2mExcludeNonContent(keepIds, deleteIds) → { hidden, kept }
 ```
 
 `touched` 语义不变（纵向计数）；`wideTouched`（横向覆写处数）与 `occluders`（隐藏的遮挡者数，含相交命中）仅供 `U2M_DEBUG` 观测——调用侧在现有 debug 块后各加一行。调用侧新增：读 `3_key_ids.json` 拼 keep 集 → 存在的页各执行一次分类层（页 B live 整体失败为 null 时自然跳过；debug 一行 `{hidden, kept}`）→ 循环内逐 id 三段手术。流程零变化。两层都写 `visibility:hidden`，重复覆写幂等无冲突。
@@ -89,7 +89,7 @@ __u2mExcludeNonContent(keepIds) → { hidden, kept }
 
 - **超宽裁剪夹具**：`html{overflow-x:auto} + body{overflow-x:hidden}` + 内部 `.wrap{overflow-x:auto;max-width:640px}` 装 2800px 表格 + 左右两条品红 `position:fixed; z-index:9999` 假导航横跨表格区域。**必须用真实盒裁剪形态**（见 §1）。
 - **亲族 fixed 夹具**：模块内 `position:fixed` 红色徽标（类比模块内吸顶表头）。
-- **分类层夹具**：快照含正文模块 + 带各自 `data-u2m-id` 的侧栏浮窗/推荐位（非 keep、非 keep 祖先），手写最小 `3_key_ids.json` 只标正文 → 断言浮窗特征像素 = 0、正文模块内容像素 > 阈值（完整未误伤）。
+- **分类层夹具**：快照含正文模块 + 带各自 `data-u2m-id` 的侧栏浮窗/推荐位（非 keep、非 keep 祖先），手写最小 `3_key_ids.json` 只标正文 → 断言浮窗特征像素 = 0、正文模块内容像素 > 阈值（完整未误伤）。`page-exclude-noncontent.js` 另配直接 evaluate 的**语义单测**（真实浏览器 setContent + 注入脚本，断言保护规则矩阵：keep 自身/祖先/子孙保、非内容藏、delete 在 keep 子树内藏、delete 为 keep 祖先时保优先）。
 
 断言（`pixelStats` 辅助：产物 webp 装进 chromium canvas，逐像素统计——颜色匹配每通道 ±40 容差抗 webp 有损压缩；带密度 = 超视口带内与带内众色不同的像素占比）：
 
@@ -124,4 +124,4 @@ __u2mExcludeNonContent(keepIds) → { hidden, kept }
 ## 8. 修订记录
 
 - 2026-08-28：初稿。方案经 spike 实证（`.temp/spike-wide-reveal.mjs`，gitignored throwaway：live 页复现空白 → 横向 reveal 修复 → 遮挡两方案对照）与库调研（satori / dom-to-image-more / dom-to-svg / dom2svg / node-html-to-image / html-to-image / modern-screenshot，结论见 §2 非目标）后定稿。
-- 2026-08-28：二稿。并入两项决策：视口维持 1280×3000（iPad Air 竖屏 820×1180 方案否决，记入非目标）；非文章内容排除升级为**双层**——新增分类层 `page-exclude-noncontent.js`（keep 集 = 四类正文 id ∪ trans2img id；隐藏集 = id 全集 − keep − 祖先 − 子孙，并入 listFlowDeleteIds；visibility:hidden 落地），几何层（原 3.3）相交规则从仅 absolute 泛化到一切定位形态。章节重排：分类层为 3.1，三段手术顺延为 3.2-3.4，返回值契约并为 3.5。
+- 2026-08-28：二稿。并入两项决策：视口维持 1280×3000（iPad Air 竖屏 820×1180 方案否决，记入非目标）；非文章内容排除升级为**双层**——新增分类层 `page-exclude-noncontent.js`（keep 集 = 四类正文 id ∪ trans2img id；隐藏集 = id 全集 − keep − 祖先 − 子孙，并入 listFlowDeleteIds；visibility:hidden 落地），几何层（原 3.3）相交规则从仅 absolute 泛化到一切定位形态。章节重排：分类层为 3.1，三段手术顺延为 3.2-3.4，返回值契约并为 3.5。同日精化（写实施计划时）：分类层签名补 `deleteIds` 参；子代显式 `visibility:visible` 穿透与几何层同式覆写；测试计划补分类层语义单测。
