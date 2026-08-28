@@ -7,6 +7,7 @@ import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { runScript } from '../helpers/run-script.mjs';
 import { PIXEL_PNG } from '../helpers/assets.mjs';
+import { pixelStats, closePixelStats } from '../helpers/pixel-stats.mjs';
 import { urlToDirName } from '../../script/lib/env.mjs';
 
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
@@ -336,6 +337,76 @@ test('screenshot_trans.mjs: 条目全部 id 结构性无盒时报 error 指明�
   assert.ok(out.reason.includes('83'), `reason 应含条目 id: ${out.reason}`);
 
   fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+// ── 超宽裁剪 + 遮挡（spec §5 超宽裁剪夹具）──
+// 真实盒裁剪形态：html{overflow-x:auto} 让 body 的 overflow-x:hidden 作为
+// 普通盒裁剪（视口传播形态测不到 bug，见 spec §1）；.wrap 再叠一层
+// overflow-x:auto（宽表格站点的标准写法）。表 2800px 超视口（1280）。
+// 品红 fixed 假导航×2 横跨表格区域（非亲族 → 遮挡者隐藏）；
+// 红徽标在表内（亲族 absolute → 保留）；橙色 relative 负 margin 块压在
+// 表上（非亲族、非 fixed → 泛化相交规则隐藏）
+const wideCells = (bg) =>
+  `<td style="width: 100px; height: 40px; border: 1px solid rgb(120, 120, 120); background: ${bg}">cell</td>`.repeat(28);
+const SNAPSHOT_WIDE = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>超宽</title><base data-u2m-base="1" href="http://127.0.0.1:9/dead">
+<style>
+  html { overflow-x: auto; }
+  body { overflow-x: hidden; margin: 0; }
+  .wrap { overflow-x: auto; max-width: 640px; }
+</style></head><body>
+<h1 data-u2m-id="1">超宽模块测试</h1>
+<p data-u2m-id="2">正文段落。</p>
+<div style="position: fixed; top: 0; left: 0; width: 40px; height: 100%; background: rgb(255, 0, 255); z-index: 9999"></div>
+<div style="position: fixed; top: 0; right: 0; width: 40px; height: 100%; background: rgb(255, 0, 255); z-index: 9999"></div>
+<div class="wrap" data-u2m-id="91">
+<table data-u2m-id="92" style="width: 2800px; border-collapse: collapse; background: rgb(255, 255, 255)">
+<tr>${wideCells('rgb(200, 220, 240)')}</tr>
+<tr>${wideCells('rgb(225, 235, 250)')}</tr>
+<tr>${wideCells('rgb(200, 220, 240)')}</tr>
+<tr><td colspan="28" style="height: 40px; border: 1px solid rgb(120, 120, 120); background: rgb(225, 235, 250)"><span data-u2m-id="95" style="position: absolute; top: 200px; left: 300px; width: 60px; height: 60px; background: rgb(255, 0, 0); z-index: 9999"></span></td></tr>
+</table>
+</div>
+<div data-u2m-id="96" style="position: relative; margin-top: -120px; height: 60px; background: rgb(255, 165, 0); z-index: 50"></div>
+<p data-u2m-id="60">结尾段落。</p>
+</body></html>`;
+
+test('screenshot_trans.mjs: 超宽表格横向 reveal 截全 + 遮挡者隐藏 + 亲族保留', async () => {
+  const { tmpRoot, urlDir, assetsDir } = setupTmp('wide', {
+    snapshot: SNAPSHOT_WIDE,
+    skeleton: [{ trans2img: [91, 92] }],
+  });
+  const script = path.resolve('script/screenshot_trans.mjs');
+  try {
+    const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
+      env: { U2M_WORKING_ROOT: tmpRoot },
+      timeoutMs: 120000,
+    });
+    assert.equal(r.code, 0, `stderr: ${r.stderr}\nstdout: ${r.stdout}`);
+    const out = JSON.parse(r.stdout);
+    assert.equal(out.status, 'ok');
+    assert.equal(out.count, 2, '链上 91、92 各截一张');
+    assert.equal(out.source, 'snapshot', '死端口 → 快照兜底');
+
+    const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
+    assert.deepEqual(resolved, [{ trans2img: 'assets/trans/92.webp' }],
+      '表格 2800px 宽于 wrap 640px → 择优选 92');
+
+    const s = await pixelStats(path.join(assetsDir, 'trans', '92.webp'), [
+      { name: 'beyondDensity', kind: 'density', rect: [2600, 0, 99999, 99999] },
+      { name: 'magenta', kind: 'count', rgb: [255, 0, 255] },
+      { name: 'red', kind: 'count', rgb: [255, 0, 0] },
+      { name: 'orange', kind: 'count', rgb: [255, 165, 0] },
+    ]);
+    assert.equal(s.width, 5600, `2800 CSS × 2 应截全: ${s.width}`);
+    assert.ok(s.beyondDensity > 0.01, `超视口带（x≥2600 设备px）内容密度>1%: ${s.beyondDensity}`);
+    assert.equal(s.magenta, 0, `非亲族 fixed 导航应隐藏: ${s.magenta}`);
+    assert.ok(s.red > 1000, `亲族红徽标应保留: ${s.red}`);
+    assert.equal(s.orange, 0, `relative 负 margin 重叠块应隐藏: ${s.orange}`);
+  } finally {
+    await closePixelStats();
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
 });
 
 test('screenshot_trans.mjs: trans2img value 非法（旧格式/空数组/非整数）时报 error', async () => {

@@ -336,6 +336,12 @@ async function main() {
         if (rev.touched > 0) {
           debug(`trans2img ${id} 隐藏态强制展开（${srcLabel(page)}，覆写 ${rev.touched} 处）`);
         }
+        if (rev.wideTouched > 0) {
+          debug(`trans2img ${id} 横向裁剪 reveal（${srcLabel(page)}，覆写 ${rev.wideTouched} 处）`);
+        }
+        if (rev.occluders > 0) {
+          debug(`trans2img ${id} 遮挡者隐藏（${srcLabel(page)}，${rev.occluders} 个）`);
+        }
         // display:contents 透明包装：结构性无盒（与隐藏无关），截不出图——
         // 跳过该 id，视觉由链上其余 id 承载（择优自然落选它）
         if (rev.boxless) {
