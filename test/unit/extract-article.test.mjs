@@ -458,3 +458,35 @@ test('extract_article.mjs: 瘦身规则②——MathML 按三档替换为 $LaTeX
   assert.equal(out.slim.mathReplaced, 2, '应替换 2 处（双胞胎整体 + 裸 math）');
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
+
+// 瘦身规则③④：无文本/纯符号（/[\p{L}\p{N}]/u 不命中——⋮ 即此类）button
+// 与无文本 svg 整删（随 button 删除的内部 svg 不重复计数）；有文本
+// button（中文/字母数字）解包降级保留文本；保护集中的 button 不动
+const BUTTON_JUICED = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>按钮</title></head><body><h1 data-u2m-id="1">标题</h1><div data-u2m-id="4"><p data-u2m-id="5">正文</p><button data-u2m-id="20"><svg data-u2m-id="21"><path d="M0 0"/></svg></button><button data-u2m-id="22">⋮</button><svg data-u2m-id="28"><rect width="1"/></svg><button data-u2m-id="23">JavaScript</button><button data-u2m-id="24">查看答案</button></div></body></html>`;
+
+test('extract_article.mjs: 瘦身规则③④——纯符号 button/空 svg 删除、文本 button 解包、保护集跳过', async () => {
+  const { tmpRoot, urlDir } = setupTmp('button', { titleIds: [1], descriptionIds: [23], listFlowIds: [4] });
+  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), BUTTON_JUICED);
+  const script = path.resolve('script/extract_article.mjs');
+  const r = await runScript(process.execPath, [script, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+
+  const html = fs.readFileSync(out.article, 'utf8');
+  for (const id of [20, 21, 22, 28]) {
+    assert.ok(!html.includes(`data-u2m-id="${id}"`), `id ${id} 应删除`);
+  }
+  assert.ok(html.includes('data-u2m-id="23">JavaScript</button>'),
+    '保护集中的 button 应原样保留（不解包）');
+  assert.ok(!/<button[^>]*data-u2m-id="24"/.test(html), '有文本 button 应解包');
+  assert.ok(html.includes('查看答案'), '解包后文本应保留');
+  assert.equal(out.slim.buttonsRemoved, 2, '无文本/纯符号 button 删 2 个（20 图标钮 + 22 ⋮）');
+  assert.equal(out.slim.svgsRemoved, 1, '独立空 svg 删 1 个（21 随 button 走不重复计数）');
+  assert.equal(out.slim.buttonsUnwrapped, 1, '有文本 button 解包 1 个（24）');
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});

@@ -89,6 +89,33 @@ function __u2mSlimArticle(protectedIds) {
     stats.mathReplaced++;
   }
 
+  // ③ 无文本/纯符号 button 与无文本 svg 删除：textContent 无非空白文本、
+  // 或无任何字母数字（/[\p{L}\p{N}]/u 不命中——⋮/✕/× 等纯符号交互件，
+  // 参考页 7 个 ⋮ 溢出菜单实测即此类；中文与 GPT-5.6+ 等含字母数字者
+  // 走 ④）。svg 的 <text> 后代算文本——带文字的图标保留
+  function hasWordText(el) {
+    var t = (el.textContent || '').trim();
+    return t.length > 0 && (/\p{L}|\p{N}/u).test(t);
+  }
+  var interactive = document.querySelectorAll('button, svg');
+  for (var i = 0; i < interactive.length; i++) {
+    var el = interactive[i];
+    if (!el.isConnected || isProtected(el) || hasWordText(el)) continue;
+    if (el.parentNode) el.parentNode.removeChild(el);
+    if (el.tagName === 'BUTTON') stats.buttonsRemoved++;
+    else stats.svgsRemoved++;
+  }
+
+  // ④ 有文本 button 降级：解包上提子节点——按钮自身 style 弃置（包装铬
+  // 是装饰），内部文本/span 的样式保留；tab/手风琴标题的文本有信息量
+  var buttons = document.querySelectorAll('button');
+  for (var i = 0; i < buttons.length; i++) {
+    var el = buttons[i];
+    if (!el.isConnected || isProtected(el)) continue;
+    unwrap(el);
+    stats.buttonsUnwrapped++;
+  }
+
   return {
     html: '<!DOCTYPE html>\n' + document.documentElement.outerHTML,
     attrsDropped: stats.attrsDropped,
