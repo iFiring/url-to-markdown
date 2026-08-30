@@ -341,6 +341,30 @@ function __u2mCleanSnapshot(cfg) {
     else el.removeAttribute('class');
   }
 
+  // 表格形状预计算（供 K6）：网格列数依赖 colspan，而 K2 白名单会剥掉它——
+  // 必须在属性删除前从原始 DOM 计算行数/列数。结果挂元素 expando（非属性、
+  // 不序列化、不影响两版输出），K6 折叠时取用
+  function tableRowsCols(tb) {
+    var rows = 0, cols = 0;
+    var trs = tb.querySelectorAll('tr');
+    for (var i = 0; i < trs.length; i++) {
+      if (trs[i].closest('table') !== tb) continue;   // 行归属最近的 table
+      rows++;
+      var c = 0;
+      var cells = trs[i].cells;
+      for (var j = 0; j < cells.length; j++) {
+        var cs = parseInt(cells[j].getAttribute('colspan'), 10);
+        c += cs > 1 ? cs : 1;                         // colspan 展开为网格列
+      }
+      if (c > cols) cols = c;
+    }
+    return { rows: rows, cols: cols };
+  }
+  var shapeTables = document.querySelectorAll('table');
+  for (var i = 0; i < shapeTables.length; i++) {
+    shapeTables[i].__u2mTableShape = tableRowsCols(shapeTables[i]);
+  }
+
   // K2. 属性白名单（仅清洗版）：全文档只留 LLM 可理解的最小属性集；
   //     href/src/aria-*/style/tabindex 等一律删除——a/img 的 URL 就此清空。
   //     SVG 特殊处理：仅保留 data-u2m-id（id/class 等由 styled 趟保留，clean 趟删净）
@@ -394,20 +418,39 @@ function __u2mCleanSnapshot(cfg) {
     hiddenCount++;
   }
 
-  // K6. table 折叠（仅清洗版）：整树清空、只统计字数；步骤 7 从带样式版读全表。
+  // K6. table 折叠（仅清洗版）：整树清空、折叠为行列 token——行 = 本表自身的
+  //     <tr> 数（嵌套表格的行归属其最近的 table、不计入外层），列 = 各行
+  //     「单元格 colspan 之和」的最大值（网格列数而非单元格个数）；形状在 K2
+  //     前预计算（colspan 属性彼时尚在）。步骤 3 以行列规模判读表格；全表在
+  //     后续步骤从带样式版保真。
   //     带 hidden 的 table 由 K5 独占折叠（其构成 token 已就位），跳过防二次覆盖
   var tables = document.querySelectorAll('table');
   for (var i = 0; i < tables.length; i++) {
     var tb = tables[i];
     if (!tb.parentNode) continue;
     if (tb.hasAttribute('hidden')) continue;
-    var tsz = sizeSuffix(tb.textContent);
+    var shape = tb.__u2mTableShape;
     while (tb.firstChild) tb.removeChild(tb.firstChild);
-    tb.appendChild(document.createTextNode('{{table>' + tsz.n + '_' + tsz.unit + '}}'));
+    tb.appendChild(document.createTextNode('{{TABLE_TAG|' + shape.rows + '_rows|' + shape.cols + '_cols}}'));
   }
 
-  // K7. pre 折叠（仅清洗版）：data-language 从 code 壳提升到 pre；代码一律按字符数。
+  // K7. pre 折叠（仅清洗版）：data-language 从 code 壳提升到 pre；行数取两者较大：
+  //     换行切分（textContent trim 后按 \n 切分——高亮 span 是语法 token 不是行，
+  //     行分隔符总以文本节点存在：纯代码 / Prism / hljs / Shiki 全覆盖）与
+  //     div 行块数（编辑器式「每行一个 <div>」无换行文本节点，直接子 div 计数
+  //     兜底；容器 div 场景由换行法胜出、不虚增）。
   //     带 hidden 的 pre 由 K5 独占折叠（其构成 token 已就位），跳过防二次覆盖
+  function countPreLines(pre) {
+    var t = (pre.textContent || '').trim();
+    var nl = t ? t.split(/\n/).length : 0;
+    var shell = pre.querySelector('code') || pre;
+    var blocks = 0;
+    for (var i = 0; i < shell.childNodes.length; i++) {
+      var n = shell.childNodes[i];
+      if (n.nodeType === 1 && n.tagName === 'DIV') blocks++;
+    }
+    return Math.max(nl, blocks);
+  }
   var pres = document.querySelectorAll('pre');
   for (var i = 0; i < pres.length; i++) {
     var pre = pres[i];
@@ -417,9 +460,9 @@ function __u2mCleanSnapshot(cfg) {
     if (langShell && !pre.hasAttribute('data-language')) {
       pre.setAttribute('data-language', langShell.getAttribute('data-language'));
     }
-    var codeChars = (pre.textContent || '').trim().length;
+    var lines = countPreLines(pre);
     while (pre.firstChild) pre.removeChild(pre.firstChild);
-    pre.appendChild(document.createTextNode('{{pre>code>' + codeChars + '_chars}}'));
+    pre.appendChild(document.createTextNode('{{PRE_CODE_TAG|' + lines + '_lines}}'));
   }
 
   // 行内标签集（K8/K9 共用）：K8 判 run 成员归属、K9 判行间空白是否敏感

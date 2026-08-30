@@ -6,7 +6,7 @@
 
      - 段落 `<p>`
      - 标题 `<h1>`、`<h2>`、`<h3>`、`<h4>`、`<h5>`、`<h6>`
-     - 预格式块 `<pre>`（内容折叠为 `{{pre>code>N_chars}}` 占位）
+     - 预格式块 `<pre>`（内容折叠为 `{{PRE_CODE_TAG|x_lines}}` 占位）
      - 列表 `<ul>`、`<ol>`
      - 定义列表 `<dl>`（`<dt>`/`<dd>` 的术语对、问答、元信息对）
      - 引用块 `<blockquote>`
@@ -28,8 +28,22 @@
   1. **必须排除**菜单、导航、广告等不属于四类关键元素的元素——特别注意：导航/目录/推荐里的 `<ul>` 结构上完全符合流的判据，但语义上不是文章内容，**任何一类（含 `standaloneIds`）都不能标**；四类标记只收文章主体内容
   2. 不选 `<body>` 或 `<html>`——它们的 ID 无意义
   3. **`hidden` 属性元素 + `{{n_chars;n_a/n_div/...}}` 内容 token**：折叠的隐藏子树（模态/抽屉/移动端导航等）。根元素的 `data-u2m-id` 可正常引用——原文完整保留在带样式版，纳入 listFlowIds 即可还原全文（FAQ 折叠答案、tab 变体面板是典型可纳入场景）；token 值是真实文本规模与标签构成（计数降序），可据此判断是否值得纳入
-  4. `{{pre>code>N_chars}}`：pre 代码块内容占位（`data-language` 在 pre 上）。完整代码在后续步骤保真，识别时把 pre 当作一个结构单元即可
-  5. `{{table>N_chars}}` / `{{table>N_words}}`：表格整体占位。完整表格在后续步骤从带样式版保真，判定容器是否为流时把 table 当复合单元即可（注意：`>` 在文本节点序列化时转义为 `&gt;`，4/5 两类 token 在 HTML 源码里显示为 `{{table&gt;N_chars}}` / `{{pre&gt;code&gt;N_chars}}`——本手册一律按规范形态 `>` 书写）
+  4. `{{PRE_CODE_TAG|x_lines}}`：pre 代码块内容占位，x = 代码行数（规模信号：判读代码块的体量与粒度；`data-language` 在 pre 属性上，语言线索看那里）。完整代码在后续步骤保真，识别时把 pre 当作一个结构单元即可
+  5. `{{TABLE_TAG|y_rows|x_cols}}`：表格整体占位，y = 行数（`<tr>` 数），x = 列数（各行 colspan 之和的最大值，即网格列数）。行列规模是判读表格的信号——大表（如 `30_rows` 级）大概率是核心数据载体。完整表格在后续步骤从带样式版保真，判定容器是否为流时把 table 当复合单元即可
+
+  占位符形态速览：
+
+  ```html
+  <!-- 普通表格：2 行 × 2 列 -->
+  <table data-u2m-id="35">{{TABLE_TAG|2_rows|2_cols}}</table>
+  <!-- 跨列表格：首行 1 个 colspan=3 的单元格 + 1 个尾列 = 4 列，取各行最大 -->
+  <table data-u2m-id="36">{{TABLE_TAG|3_rows|4_cols}}</table>
+  <!-- 代码块：行数按换行切分（高亮 span 是语法 token、不是行）；
+       语言线索在 data-language 属性 -->
+  <pre data-u2m-id="37" data-language="tsx">{{PRE_CODE_TAG|87_lines}}</pre>
+  <!-- 纯代码块（无高亮、无语言） -->
+  <pre data-u2m-id="38">{{PRE_CODE_TAG|12_lines}}</pre>
+  ```
   6. 链接与图片元素**不带 URL**（href/src 已清空，链接文本与 alt 保留）；超阈值的连续行内文本段（含链接混排）整段折叠为 `{{n_chars;n_a/...}}` token——文本规模与构成是判读流价值的线索，短文本（≤16 汉字 / ≤12 词）保留原文；`<title>` 原文保留（不 token 化），仍是识别线索
 
 
@@ -79,7 +93,7 @@
            也是流（标不标均可、多标无害——随外层 [5] 整块迁入，[22]/[23] 不拆出） -->
       <div class="codeblock" data-u2m-id="21">
         <div class="bar" data-u2m-id="22">tsx</div>
-        <pre data-u2m-id="23" data-language="tsx">{{pre>code>412_chars}}</pre>
+        <pre data-u2m-id="23" data-language="tsx">{{PRE_CODE_TAG|23_lines}}</pre>
       </div>
       <!-- 非流：直接子元素仅 figure 复合单元 → 不标，整体迁入 -->
       <div data-u2m-id="24"><figure data-u2m-id="25">...</figure></div>
@@ -99,7 +113,7 @@
       <!-- 非流：figcaption 与表格包装都是复合单元、无段落级块 → 不标，整体迁入 -->
       <figure class="table" data-u2m-id="32">
         <figcaption data-u2m-id="33">表题</figcaption>
-        <div data-u2m-id="34"><table data-u2m-id="35">{{table>96_chars}}</table></div>
+        <div data-u2m-id="34"><table data-u2m-id="35">{{TABLE_TAG|8_rows|4_cols}}</table></div>
       </figure>
       <p data-u2m-id="36"><span data-u2m-id="37">...</span></p>
       <!-- <dl> 本身是段落级块：作为 [28] 的一个子块整体迁入 -->

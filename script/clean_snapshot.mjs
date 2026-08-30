@@ -47,7 +47,8 @@
  *   - clean 趟：删 style 属性与 <style> 标签，SVG 剥成裸 <svg></svg> 壳；
  *     K1-K9 机械规则全部就位——K1 class 语义过滤、K2 属性白名单（href/src/
  *     aria 全删）、K3 SVG 清空、K4 astro 解包（两趟共享）、K5 hidden 裸属性
- *     折叠 {{n;构成}}、K6/K7 table/pre 折叠 {{table>n}}/{{pre>code>n}}、
+ *     折叠 {{n;构成}}、K6/K7 table/pre 折叠 {{TABLE_TAG|n_rows|m_cols}}/
+ *     {{PRE_CODE_TAG|n_lines}}（行列/行数规模信号），
  *     K8 行内 run token 化（title 容器豁免——title 是步骤 3 识别线索，
  *     不 token 化）、K9 空白压缩
  *

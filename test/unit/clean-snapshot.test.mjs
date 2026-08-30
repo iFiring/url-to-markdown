@@ -270,11 +270,10 @@ test('clean_snapshot.mjs: 删除 video/audio 与残余表单控件，header/asid
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('K6: table 整树折叠为 {{table>N}}——带样式版结构完整（含空单元格）', async () => {
+test('K6: table 整树折叠为 {{TABLE_TAG|N_rows|M_cols}}——带样式版结构完整（含空单元格）', async () => {
   // 回归：空 <td>/<th>/<tr>/<col> 不在 KEEP_EMPTY 白名单时会被空元素级联删除，
   // 删掉后表格行列错位；article-1 实测丢过整个 <colgroup>+4 <col>。
-  // 清洗版整树折叠为字数 token（结构守护转移至带样式版断言）。
-  // 注：HTML 文本节点序列化把 `>` 转义为 &gt;，正则按磁盘字节断言。
+  // 清洗版整树折叠为行列 token（结构守护转移至带样式版断言）。
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
@@ -292,7 +291,7 @@ test('K6: table 整树折叠为 {{table>N}}——带样式版结构完整（含�
   const { cleaned, styled, cleanup } = await runClean(snapshot, 'k6-table');
   try {
     const seg = cleaned.match(/<table data-u2m-id="2"[^>]*>([\s\S]*?)<\/table>/)[1];
-    assert.ok(/^\{\{table&gt;\d+_(chars|words)\}\}$/.test(seg), `table 应折叠为字数 token: ${seg}`);
+    assert.ok(seg === '{{TABLE_TAG|2_rows|2_cols}}', `table 应折叠为行列 token（thead 1 行 + tbody 1 行 × 2 列）: ${seg}`);
     assert.ok(!cleaned.includes('列A') && !cleaned.includes('data-u2m-id="3"'), '表格内部结构与内容从清洗版消失');
     assert.ok(cleaned.includes('正文段落'), '表外正文保留');
     // 带样式版：表格结构全体保留（含空 th/td/col——删空单元格会让行列错位）
@@ -302,7 +301,54 @@ test('K6: table 整树折叠为 {{table>N}}——带样式版结构完整（含�
     ]) {
       assert.ok(styled.includes(`data-u2m-id="${tid}"`), `${what} (id=${tid}) 带样式版必须保留`);
     }
-    assert.ok(!styled.includes('{{table&gt;') && !styled.includes('{{table>'), '守卫: 带样式版不得出现新 token');
+    assert.ok(!styled.includes('{{TABLE_TAG'), '守卫: 带样式版不得出现行列 token');
+  } finally { cleanup(); }
+});
+
+test('K6: 列数按各行 colspan 之和的最大值——网格列数而非单元格个数', async () => {
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-u2m-id="1">
+    <table data-u2m-id="2">
+      <tr data-u2m-id="3"><td data-u2m-id="4" colspan="3">跨三列</td><td data-u2m-id="5">尾列</td></tr>
+      <tr data-u2m-id="6"><td data-u2m-id="7">甲</td><td data-u2m-id="8">乙</td></tr>
+    </table>
+    <p data-u2m-id="9">正文段落</p>
+  </div>
+</body></html>`;
+  const { cleaned, cleanup } = await runClean(snapshot, 'k6-colspan');
+  try {
+    const seg = cleaned.match(/<table data-u2m-id="2"[^>]*>([\s\S]*?)<\/table>/)[1];
+    // 行1: colspan 3 + 1 = 4 列；行2: 2 列 → 取最大 4；行数 2
+    assert.ok(seg === '{{TABLE_TAG|2_rows|4_cols}}', `colspan 按网格列展开取各行最大: ${seg}`);
+  } finally { cleanup(); }
+});
+
+test('K6: 嵌套表格的行列不计入外层——行归属按最近 table 判定', async () => {
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-u2m-id="1">
+    <table data-u2m-id="2">
+      <tr data-u2m-id="3">
+        <td data-u2m-id="4">外层单元格
+          <table data-u2m-id="5">
+            <tr data-u2m-id="6"><td data-u2m-id="7">内层1</td><td data-u2m-id="8">内层2</td></tr>
+            <tr data-u2m-id="9"><td data-u2m-id="10">内层3</td><td data-u2m-id="11">内层4</td></tr>
+          </table>
+        </td>
+        <td data-u2m-id="12">外层右列</td>
+      </tr>
+    </table>
+    <p data-u2m-id="13">正文段落</p>
+  </div>
+</body></html>`;
+  const { cleaned, cleanup } = await runClean(snapshot, 'k6-nested');
+  try {
+    const seg = cleaned.match(/<table data-u2m-id="2"[^>]*>([\s\S]*?)<\/table>/)[1];
+    // 外层只有 1 行 2 列；内层表格的 2 行不计入（整树折叠后内层随之消失）
+    assert.ok(seg === '{{TABLE_TAG|1_rows|2_cols}}', `嵌套表格行列不计入外层: ${seg}`);
   } finally { cleanup(); }
 });
 
@@ -581,7 +627,7 @@ test('K5: hidden 裸属性折叠——最外层折为构成 token，嵌套取外
   } finally { cleanup(); }
 });
 
-test('K7: pre 折叠为 {{pre>code>N_chars}}——data-language 提升到 pre，行内 code 不动', async () => {
+test('K7: pre 折叠为 {{PRE_CODE_TAG|N_lines}}——data-language 提升到 pre，行内 code 不动', async () => {
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
@@ -593,8 +639,8 @@ test('K7: pre 折叠为 {{pre>code>N_chars}}——data-language 提升到 pre，
   const { cleaned, styled, cleanup } = await runClean(snapshot, 'k7-pre');
   try {
     assert.ok(
-      /<pre[^>]*data-u2m-id="2"[^>]*data-language="javascript"[^>]*>\{\{pre&gt;code&gt;\d+_chars\}\}<\/pre>/.test(cleaned),
-      `pre 应折叠为 token 且 data-language 提升: ${cleaned.match(/<pre[\s\S]*?<\/pre>/)?.[0]}`
+      /<pre[^>]*data-u2m-id="2"[^>]*data-language="javascript"[^>]*>\{\{PRE_CODE_TAG\|1_lines\}\}<\/pre>/.test(cleaned),
+      `pre 应折叠为行数 token 且 data-language 提升: ${cleaned.match(/<pre[\s\S]*?<\/pre>/)?.[0]}`
     );
     assert.ok(!cleaned.includes('data-u2m-id="3"') && !cleaned.includes('data-u2m-id="4"'), 'pre 内部 id 随子树删除');
     assert.ok(!cleaned.includes('shiki-token'), 'token span 应删除');
@@ -603,7 +649,64 @@ test('K7: pre 折叠为 {{pre>code>N_chars}}——data-language 提升到 pre，
     // 原文保留（K8 阈值下同理）
     assert.ok(cleaned.includes('<code data-u2m-id="8">client.create()</code>'), '行内 code 不动');
     assert.ok(styled.includes('shiki-token') && styled.includes('import'), '带样式版完整保留代码');
-    assert.ok(!styled.includes('{{pre&gt;') && !styled.includes('{{pre>'), '守卫: 带样式版不得出现新 token');
+    assert.ok(!styled.includes('{{PRE_CODE_TAG'), '守卫: 带样式版不得出现行数 token');
+  } finally { cleanup(); }
+});
+
+test('K7: 行数按换行切分——高亮 span 是语法 token 不是行', async () => {
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-u2m-id="1">
+    <pre data-u2m-id="2"><code data-u2m-id="3"><span data-u2m-id="4" class="token keyword">const</span> a = 1;
+<span data-u2m-id="5" class="token keyword">const</span> b = <span data-u2m-id="6" class="token number">2</span>;</code></pre>
+    <p data-u2m-id="7">正文段落</p>
+  </div>
+</body></html>`;
+  const { cleaned, cleanup } = await runClean(snapshot, 'k7-token-span');
+  try {
+    const seg = cleaned.match(/<pre data-u2m-id="2"[^>]*>([\s\S]*?)<\/pre>/)[1];
+    // 3 个高亮 span 但只有 2 行——数 span 会得 3，数换行得 2
+    assert.ok(seg === '{{PRE_CODE_TAG|2_lines}}', `行数按换行切分而非 span 个数: ${seg}`);
+  } finally { cleanup(); }
+});
+
+test('K7: 每行一个 div 的编辑器式代码块——div 行块数兜底，容器 div 不虚增', async () => {
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-u2m-id="1">
+    <pre data-u2m-id="2"><code data-u2m-id="3"><div>line1</div><div>line2</div><div>line3</div></code></pre>
+    <pre data-u2m-id="4"><code data-u2m-id="5"><div>let a = 1;
+let b = 2;
+let c = 3;</div></code></pre>
+    <p data-u2m-id="6">正文段落</p>
+  </div>
+</body></html>`;
+  const { cleaned, cleanup } = await runClean(snapshot, 'k7-div-lines');
+  try {
+    // 无换行文本节点（div 块拼接无分隔）→ 换行法只得 1，div 行块 3 条兜底
+    const divPerLine = cleaned.match(/<pre data-u2m-id="2"[^>]*>([\s\S]*?)<\/pre>/)[1];
+    assert.ok(divPerLine === '{{PRE_CODE_TAG|3_lines}}', `div 行块数兜底编辑器式代码块: ${divPerLine}`);
+    // 单个容器 div 内含真实换行 → 换行法 3 胜过 div 计数 1，不虚增
+    const containerDiv = cleaned.match(/<pre data-u2m-id="4"[^>]*>([\s\S]*?)<\/pre>/)[1];
+    assert.ok(containerDiv === '{{PRE_CODE_TAG|3_lines}}', `容器 div 不虚增行数: ${containerDiv}`);
+  } finally { cleanup(); }
+});
+
+test('K7: 空 pre 折叠为 0_lines', async () => {
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-u2m-id="1">
+    <pre data-u2m-id="2"></pre>
+    <p data-u2m-id="3">正文段落</p>
+  </div>
+</body></html>`;
+  const { cleaned, cleanup } = await runClean(snapshot, 'k7-empty-pre');
+  try {
+    const seg = cleaned.match(/<pre data-u2m-id="2"[^>]*>([\s\S]*?)<\/pre>/)[1];
+    assert.ok(seg === '{{PRE_CODE_TAG|0_lines}}', `空 pre 行数为 0: ${seg}`);
   } finally { cleanup(); }
 });
 
@@ -622,10 +725,10 @@ test('K6/K7: 带 hidden 的 table/pre 由 K5 独占折叠——不被二次覆�
     const tbl = cleaned.match(/<table data-u2m-id="2"[^>]*>([\s\S]*?)<\/table>/)[1];
     // chromium 解析 <table><tr> 时按规范自动插入 tbody，K5 构成含 1_tbody
     assert.ok(/^\{\{\d+_(chars|words);1_tbody\/1_tr\/1_td\}\}$/.test(tbl), `hidden table 保留 K5 构成 token: ${tbl}`);
-    assert.ok(!tbl.includes('table&gt;'), '不得被 K6 覆盖');
+    assert.ok(!/\{\{TABLE_TAG/.test(tbl), '不得被 K6 覆盖');
     const pre = cleaned.match(/<pre data-u2m-id="3"[^>]*>([\s\S]*?)<\/pre>/)[1];
     assert.ok(/^\{\{\d+_(chars|words);1_code\}\}$/.test(pre), `hidden pre 保留 K5 构成 token: ${pre}`);
-    assert.ok(!pre.includes('pre&gt;code'), '不得被 K7 覆盖');
+    assert.ok(!/\{\{PRE_CODE_TAG/.test(pre), '不得被 K7 覆盖');
     assert.ok(cleaned.includes('正文段落'), '可见正文不受影响');
   } finally { cleanup(); }
 });
