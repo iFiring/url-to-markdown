@@ -1,23 +1,26 @@
 /**
  * 步骤 2 页面内清洗函数。在浏览器 evaluate 中执行；clean_snapshot.mjs 对
  * 同一快照跑两趟，cfg.mode ∈ 'styled'（缺省）| 'clean' 分叉：
- *   styled 趟 —— 共享结构清洗 + 长文本占位（{{LONG_TEXT_k|n_chars|n_words}}）
- *                + SVG 瘦身为壳（仅留 id/class/data-u2m-id）+ 属性白名单
- *                （22 静态属性 + <style> 选择器引用的动态属性集，<style> 豁免）
+ *   styled 趟 —— 共享结构清洗 + 长文本占位 + SVG 瘦身为壳（仅留
+ *                id/class/data-u2m-id）+ 属性白名单（22 静态属性 +
+ *                <style> 选择器引用的动态属性集，<style> 豁免）
  *                → 带样式版 + 恢复清单（供步骤 4 裁剪与后续占位还原）
  *   clean 趟   —— 共享结构清洗 + SVG 清空/样式剥除 + 瘦身规则 → 清洗版
  * 两趟共享同一套结构清洗（步骤 1-9：link/meta/base 删除、骨架删除、播放器
- * 删除、控件删除、空元素级联 + KEEP_EMPTY、astro- 前缀解包）。
+ * 删除、控件删除、空元素级联 + KEEP_EMPTY、astro- 前缀解包）与长文本占位
+ * （2026-08-31 修订：占位在共享段末尾同位执行，两版 {{LONG_TEXT_k|n_chars}}
+ * 编号逐一对应；折叠统计——K5 hidden 规模、K7 pre 行数——在占位前预计算挂
+ * expando，量的始终是原文）。
  *
- * 终端视图不变量：清洗版（clean 趟产物）是步骤 3 LLM 的终端视图——不再含
- * LONG_TEXT 占位符（一切还原走带样式版与 2_long_text.json）；隐藏折叠不走
- * juice 样式检测，由 K5 以 hidden 裸属性零样式计算实现。
+ * 清洗版含 LONG_TEXT 占位符（与带样式版编号一致）；还原链只走带样式版——
+ * 步骤 7 骨架引用来自文章视图（styled 路径），步骤 8 从 2_long_text.json
+ * 回填，清洗版占位不被任何后续步骤消费。
  *
- * 清洗版瘦身规则 K1-K9（全部就位）：class 语义过滤 K1 → 属性白名单 K2 →
- * SVG 清空 K3 → astro 解包 K4（两趟共享，见共享段步骤 9）→ hidden 裸属性
- * 折叠 K5 → table 折叠 K6 → pre 折叠 K7 → 行内 run token 化 K8（title 容器
- * 豁免——title 是步骤 3 的识别线索，不 token 化）→ 空白压缩 K9；详见各
- * 步骤注释与 spec。
+ * 清洗版瘦身规则 K1-K7/K9：class 语义过滤 K1 → 属性白名单 K2 →
+ * SVG 清空 K3 → astro 解包 K4（两趟共享，见共享段）→ hidden 裸属性折叠 K5
+ * （{{HIDDEN_TAG|n;构成}}）→ table 折叠 K6 → pre 折叠 K7 → 空白压缩 K9；
+ * K8 行内 run token 化已废除（2026-08-31：run 整段折叠吞噬行内结构，按
+ * 文本节点的共享占位保真行内骨架）。详见各步骤注释与 spec 修订记录。
  *
  * 带样式版简化（2026-08-28）：astro 解包两趟共享 + styled 属性白名单——
  * 带样式版是步骤 4-7 的输入源，脚手架标签与属性（astro props、data-v-*、
@@ -163,56 +166,100 @@ function __u2mCleanSnapshot(cfg) {
     wrap.parentNode.removeChild(wrap);
   }
 
-  // ---- mode 分叉：styled 趟到占位 + SVG 瘦身即返回；clean 趟继续剥样式 ----
+  // ---- 折叠统计预计算 + 长文本占位（两趟共享）----
+  // 长文本占位上移至共享段（2026-08-31 修订，恢复 simplify 前"两版共享、
+  // 编号逐一对应"的形态）：两趟在同一 DOM 状态、同一位置执行，清洗版从此
+  // 携带与带样式版编号一致的 {{LONG_TEXT_k|n_chars}} 占位符；K8 行内 run
+  // 整段折叠废除——run 吞噬行内结构（a/code 混排看不出来），而按文本节点
+  // 占位只折叠超阈值的单个文本节点、行内结构保真。
+  // K5 hidden 规模与 K7 pre 行数量的是子树原文，必须在占位之前预计算挂
+  // expando：占位之后原文变成 {{LONG_TEXT_k|N_unit}} 语法串，届时再量会把
+  // 语法当文本（规模虚高）、丢换行（行数塌缩为 1）。表格形状预计算不受
+  // 占位影响（数 tr/td/colspan、不动文本），仍在 clean 趟 K2 之前。
+
+  // 规模计量（K5 用）：含汉字按字符数、否则按词数
+  function sizeSuffix(text) {
+    var t = (text || '').trim();
+    var cjk = CJK_RE.test(t);
+    var n = cjk ? t.length : t.split(/\s+/).filter(Boolean).length;
+    return { n: n, unit: cjk ? 'chars' : 'words' };
+  }
+  // pre 行数（K7 用）：换行切分与 div 行块数取较大——高亮 span 是语法 token
+  // 不是行，行分隔符总以文本节点存在（纯代码 / Prism / hljs / Shiki 全覆盖）；
+  // 编辑器式「每行一个 <div>」无换行文本节点，直接子 div 计数兜底，容器 div
+  // 场景由换行法胜出、不虚增
+  function countPreLines(pre) {
+    var t = (pre.textContent || '').trim();
+    var nl = t ? t.split(/\n/).length : 0;
+    var shell = pre.querySelector('code') || pre;
+    var blocks = 0;
+    for (var pi = 0; pi < shell.childNodes.length; pi++) {
+      var pn = shell.childNodes[pi];
+      if (pn.nodeType === 1 && pn.tagName === 'DIV') blocks++;
+    }
+    return Math.max(nl, blocks);
+  }
+  var hiddenPre = document.querySelectorAll('[hidden]');
+  for (var i = 0; i < hiddenPre.length; i++) {
+    hiddenPre[i].__u2mHiddenSize = sizeSuffix(hiddenPre[i].textContent);
+  }
+  var prePre = document.querySelectorAll('pre');
+  for (var i = 0; i < prePre.length; i++) {
+    prePre[i].__u2mPreLines = countPreLines(prePre[i]);
+  }
+
+  // 9. 长文本占位（两趟共享，编号逐一对应；中英文分标准）：含汉字（CJK）→
+  //    中文标准：字符数 > MIN_CHARS → {{LONG_TEXT_k|n_chars}}；不含汉字 →
+  //    英文标准：单词数 > MIN_WORDS → {{LONG_TEXT_k|n_words}}。原文按占位
+  //    编号收集进 longTexts，由 CLI 写 2_long_text.json 供后续恢复。
+  //    纯空白文本节点（源码缩进/换行）不含语义内容，不占位——否则会在
+  //    父子元素之间凭空捏造"长文本"，误导步骤 3 的结构识别。
+  //    svg/style 子树内的文本不占位——两趟随后都会删 SVG 内容（styled 瘦身
+  //    壳 / clean 清空），若占位，占位符会随之消失而编号留在清单里；
+  //    <style> 文本在带样式版中原样保留，清洗版删除 <style> 标签
+  var MIN_CHARS = typeof cfg.minChars === 'number' ? cfg.minChars : 16;
+  var MIN_WORDS = typeof cfg.minWords === 'number' ? cfg.minWords : 12;
+  function skipPlaceholder(textNode) {
+    var p = textNode.parentElement;
+    return !!(p && p.closest && p.closest('svg, style'));
+  }
+  var k = 0;
+  var longTexts = {};
+  var walker = document.createTreeWalker(
+    document.body,
+    NodeFilter.SHOW_TEXT,
+    null,
+    false
+  );
+  var textNodes = [];
+  var node;
+  while ((node = walker.nextNode())) {
+    textNodes.push(node);
+  }
+  for (var i = 0; i < textNodes.length; i++) {
+    var tn = textNodes[i];
+    if (skipPlaceholder(tn)) continue;
+    var text = tn.textContent;
+    if (text.trim() === '') continue;
+    var n, unit;
+    if (CJK_RE.test(text)) {
+      if (text.length <= MIN_CHARS) continue;
+      n = text.length;
+      unit = 'chars';
+    } else {
+      n = text.trim().split(/\s+/).length;
+      if (n <= MIN_WORDS) continue;
+      unit = 'words';
+    }
+    k++;
+    longTexts[String(k)] = text;
+    tn.textContent = '{{LONG_TEXT_' + k + '|' + n + '_' + unit + '}}';
+  }
+
+  // ---- mode 分叉：styled 趟 SVG 瘦身 + 属性白名单后返回；clean 趟继续剥样式 ----
 
   if (mode !== 'clean') {
-    // 9. 长文本占位（styled 趟；中英文分标准）：含汉字（CJK）→ 中文标准：
-    //    字符数 > MIN_CHARS → {{LONG_TEXT_k|n_chars}}；不含汉字 → 英文标准：
-    //    单词数 > MIN_WORDS → {{LONG_TEXT_k|n_words}}。原文按占位编号收集进
-    //    longTexts，由 CLI 写 2_long_text.json 供后续恢复。
-    //    纯空白文本节点（源码缩进/换行）不含语义内容，不占位——否则会在
-    //    父子元素之间凭空捏造"长文本"，误导步骤 3 的结构识别。
-    //    svg/style 子树内的文本不占位——styled 趟会删 SVG 内容，
-    //    若占位，占位符会随之消失而编号留在清单里；
-    //    <style> 文本在带样式版中原样保留，SVG 文本两版都不保留
-    var MIN_CHARS = typeof cfg.minChars === 'number' ? cfg.minChars : 16;
-    var MIN_WORDS = typeof cfg.minWords === 'number' ? cfg.minWords : 12;
-    function skipPlaceholder(textNode) {
-      var p = textNode.parentElement;
-      return !!(p && p.closest && p.closest('svg, style'));
-    }
-    var k = 0;
-    var longTexts = {};
-    var walker = document.createTreeWalker(
-      document.body,
-      NodeFilter.SHOW_TEXT,
-      null,
-      false
-    );
-    var textNodes = [];
-    var node;
-    while ((node = walker.nextNode())) {
-      textNodes.push(node);
-    }
-    for (var i = 0; i < textNodes.length; i++) {
-      var tn = textNodes[i];
-      if (skipPlaceholder(tn)) continue;
-      var text = tn.textContent;
-      if (text.trim() === '') continue;
-      var n, unit;
-      if (CJK_RE.test(text)) {
-        if (text.length <= MIN_CHARS) continue;
-        n = text.length;
-        unit = 'chars';
-      } else {
-        n = text.trim().split(/\s+/).length;
-        if (n <= MIN_WORDS) continue;
-        unit = 'words';
-      }
-      k++;
-      longTexts[String(k)] = text;
-      tn.textContent = '{{LONG_TEXT_' + k + '|' + n + '_' + unit + '}}';
-    }
+    // （长文本占位已上移至两趟共享段——见上方步骤 9，两版编号逐一对应）
 
     // 10. SVG 瘦身（styled 趟）：只留 svg 标签及其 id/class/data-u2m-id，
     //     删除其余属性与全部子元素——完整 SVG 体积庞大，带样式版只需结构身份
@@ -278,10 +325,8 @@ function __u2mCleanSnapshot(cfg) {
     };
   }
 
-  // clean 趟阈值（K5 构成 token / K8 行内 run 共用，与 styled 趟占位同源的
-  // cfg 默认：16 汉字 / 12 词）
-  var MIN_CHARS = typeof cfg.minChars === 'number' ? cfg.minChars : 16;
-  var MIN_WORDS = typeof cfg.minWords === 'number' ? cfg.minWords : 12;
+  // （长文本占位已在两趟共享段执行——清洗版同样携带 {{LONG_TEXT_k|n_chars}}，
+  //   编号与带样式版逐一对应；K8 行内 run token 化已废除）
 
   // 11. SVG 清空子树（仅清洗版）：属性由 K2 白名单统一裁剪，data-u2m-id 等存活
   var svgs = document.querySelectorAll('svg');
@@ -382,14 +427,9 @@ function __u2mCleanSnapshot(cfg) {
   // （K4 astro 解包已上移至两趟共享段——见上方步骤 9；本趟不再重复执行）
 
   // K5. hidden 裸属性折叠（仅清洗版）：HTML 规范里属性存在即隐藏（任意值），
-  //     无需样式计算。最外层折叠、子树清空放构成 token；根保留 id 可引用，
-  //     原文在带样式版（listFlow 引用即可还原 FAQ 折叠答案等）。
-  function sizeSuffix(text) {
-    var t = (text || '').trim();
-    var cjk = CJK_RE.test(t);
-    var n = cjk ? t.length : t.split(/\s+/).filter(Boolean).length;
-    return { n: n, unit: cjk ? 'chars' : 'words' };
-  }
+  //     无需样式计算。最外层折叠、子树清空放 HIDDEN_TAG 规模+构成 token
+  //     （规模取共享段占位前预计算的原文——量占位符语法串会虚高）；根保留
+  //     id 可引用，原文在带样式版（listFlow 引用即可还原 FAQ 折叠答案等）。
   function topTags(counts) {
     return Object.keys(counts)
       .map(function (t) { return counts[t] + '_' + t; })
@@ -410,9 +450,9 @@ function __u2mCleanSnapshot(cfg) {
       var dt = desc[j].tagName.toLowerCase();
       tagCounts[dt] = (tagCounts[dt] || 0) + 1;
     }
-    var sz = sizeSuffix(he.textContent);
+    var sz = he.__u2mHiddenSize;
     var comp = topTags(tagCounts);
-    var token = '{{' + sz.n + '_' + sz.unit + (comp ? ';' + comp : '') + '}}';
+    var token = '{{HIDDEN_TAG|' + sz.n + '_' + sz.unit + (comp ? ';' + comp : '') + '}}';
     while (he.firstChild) he.removeChild(he.firstChild);
     he.appendChild(document.createTextNode(token));
     hiddenCount++;
@@ -434,23 +474,10 @@ function __u2mCleanSnapshot(cfg) {
     tb.appendChild(document.createTextNode('{{TABLE_TAG|' + shape.rows + '_rows|' + shape.cols + '_cols}}'));
   }
 
-  // K7. pre 折叠（仅清洗版）：data-language 从 code 壳提升到 pre；行数取两者较大：
-  //     换行切分（textContent trim 后按 \n 切分——高亮 span 是语法 token 不是行，
-  //     行分隔符总以文本节点存在：纯代码 / Prism / hljs / Shiki 全覆盖）与
-  //     div 行块数（编辑器式「每行一个 <div>」无换行文本节点，直接子 div 计数
-  //     兜底；容器 div 场景由换行法胜出、不虚增）。
-  //     带 hidden 的 pre 由 K5 独占折叠（其构成 token 已就位），跳过防二次覆盖
-  function countPreLines(pre) {
-    var t = (pre.textContent || '').trim();
-    var nl = t ? t.split(/\n/).length : 0;
-    var shell = pre.querySelector('code') || pre;
-    var blocks = 0;
-    for (var i = 0; i < shell.childNodes.length; i++) {
-      var n = shell.childNodes[i];
-      if (n.nodeType === 1 && n.tagName === 'DIV') blocks++;
-    }
-    return Math.max(nl, blocks);
-  }
+  // K7. pre 折叠（仅清洗版）：data-language 从 code 壳提升到 pre；行数取共享段
+  //     占位前预计算的原文换行/div 行块较大值（算法见共享段 countPreLines——
+  //     长文本占位吞掉换行后再量会塌缩为 1）。
+  //     带 hidden 的 pre 由 K5 独占折叠（其折叠 token 已就位），跳过防二次覆盖
   var pres = document.querySelectorAll('pre');
   for (var i = 0; i < pres.length; i++) {
     var pre = pres[i];
@@ -460,74 +487,18 @@ function __u2mCleanSnapshot(cfg) {
     if (langShell && !pre.hasAttribute('data-language')) {
       pre.setAttribute('data-language', langShell.getAttribute('data-language'));
     }
-    var lines = countPreLines(pre);
+    var lines = pre.__u2mPreLines;
     while (pre.firstChild) pre.removeChild(pre.firstChild);
     pre.appendChild(document.createTextNode('{{PRE_CODE_TAG|' + lines + '_lines}}'));
   }
 
-  // 行内标签集（K8/K9 共用）：K8 判 run 成员归属、K9 判行间空白是否敏感
+  // 行内标签集（K9 用）：判行间空白是否敏感
   var INLINE_TAGS = { A: 1, SPAN: 1, CODE: 1, STRONG: 1, EM: 1, B: 1, I: 1, U: 1, S: 1,
     MARK: 1, SMALL: 1, SUB: 1, SUP: 1, ABBR: 1, CITE: 1, Q: 1, KBD: 1, SAMP: 1, TIME: 1, IMG: 1, BR: 1 };
 
-  // K8. 行内 run token 化（仅清洗版）：块容器内连续行内兄弟序列（裸文本 +
-  //     行内集元素），合计文本超阈值 → 整段替换为一个元数据 token（构成按
-  //     成员元素标签计数、降序至多 4 项）。含 img 的 run 不折叠（图片 id 需
-  //     可引用）；行内元素子树内出现行内集外标签（病态）→ 该元素视作块、
-  //     切断 run（保守保留）。svg/iframe/canvas 不在行内集内、天然切断。
-  //     title 容器豁免：title 是步骤 3 识别线索，不 token 化（spec §4）。
-  function isInlineUnit(el) {
-    if (!INLINE_TAGS[el.tagName.toUpperCase()]) return false;
-    var inner = el.querySelectorAll('*');
-    for (var i = 0; i < inner.length; i++) {
-      if (!INLINE_TAGS[inner[i].tagName.toUpperCase()]) return false;
-    }
-    return true;
-  }
-  var runCount = 0;
-  var containers = Array.prototype.slice.call(document.querySelectorAll('*'));
-  for (var ci = 0; ci < containers.length; ci++) {
-    var cont = containers[ci];
-    if (!cont.parentNode || !cont.isConnected || cont.tagName === 'TITLE') continue;
-    var snapNodes = Array.prototype.slice.call(cont.childNodes);
-    var runsList = [];
-    var current = [];
-    function flushRun() { if (current.length) { runsList.push(current); current = []; } }
-    for (var ni = 0; ni < snapNodes.length; ni++) {
-      var nd = snapNodes[ni];
-      var member = nd.nodeType === 3 || (nd.nodeType === 1 && isInlineUnit(nd));
-      if (member) current.push(nd); else flushRun();
-    }
-    flushRun();
-    for (var ri = 0; ri < runsList.length; ri++) {
-      var run = runsList[ri];
-      var text = '';
-      var imgHit = false;
-      var memberCounts = {};
-      for (var mi = 0; mi < run.length; mi++) {
-        var m = run[mi];
-        text += m.textContent;
-        if (m.nodeType === 1) {
-          var mt = m.tagName.toLowerCase();
-          memberCounts[mt] = (memberCounts[mt] || 0) + 1;
-          if (mt === 'img' || m.querySelector('img')) imgHit = true;
-        }
-      }
-      if (text.trim() === '' || imgHit) continue;      // 纯空白交 K9；img run 豁免
-      var cjk = CJK_RE.test(text.trim());
-      var n = cjk ? text.trim().length : text.trim().split(/\s+/).filter(Boolean).length;
-      if (n <= (cjk ? MIN_CHARS : MIN_WORDS)) continue; // 阈值下保留原文
-      var mcomp = topTags(memberCounts);
-      var mtoken = '{{' + n + '_' + (cjk ? 'chars' : 'words') + (mcomp ? ';' + mcomp : '') + '}}';
-      var parent = run[0].parentNode;
-      if (!parent) continue;
-      var insertBefore = run[run.length - 1].nextSibling;
-      for (var di = 0; di < run.length; di++) {
-        if (run[di].parentNode) run[di].parentNode.removeChild(run[di]);
-      }
-      parent.insertBefore(document.createTextNode(mtoken), insertBefore);
-      runCount++;
-    }
-  }
+  // （K8 行内 run token 化已废除——2026-08-31：run 整段折叠吞噬行内结构
+  //   （a/code 混排），步骤 3 看不到行内骨架；长文本占位已在两趟共享段
+  //   按文本节点执行，行内结构保真）
 
   // K9. 保守空白压缩（仅清洗版）：删纯空白文本节点，当且仅当
   //     前后兄弟都不是行内文本敏感节点（非空白文本或行内元素）——行内相邻
@@ -552,6 +523,6 @@ function __u2mCleanSnapshot(cfg) {
 
   return {
     html: '<!DOCTYPE html>\n' + document.documentElement.outerHTML,
-    stats: { hiddenCount: hiddenCount, runCount: runCount }
+    stats: { hiddenCount: hiddenCount }
   };
 }

@@ -4,13 +4,16 @@
  * 同一 1_snapshot.html 先后渲染两次，cfg.mode 分叉）：
  *   趟 1（styled）结构清洗 + astro 解包 + 长文本占位 + SVG 瘦身 + 属性白名单
  *     → 2_clean_style_snapshot.html（供步骤 4 裁剪）+ 2_long_text.json
- *   趟 2（clean）结构清洗 + K1-K9 机械规则瘦身
- *     → 2_clean_snapshot.html（终端视图）
+ *   趟 2（clean）结构清洗 + 长文本占位 + K1-K7/K9 机械规则瘦身
+ *     → 2_clean_snapshot.html（结构视图）
  * 零样式计算：不做 juice 内联、不做 CSS 隐藏检测——CSS 隐藏子树按可见
  * 保留，清洗版的隐藏折叠只认 HTML 裸 hidden 属性（K5）。
  *
- * 清洗版是终端视图：不含 LONG_TEXT 占位符（一切还原走带样式版与恢复清单），
- * 步骤 3 的 LLM 在清洗版上读结构、不再需要二次还原。
+ * 长文本占位两趟共享（2026-08-31 修订，恢复 simplify 前"两版共享、编号逐
+ * 一对应"）：两趟在共享段同位执行，清洗版携带与带样式版编号一致的
+ * {{LONG_TEXT_k|n_chars}} 占位符；还原链不变——步骤 7 引用、步骤 8 回填仍
+ * 只走带样式版路径。K8 行内 run token 化废除：run 整段折叠吞噬行内结构，
+ * 按文本节点占位只折叠超阈值的单个文本节点、行内结构保真。
  *
  * 共同结构清洗（两趟一致；实现在 lib/page-clean-snapshot.js，共享步骤 1-9）：
  *   【整体删除】与正文结构无关的噪声，连子树一起删：
@@ -45,12 +48,11 @@
  *     lang，外加 <style> 选择器引用的动态属性集；<style> 标签豁免）——
  *     target/rel/tabindex/loading/未被选择器引用的 data-* 等删净
  *   - clean 趟：删 style 属性与 <style> 标签，SVG 剥成裸 <svg></svg> 壳；
- *     K1-K9 机械规则全部就位——K1 class 语义过滤、K2 属性白名单（href/src/
+ *     K1-K7/K9 机械规则——K1 class 语义过滤、K2 属性白名单（href/src/
  *     aria 全删）、K3 SVG 清空、K4 astro 解包（两趟共享）、K5 hidden 裸属性
- *     折叠 {{n;构成}}、K6/K7 table/pre 折叠 {{TABLE_TAG|n_rows|m_cols}}/
- *     {{PRE_CODE_TAG|n_lines}}（行列/行数规模信号），
- *     K8 行内 run token 化（title 容器豁免——title 是步骤 3 识别线索，
- *     不 token 化）、K9 空白压缩
+ *     折叠 {{HIDDEN_TAG|n_chars;构成}}（规模按占位前原文预计算）、K6/K7
+ *     table/pre 折叠 {{TABLE_TAG|n_rows|m_cols}}/{{PRE_CODE_TAG|n_lines}}
+ *     （行列/行数规模信号，pre 行数占位前预计算）、K9 空白压缩
  *
  * stdout 输出（有且仅有一行 JSON，日志一律走 stderr）:
  *   {"status":"ok","cleanedSnapshot":"...","styledSnapshot":"...",
@@ -121,7 +123,7 @@ async function main() {
     const longTextPath = path.join(dir, '2_long_text.json');
     await fsPromises.writeFile(longTextPath, JSON.stringify(styled.longTexts), 'utf8');
 
-    debug(`[clean] hidden 折叠 ${clean.stats.hiddenCount} · run token ${clean.stats.runCount} · 清洗版 ${Buffer.byteLength(clean.html, 'utf8')} 字节`);
+    debug(`[clean] hidden 折叠 ${clean.stats.hiddenCount} · 清洗版 ${Buffer.byteLength(clean.html, 'utf8')} 字节`);
     log(`清洗完成: ${cleanedPath} (${styled.longTextCount} 个长文本占位符)`);
 
     await context.close();

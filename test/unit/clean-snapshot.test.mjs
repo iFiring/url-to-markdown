@@ -75,7 +75,7 @@ test('clean_snapshot.mjs: 对 article-1 快照执行清洗', async () => {
   const cleaned = fs.readFileSync(out.cleanedSnapshot, 'utf8');
   assert.ok(!cleaned.includes('style='), '不应含 style 属性');
   assert.ok(!cleaned.includes('<style'), '不应含 <style> 标签');
-  assert.ok(!cleaned.includes('LONG_TEXT'), '清洗版不应再含 LONG_TEXT 占位（终端视图，一切还原走带样式版）');
+  assert.ok(cleaned.includes('{{LONG_TEXT_'), '清洗版恢复长文本占位（两趟共享，与带样式版编号一致）');
   assert.ok(/<svg data-u2m-id="[0-9]+"><\/svg>/.test(cleaned) || !cleaned.includes('<svg'), 'SVG 壳保留 data-u2m-id');
 
   // head 里的 meta/link（charset/viewport/preconnect/og:* 等）对步骤 3 的结构识别
@@ -530,10 +530,11 @@ test('clean_snapshot.mjs: 带样式快照保留样式，SVG 瘦身为壳，占�
   assert.ok(!/width=|height=/.test(svgOpen[0]), 'svg 壳不应保留 width/height 等其他属性');
   assert.ok(!styled.includes(svgLong) && !styled.includes('<text'), '带样式版不应残留 SVG 子元素与文本');
 
-  // 占位体系分叉（2026-08-27）：styled 保留 LONG_TEXT；清洗版是终端视图、不再占位
+  // 占位两趟共享（2026-08-31 修订）：清洗版恢复 LONG_TEXT 占位，编号与
+  // 带样式版逐一对应——占位步骤在共享段同位执行，还原链仍只走带样式版
   const ph = (h) => (h.match(/\{\{LONG_TEXT_\d+\|\d+_[a-z]+\}\}/g) || []).sort();
   assert.ok(ph(styled).length > 0, '带样式版 HTML 长文本应被占位');
-  assert.ok(!cleaned.includes('{{LONG_TEXT_'), '清洗版不应含 LONG_TEXT 占位（守卫不变量）');
+  assert.deepEqual(ph(cleaned), ph(styled), '清洗版占位符应与带样式版逐一对应');
   assert.ok(!styled.includes(htmlLong), '带样式版中 HTML 长文本同样应被占位');
 
   // 恢复清单条数 = 占位数（SVG 文本与 <style> CSS 均不参与，故仅 htmlLong 一条）
@@ -598,7 +599,7 @@ test('K2: 属性白名单——八属性存活，href/src/aria/style 等删净�
   } finally { cleanup(); }
 });
 
-test('K5: hidden 裸属性折叠——最外层折为构成 token，嵌套取外层，data-u2m-hidden 属性取消', async () => {
+test('K5: hidden 裸属性折叠为 {{HIDDEN_TAG|规模;构成}}——规模按占位前原文计，嵌套取外层', async () => {
   const attrLong = '这是一段仅靠 hidden 属性隐藏的中文文本';
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
@@ -612,18 +613,20 @@ test('K5: hidden 裸属性折叠——最外层折为构成 token，嵌套取外
   const { out, cleaned, styled, cleanup } = await runClean(snapshot, 'k5-hidden');
   try {
     const seg1 = cleaned.match(/<div data-u2m-id="2"[^>]*>([\s\S]*?)<\/div>/)[1];
-    assert.ok(/^\{\{\d+_(chars|words);1_p\/1_a\}\}$/.test(seg1), `子树应折为构成 token: ${seg1}`);
+    // 规模按占位前原文计：attrLong 23 字 + 链接 2 字 = 25——子树内长文本已被
+    // 占位成 {{LONG_TEXT_1|23_chars}}，量占位符语法串会得 26 字（虚高）
+    assert.ok(seg1 === '{{HIDDEN_TAG|25_chars;1_p/1_a}}', `子树应折为 HIDDEN_TAG 规模+构成 token: ${seg1}`);
     assert.ok(cleaned.match(/<div data-u2m-id="2"[^>]*>/)[0].includes('hidden'), 'hidden 属性保留（触发信号）');
     assert.ok(!cleaned.includes(attrLong) && !cleaned.includes('data-u2m-id="3"') && !cleaned.includes('data-u2m-id="4"'), '折叠子树内容应消失');
     const seg2 = cleaned.match(/<div data-u2m-id="5"[^>]*>([\s\S]*?)<\/div>/)[1];
-    assert.ok(/^\{\{\d+_(chars|words);1_div\/1_p\}\}$/.test(seg2), `嵌套 hidden 只折最外层: ${seg2}`);
+    assert.ok(seg2 === '{{HIDDEN_TAG|4_chars;1_div/1_p}}', `嵌套 hidden 只折最外层: ${seg2}`);
     assert.ok(!cleaned.includes('data-u2m-id="6"') && !cleaned.includes('data-u2m-id="7"'), '内层 id 随外层折叠消失');
     assert.ok(!cleaned.includes('data-u2m-hidden'), 'data-u2m-hidden 属性应取消');
     assert.ok(cleaned.includes('正文段落'), '可见正文保留');
     // attrLong 23 字 > 16：带样式版以 LONG_TEXT 占位符保留、原文进恢复清单
     assert.ok(styled.includes('{{LONG_TEXT_1|') && styled.includes('data-u2m-id="3"'), '带样式版子树完整（长文本以占位符保留）');
     assert.ok(JSON.parse(fs.readFileSync(out.longText, 'utf8'))[1] === attrLong, '隐藏长文本原文在恢复清单完整保留');
-    assert.ok(!styled.includes(';1_p'), '守卫: 带样式版不得出现新 token');
+    assert.ok(!styled.includes('{{HIDDEN_TAG'), '守卫: 带样式版不得出现 HIDDEN_TAG token');
   } finally { cleanup(); }
 });
 
@@ -644,9 +647,8 @@ test('K7: pre 折叠为 {{PRE_CODE_TAG|N_lines}}——data-language 提升到 pr
     );
     assert.ok(!cleaned.includes('data-u2m-id="3"') && !cleaned.includes('data-u2m-id="4"'), 'pre 内部 id 随子树删除');
     assert.ok(!cleaned.includes('shiki-token'), 'token span 应删除');
-    // p7 外围 filler 特意用英文短词（原中文 filler「行内 … 代码」使 run 达 21 字
-    // > K8 阈值 16、会被 K8 整段折叠）——本断言守护 K7 不动行内 code，短 run
-    // 原文保留（K8 阈值下同理）
+    // p7 外围 filler 特意用英文短词——本断言守护 K7 不动行内 code；
+    // 占位按文本节点判阈值，各节点均低于阈值、原文保留
     assert.ok(cleaned.includes('<code data-u2m-id="8">client.create()</code>'), '行内 code 不动');
     assert.ok(styled.includes('shiki-token') && styled.includes('import'), '带样式版完整保留代码');
     assert.ok(!styled.includes('{{PRE_CODE_TAG'), '守卫: 带样式版不得出现行数 token');
@@ -710,6 +712,28 @@ test('K7: 空 pre 折叠为 0_lines', async () => {
   } finally { cleanup(); }
 });
 
+test('K7: 行数在长文本占位前预计算——占位吞掉换行后行数不塌缩', async () => {
+  // 回归：pre 内单个长文本节点（含汉字、超阈值）被两趟共享的长文本占位折叠成
+  // {{LONG_TEXT_k|N_chars}} 后，textContent 不再含换行——行数若在占位后才量会
+  // 塌缩成 1。行数必须在共享段占位之前预计算挂 expando。
+  const preLong = '第一行超过阈值的中文长文本行；\n第二行超过阈值的中文长文本行；\n第三行超过阈值的中文长文本行；';
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-u2m-id="1">
+    <pre data-u2m-id="2"><code data-u2m-id="3">${preLong}</code></pre>
+    <p data-u2m-id="4">正文段落</p>
+  </div>
+</body></html>`;
+  const { cleaned, styled, cleanup } = await runClean(snapshot, 'k7-precompute');
+  try {
+    const seg = cleaned.match(/<pre data-u2m-id="2"[^>]*>([\s\S]*?)<\/pre>/)[1];
+    assert.ok(seg === '{{PRE_CODE_TAG|3_lines}}', `行数按占位前原文的换行计（3 行而非 1）: ${seg}`);
+    // 对照：带样式版里这段 pre 文本同样被占位（既有行为不变）
+    assert.ok(styled.includes('{{LONG_TEXT_1|'), '带样式版 pre 长文本照常占位');
+  } finally { cleanup(); }
+});
+
 test('K6/K7: 带 hidden 的 table/pre 由 K5 独占折叠——不被二次覆盖', async () => {
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
@@ -724,10 +748,10 @@ test('K6/K7: 带 hidden 的 table/pre 由 K5 独占折叠——不被二次覆�
   try {
     const tbl = cleaned.match(/<table data-u2m-id="2"[^>]*>([\s\S]*?)<\/table>/)[1];
     // chromium 解析 <table><tr> 时按规范自动插入 tbody，K5 构成含 1_tbody
-    assert.ok(/^\{\{\d+_(chars|words);1_tbody\/1_tr\/1_td\}\}$/.test(tbl), `hidden table 保留 K5 构成 token: ${tbl}`);
+    assert.ok(tbl === '{{HIDDEN_TAG|7_chars;1_tbody/1_tr/1_td}}', `hidden table 保留 K5 折叠 token: ${tbl}`);
     assert.ok(!/\{\{TABLE_TAG/.test(tbl), '不得被 K6 覆盖');
     const pre = cleaned.match(/<pre data-u2m-id="3"[^>]*>([\s\S]*?)<\/pre>/)[1];
-    assert.ok(/^\{\{\d+_(chars|words);1_code\}\}$/.test(pre), `hidden pre 保留 K5 构成 token: ${pre}`);
+    assert.ok(pre === '{{HIDDEN_TAG|3_words;1_code}}', `hidden pre 保留 K5 折叠 token: ${pre}`);
     assert.ok(!/\{\{PRE_CODE_TAG/.test(pre), '不得被 K7 覆盖');
     assert.ok(cleaned.includes('正文段落'), '可见正文不受影响');
   } finally { cleanup(); }
@@ -765,26 +789,27 @@ test('R4+R5: astro 包装解包；安全位置空白删除、行内间空白保�
   } finally { cleanup(); }
 });
 
-test('守卫: 清洗版是终端视图——不含 {{LONG_TEXT_，步骤 2 不再 import juice', async () => {
+test('守卫: 长文本占位两趟共享——清洗版与带样式版占位集合逐一对应，步骤 2 不再 import juice', async () => {
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
-  <div data-u2m-id="1"><p data-u2m-id="2">这是一段超过十六个汉字的长文本，清洗版不应为其生成占位符。</p></div>
+  <div data-u2m-id="1"><p data-u2m-id="2">这是一段超过十六个汉字的长文本，两趟都应为其生成占位符。</p></div>
 </body></html>`;
   const { out, cleaned, styled, cleanup } = await runClean(snapshot, 'guard-terminal');
   try {
-    assert.ok(!cleaned.includes('{{LONG_TEXT_'), '清洗版不应含 LONG_TEXT 占位');
-    assert.ok(styled.includes('{{LONG_TEXT_'), '带样式版保留 LONG_TEXT 占位');
-    assert.equal(out.longTextCount, 1, '恢复清单仍从带样式版产出');
+    const ph = (h) => (h.match(/\{\{LONG_TEXT_\d+\|\d+_[a-z]+\}\}/g) || []).sort();
+    assert.equal(ph(styled).length, 1, '带样式版保留 LONG_TEXT 占位');
+    assert.deepEqual(ph(cleaned), ph(styled), '清洗版占位符与带样式版逐一对应（编号一致）');
+    assert.equal(out.longTextCount, 1, '恢复清单从共享占位产出');
     const src = fs.readFileSync(path.resolve(thisDir, '../../script/clean_snapshot.mjs'), 'utf8');
     assert.ok(!src.includes("from 'juice'"), '步骤 2 不再 import juice');
   } finally { cleanup(); }
 });
 
-test('K8: 行内 run token 化——阈值边界、构成、链接 run 整段吞噬、短 run 保留', async () => {
-  const zh17 = '汉'.repeat(17);                       // 17 字 > 16 → token
+test('长文本占位（两趟共享）——清洗版按文本节点折叠、行内结构保留、短文本原文', async () => {
+  const zh17 = '汉'.repeat(17);                       // 17 字 > 16 → 占位
   const zh16 = '汉'.repeat(16);                       // 16 字 → 保留
-  const en13 = Array(13).fill('word').join(' ');      // 13 词 > 12 → token
+  const en13 = Array(13).fill('word').join(' ');      // 13 词 > 12 → 占位
   const en12 = Array(12).fill('word').join(' ');      // 12 词 → 保留
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
@@ -800,19 +825,22 @@ test('K8: 行内 run token 化——阈值边界、构成、链接 run 整段吞
 </body></html>`;
   const { cleaned, styled, cleanup } = await runClean(snapshot, 'k8-run');
   try {
-    assert.ok(/<p data-u2m-id="2">\{\{17_chars\}\}<\/p>/.test(cleaned), '17 字 run 应折叠');
-    assert.ok(cleaned.includes(zh16), '16 字 run 保留原文');
-    assert.ok(/<p data-u2m-id="4">\{\{13_words\}\}<\/p>/.test(cleaned), '13 词 run 折叠');
-    assert.ok(cleaned.includes(en12), '12 词 run 保留原文');
+    assert.ok(/<p data-u2m-id="2">\{\{LONG_TEXT_1\|17_chars\}\}<\/p>/.test(cleaned), '17 字文本节点清洗版同样占位');
+    assert.ok(cleaned.includes(zh16), '16 字文本保留原文');
+    assert.ok(/<p data-u2m-id="4">\{\{LONG_TEXT_2\|13_words\}\}<\/p>/.test(cleaned), '13 词文本节点清洗版同样占位');
+    assert.ok(cleaned.includes(en12), '12 词文本保留原文');
+    // 行内混排段（合计 14 词 > 12 阈值）不再整段折叠：各文本节点均低于阈值、
+    // 全部原文保留，<a> 结构保真——run 整段吞噬曾让步骤 3 看不到行内结构
     const mixed = cleaned.match(/<p data-u2m-id="6">([\s\S]*?)<\/p>/)[1];
-    assert.ok(/^\{\{14_words;1_a\}\}$/.test(mixed), `混合 run 整段折叠为 {{n;1_a}}: ${mixed}`);
+    assert.ok(mixed.includes('<a data-u2m-id="7">Prompt Caching Dashboard</a>'), `行内元素结构保留: ${mixed}`);
+    assert.ok(mixed.startsWith('Use the ') && mixed.includes(' to monitor cache hit rates and usage over time.'), `行内短文本原文保留: ${mixed}`);
     const short = cleaned.match(/<p data-u2m-id="8">([\s\S]*?)<\/p>/)[1];
-    assert.ok(short.includes('x <a') && short.includes('> y'), `短 run 保留原文与行内间空白: ${JSON.stringify(short)}`);
+    assert.ok(short.includes('x <a') && short.includes('> y'), `短文本保留原文与行内间空白: ${JSON.stringify(short)}`);
     assert.ok(styled.includes('Prompt Caching Dashboard') && styled.includes('href="/x"'), '带样式版不受影响');
   } finally { cleanup(); }
 });
 
-test('K8: 含 img 的 run 不折叠——图片 id 与 alt 保持可引用', async () => {
+test('长文本占位（两趟共享）——含 img 的段落：文本占位、img 与 alt 保持可引用', async () => {
   const long = '这是一段超过十六个汉字的长文本配上图片，构成图注场景。';
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
@@ -825,12 +853,13 @@ test('K8: 含 img 的 run 不折叠——图片 id 与 alt 保持可引用', asy
   const { cleaned, cleanup } = await runClean(snapshot, 'k8-img');
   try {
     const seg = cleaned.match(/<p data-u2m-id="2">([\s\S]*?)<\/p>/)[1];
-    assert.ok(seg.includes(long), '含 img 的 run 保留原文');
+    assert.ok(seg.includes('{{LONG_TEXT_1|27_chars}}'), `长文本节点应占位: ${seg}`);
+    assert.ok(!seg.includes(long), '原文不应残留清洗版');
     assert.ok(seg.includes('<img data-u2m-id="3" alt="配图">') || /<img data-u2m-id="3"[^>]*alt="配图"[^>]*>/.test(seg), 'img 元素与 alt 保留');
   } finally { cleanup(); }
 });
 
-test('K8: 行内元素嵌行内集外标签（含 svg）切断 run、保守保留', async () => {
+test('行内结构保留——icon span 内 svg、短文本不经任何折叠', async () => {
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
@@ -843,11 +872,11 @@ test('K8: 行内元素嵌行内集外标签（含 svg）切断 run、保守保�
     const seg = cleaned.match(/<button data-u2m-id="2">([\s\S]*?)<\/button>/)[1];
     assert.ok(seg.includes('<svg data-u2m-id="4"></svg>'), 'icon span 内的 svg 保留');
     assert.ok(seg.includes('Copy Page'), '短文本保留原文');
-    assert.ok(!/\{\{\d+_/.test(seg), `病态结构不折叠: ${seg}`);
+    assert.ok(!/\{\{/.test(seg), `短文本结构不经折叠: ${seg}`);
   } finally { cleanup(); }
 });
 
-test('K8: <title> 不 token 化——长中文标题保留作步骤 3 识别线索', async () => {
+test('<title> 不占位——长中文标题保留作步骤 3 识别线索', async () => {
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>提示缓存使用指南与最佳实践完全详解手册</title></head>
 <body>
@@ -855,8 +884,8 @@ test('K8: <title> 不 token 化——长中文标题保留作步骤 3 识别线�
 </body></html>`;
   const { cleaned, styled, cleanup } = await runClean(snapshot, 'k8-title');
   try {
-    assert.ok(cleaned.includes('<title>提示缓存使用指南与最佳实践完全详解手册</title>'), 'title 原文应保留，不折叠为 token');
-    assert.ok(!/<title>\{\{/.test(cleaned), 'title 内不应出现 run token');
+    assert.ok(cleaned.includes('<title>提示缓存使用指南与最佳实践完全详解手册</title>'), 'title 原文应保留（占位 treewalker 只走 body）');
+    assert.ok(!/<title>\{\{/.test(cleaned), 'title 内不应出现占位符');
     assert.ok(styled.includes('提示缓存使用指南与最佳实践完全详解手册'), '带样式版不受影响');
   } finally { cleanup(); }
 });
