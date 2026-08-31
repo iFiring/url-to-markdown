@@ -84,13 +84,12 @@ test('步骤 8 live 重渲染：同内容两次渲染 id 对位 → source:"live
 
   fs.writeFileSync(path.join(urlDir, '7_skeleton.json'), JSON.stringify([{ trans2img: [Number(moduleId)] }]));
   fs.writeFileSync(path.join(urlDir, '2_long_text.json'), '{}');
-  // 步骤 3 产物（本夹具由测试代写）：标题 1，流 = 模块前后两个段落
+  // 步骤 3 产物（本夹具由测试代写，四键契约）：标题 1，块 = 模块前后两个段落
   fs.writeFileSync(path.join(urlDir, '3_key_ids.json'), JSON.stringify({
-    titleIds: [1],
+    titleId: 1,
     descriptionIds: [],
-    standaloneIds: [],
-    listFlowIds: [Number(moduleId) - 1, Number(moduleId) + 1],
-    listFlowDeleteIds: [],
+    paragraphIds: [Number(moduleId) - 1, Number(moduleId) + 1],
+    dumpIds: [],
   }));
 
   // ── 步骤 8（v1：live 重渲染结构一致 → id 对位、签名全等）──

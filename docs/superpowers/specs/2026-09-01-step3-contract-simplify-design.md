@@ -118,6 +118,10 @@
 
 > **2026-09-01 更新**：步骤 4 已按四键契约落地；dumpIds 处理从本节备查的「步骤 6 流内剔除」改为**步骤 4 折叠空壳**（清空子节点、属性仅留 id/class/data-idx）——壳占住流内兄弟位置供步骤 5 juice 求值 nth-child/相邻选择器不失真，步骤 6 适配后迁移块时壳不在清单、自然不入文章。步骤 6/8 仍读旧五键，真实管线断点当前在步骤 6。
 
+> **2026-09-01 更新（二）**：步骤 6 已按四键契约落地——paragraphIds 嵌套展开为扁平块清单、title/desc/块全部按元素本身迁移（文档序；title/desc 落在段落块子树内合法，嵌套去重后随外层整块带入），本节备查的「dumpIds 流内剔除」不再存在于步骤 6（步骤 4 折叠的空壳不在任何键、自然不入文章）；瘦身保护集改为迁入 key 元素全集（titleId∪descriptionIds∪blockIds）；四键校验与嵌套展开提取为共享模块 `script/lib/key-ids.mjs`（步骤 4 同步重构接入）。步骤 8 仍读旧五键，真实管线断点当前在步骤 8。
+
+> **2026-09-01 更新（三）**：步骤 8 已按四键契约落地——`screenshot_trans.mjs` 接入共享 `lib/key-ids.mjs`（第三消费者：非四键契约输入开浏览器前 error）；分类层 keep 集换为 titleId∪descriptionIds∪paragraphIds 块（嵌套展开）∪trans2img id、噪音集 listFlowDeleteIds→dumpIds——`page-exclude-noncontent.js` 算法零改动、只换喂入集合。本节备查的旧键读取至此全部清退，四键迁移（步骤 3 指南/4/6/8）完成、管线无断点；全仓零引用的旧契约遗留 fixture `test/fixtures/article-*_key_ids.json` 删除。
+
 ## 决策记录
 
 | 决策点 | 结论 | 备选与理由 |

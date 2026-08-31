@@ -4,19 +4,19 @@
  * 重标记 + 签名计算之后、截图循环之前）——visibility 不动
  * tag/children/textContent，签名不受影响；零重排，模块位置与 boundingBox
  * 择优不受影响。
- * 事实源是步骤 3 的 LLM 分类 + 步骤 7 的 trans2img 标记：
- *   keep = titleIds ∪ descriptionIds ∪ standaloneIds ∪ listFlowIds
- *          ∪ trans2img id 全集（调用侧拼好传入）
+ * 事实源是步骤 3 的 LLM 四键分类 + 步骤 7 的 trans2img 标记：
+ *   keep = titleId ∪ descriptionIds ∪ paragraphIds 块（嵌套已由调用侧
+ *          经 lib/key-ids.mjs 展开）∪ trans2img id 全集（调用侧拼好传入）
  *   隐藏 = 页内 data-idx 全集 − keep − keep 的祖先 − keep 的子孙
- *          ∪ listFlowDeleteIds（LLM 明判的菜单/导航/广告/推荐噪音，
- *          keep 子树内的也藏——步骤 7 是在噪音已删的 6_article.html 上
- *          标记模块的，截图应还原 LLM 所见的模块形态）
+ *          ∪ dumpIds（LLM 明判的流内噪音，keep 子树内的也藏——步骤 7
+ *          是在噪音不入文的 6_article.html 上标记模块的，截图应还原
+ *          LLM 所见的模块形态）
  * 保护规则：
  *   - keep 的子孙不藏：模块/正文内部元素是模块视觉本身，naive 补集会把
  *     模块内部挖空；
  *   - keep 的祖先是容器与背景，藏了就毁模块；
- *   - 保优先：任何隐藏候选（含 delete id）与 keep 或 keep 祖先重叠时一律
- *     不藏——步骤 3 理论上可产出 delete id 是 keep 祖先的坏分类。
+ *   - 保优先：任何隐藏候选（含 dump id）与 keep 或 keep 祖先重叠时一律
+ *     不藏——步骤 3 理论上可产出 dump id 是 keep 祖先的坏分类。
  * 落地手段 visibility:hidden !important：与 DOM 删除像素等价、零重排、
  * 页 A（无 JS 的 file://）同样适用。keep 穿透按构造封闭（被藏元素子树内
  * 不可能有 keep 元素）；子代显式 visibility:visible 规则的穿透与几何层
@@ -25,11 +25,11 @@
  * 返回 {hidden, kept}——hidden 为实际隐藏的打标元素数，kept 为 keep 集
  * 在页内命中的元素数（A/B 结构漂移时 kept < keepIds.length，可观测）。
  */
-function __u2mExcludeNonContent(keepIds, deleteIds) {
+function __u2mExcludeNonContent(keepIds, dumpIds) {
   var keep = {};
   var del = {};
   for (var i = 0; i < keepIds.length; i++) keep[keepIds[i]] = true;
-  for (var j = 0; j < deleteIds.length; j++) del[deleteIds[j]] = true;
+  for (var j = 0; j < dumpIds.length; j++) del[dumpIds[j]] = true;
 
   var tagged = document.querySelectorAll('[data-idx]');
 
@@ -51,8 +51,8 @@ function __u2mExcludeNonContent(keepIds, deleteIds) {
     var el = tagged[u];
     var id = parseInt(el.getAttribute('data-idx'), 10);
     if (keep[id]) continue;                    // keep 自身
-    if (ancSet.has(el)) continue;              // keep 祖先——保优先（delete 也不例外）
-    if (!del[id] && subSet.has(el)) continue;  // keep 子孙保护；delete 噪音例外
+    if (ancSet.has(el)) continue;              // keep 祖先——保优先（dump 也不例外）
+    if (!del[id] && subSet.has(el)) continue;  // keep 子孙保护；dump 噪音例外
     el.style.setProperty('visibility', 'hidden', 'important');
     // 子代显式 visible 穿透：可见后代一并覆写（未打标子代不在 hidden 计数内）
     var kids = el.querySelectorAll('*');

@@ -460,7 +460,8 @@ function __u2mCleanSnapshot(cfg) {
   // K5. hidden 裸属性折叠（仅清洗版）：HTML 规范里属性存在即隐藏（任意值），
   //     无需样式计算。最外层折叠、子树清空放 HIDDEN_TAG 规模+构成 token
   //     （规模取共享段占位前预计算的原文——量占位符语法串会虚高）；根保留
-  //     id 可引用，原文在带样式版（listFlow 引用即可还原 FAQ 折叠答案等）。
+  //     id 可引用，原文在带样式版（步骤 3 把 hidden 块标进 paragraphIds
+  //     即可还原 FAQ 折叠答案等）。
   function topTags(counts) {
     return Object.keys(counts)
       .map(function (t) { return counts[t] + '_' + t; })
@@ -553,7 +554,7 @@ function __u2mCleanSnapshot(cfg) {
   //     data-idx」一个属性的 span 是纯行内包装，对步骤 3（key id 识别）
   //     无语义；解包把子节点并入父块——内容不丢、只粒度变粗，省 step 3
   //     输入字节（实测微信页 ~133KB clean 省 ~30KB）。与步骤 6 规则⑥同款
-  //     拆包机制，但彼处带保护集（titleIds 等 key 元素不拆）、此处 step 2
+  //     拆包机制，但彼处带保护集（key 元素不拆）、此处 step 2
   //     在 step 3 之前无保护集——裸 span 是行内包装、内容流入可选块级父
   //     （p/section/h2-h6 等，实测占绝大多数），无内容丢失。
   //     仅 clean 趟执行：带样式版保留这些 span——其 style 携 font-weight/

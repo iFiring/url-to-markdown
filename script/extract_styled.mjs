@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * extract_styled.mjs —— 步骤 4：样式视图裁剪。读 3_key_ids.json（四键契约
- * titleId/descriptionIds/paragraphIds/dumpIds）与 2_clean_style_snapshot.html，
+ * titleId/descriptionIds/paragraphIds/dumpIds，校验与嵌套展开共享
+ * lib/key-ids.mjs）与 2_clean_style_snapshot.html，
  * 裁剪出只含文章主体的带样式视图，产出 4_styled_extract.html
  * （写入该 URL 的工作目录）。
  *
@@ -34,6 +35,7 @@ import path from 'node:path';
 import { chromium } from 'playwright';
 import { emit, emitError, usage, log, debug } from './lib/contract.mjs';
 import { urlDir } from './lib/env.mjs';
+import { parseKeyIds } from './lib/key-ids.mjs';
 import { readSharedScript } from './lib/placeholder.mjs';
 import { proxyLaunchOptions, newU2MContext } from './lib/browser.mjs';
 
@@ -70,44 +72,12 @@ async function main() {
 
   const keyIds = JSON.parse(await fsPromises.readFile(keyIdsPath, 'utf8'));
 
-  // 四键契约校验（开浏览器前拦截形状与自相矛盾输入）：
-  // paragraphIds 嵌套展开为扁平块清单（数组 = 子段落流）
-  const titleId = keyIds.titleId === undefined ? null : keyIds.titleId;
-  const descriptionIds = Array.isArray(keyIds.descriptionIds) ? keyIds.descriptionIds : [];
-  const dumpIds = Array.isArray(keyIds.dumpIds) ? keyIds.dumpIds : [];
-  if (titleId !== null && !(Number.isInteger(titleId) && titleId > 0)) {
-    return emitError('titleId 应为正整数或 null，请重跑步骤 3');
-  }
-  if (!Array.isArray(keyIds.paragraphIds) || keyIds.paragraphIds.length === 0) {
-    return emitError('paragraphIds 为空（步骤 3 要求至少标一个段落块），请重跑步骤 3');
-  }
-  const blockIds = [];
-  const invalidMembers = [];
-  (function walk(node) {
-    for (const item of node) {
-      if (Array.isArray(item)) walk(item);
-      else if (Number.isInteger(item) && item > 0) blockIds.push(item);
-      else invalidMembers.push(item);
-    }
-  })(keyIds.paragraphIds);
-  if (invalidMembers.length > 0) {
-    return emitError(`paragraphIds 含非法成员: ${invalidMembers.map((m) => JSON.stringify(m)).join(', ')}（段落块 ID 应为正整数，数组为子段落流），请重跑步骤 3`);
-  }
-
-  // 四键互不相交——同一元素进两个键（或段落块重复列举）是自相矛盾的输入
-  const seen = new Map();
-  const dup = [];
-  const collect = (id, label) => {
-    if (seen.has(id)) dup.push(`id ${id} 同时在 ${seen.get(id)} 与 ${label}`);
-    else seen.set(id, label);
-  };
-  if (titleId !== null) collect(titleId, 'titleId');
-  for (const id of descriptionIds) collect(id, 'descriptionIds');
-  for (const id of blockIds) collect(id, 'paragraphIds');
-  for (const id of dumpIds) collect(id, 'dumpIds');
-  if (dup.length > 0) {
-    return emitError(`四键标记重叠: ${dup.join('; ')}（同一元素不得进两个键），请重跑步骤 3`);
-  }
+  // 四键契约校验（开浏览器前拦截形状与自相矛盾输入）与 paragraphIds
+  // 嵌套展开（数组 = 子段落流 → 扁平块清单）共享 lib/key-ids.mjs——
+  // 步骤 4/6 读同一文件、同一校验事实源
+  const parsed = parseKeyIds(keyIds);
+  if (parsed.error) return emitError(parsed.error);
+  const { titleId, descriptionIds, blockIds, dumpIds } = parsed;
   debug(`key_ids: title=${titleId ?? '无'} desc=${descriptionIds.length} blocks=${blockIds.length} dump=${dumpIds.length}`);
 
   const pageExtractFn = await readSharedScript('page-extract-styled.js');

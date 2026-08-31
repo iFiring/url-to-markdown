@@ -18,7 +18,7 @@ test('page-extract-article.js: 文件存在且包含 __u2mExtractArticle 函数'
 
 test('page-extract-article.js: 函数可被 evaluate 格式调用', () => {
   const src = fs.readFileSync(pageScriptPath, 'utf8');
-  const wrapped = `(${src})({titleIds:[1]})`;
+  const wrapped = `(${src})({titleId:null,descriptionIds:[],blockIds:[]})`;
   assert.doesNotThrow(() => new Function('return ' + wrapped));
 });
 
@@ -40,10 +40,11 @@ test('extract_article.mjs: 无参数时输出 usage_error', async () => {
   assert.equal(JSON.parse(r.stdout).status, 'usage_error');
 });
 
-// 模拟步骤 5 产物：纯内联样式（无 class、无 <style>），
-// key 元素挂在祖先骨架（10/11）下，flow 容器（4）含三个元素子节点
+// 模拟步骤 5 产物：纯内联样式（无 class、无 <style>）。块模型——
+// 流容器 [4]/非流包装层 [20]/骨架 [10][11] 不在任何键、不入文章；
+// [9] 为步骤 4 折叠的 dump 空壳（步骤 6 不消费 dumpIds）
 const JUICED = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>测试文章</title></head><body><div data-idx="10"><main data-idx="11"><h1 style="font-size: 32px; font-weight: bold" data-idx="1">标题</h1><div style="color: rgb(102, 102, 102)" data-idx="2">作者</div><div style="color: rgb(102, 102, 102)" data-idx="3">日期</div></main><div style="margin: 0" data-idx="4"><p style="font-size: 18px" data-idx="5">段落一</p><figure data-idx="6"><img src="x.png" data-idx="7"></figure><p data-idx="8">段落二</p></div></div></body></html>`;
+<html lang="zh-CN"><head><title>测试文章</title></head><body><div data-idx="10"><main data-idx="11"><h1 style="font-size: 32px; font-weight: bold" data-idx="1">标题</h1><div style="color: rgb(102, 102, 102)" data-idx="2">作者</div></main><div style="margin: 0" data-idx="4"><p style="font-size: 18px" data-idx="5">段落一</p><nav class="toc" data-idx="9"></nav><figure data-idx="6"><img src="x.png" data-idx="7"></figure><div data-idx="20"><section data-idx="21"><p data-idx="22">小节</p></section><p data-idx="23">小节段落</p><p data-idx="24">尾段</p></div><p data-idx="8">段落二</p></div></div></body></html>`;
 
 const URL = 'https://example.com/test-article';
 
@@ -60,42 +61,52 @@ function setupTmp(name, keyIds, { withJuiced = true } = {}) {
   return { tmpRoot, urlDir };
 }
 
-test('extract_article.mjs: 分组顺序提取进新 body，骨架与 flow 容器不入，属性一字不动', async () => {
-  const { tmpRoot, urlDir } = setupTmp('ok', {
-    titleIds: [1],
-    descriptionIds: [2, 3],
-    listFlowIds: [4],
-  });
+async function runArticle(tmpRoot, juiced = null, urlDirForOverride = null) {
   const script = path.resolve('script/extract_article.mjs');
-  const r = await runScript(process.execPath, [script, '--url', URL], {
+  if (juiced && urlDirForOverride) {
+    fs.writeFileSync(path.join(urlDirForOverride, '5_juice_styles.html'), juiced);
+  }
+  return runScript(process.execPath, [script, '--url', URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
+}
+
+test('extract_article.mjs: 四键块迁移——子树一字不动，嵌套子流展开，壳/容器/骨架不入', async () => {
+  const { tmpRoot, urlDir } = setupTmp('ok', {
+    titleId: 1,
+    descriptionIds: [2],
+    paragraphIds: [5, 6, [21, 23, 24], 8],
+    dumpIds: [9],
+  });
+  const r = await runArticle(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
   assert.equal(out.article, path.join(urlDir, '6_article.html'));
-  assert.equal(out.elementCount, 6, '应提取 6 个元素（1 标题 + 2 说明 + 3 正文块）');
+  assert.equal(out.elementCount, 8, '应迁移 8 个元素（标题 + 说明 + 6 个段落块）');
+  assert.equal(out.removedNoiseCount, undefined, '四键契约下无迁移后剔除 pass，emit 不再有 removedNoiseCount');
 
   const html = fs.readFileSync(out.article, 'utf8');
 
-  // key 元素与 flow 子元素保留，属性与内容一字不动
+  // key 元素子树一字不动（含段落块的后代与嵌套子流块）
   assert.ok(html.includes('<body style="max-width: 768px; margin: 4rem auto">'), 'body 应带居中布局内联样式');
   assert.ok(html.includes('<title>测试文章</title>'), '<title> 应保留');
   assert.ok(html.includes('<html lang="zh-CN">'), 'lang 应保留');
   assert.ok(html.includes('<h1 style="font-size: 32px; font-weight: bold" data-idx="1">标题</h1>'));
   assert.ok(html.includes('<div style="color: rgb(102, 102, 102)" data-idx="2">作者</div>'));
   assert.ok(html.includes('<p style="font-size: 18px" data-idx="5">段落一</p>'));
-  assert.ok(html.includes('<figure data-idx="6"><img src="x.png" data-idx="7"></figure>'), '子树应完整');
-  assert.ok(html.includes('data-idx="8">'));
+  assert.ok(html.includes('<figure data-idx="6"><img src="x.png" data-idx="7"></figure>'), '块的后代应完整');
+  assert.ok(html.includes('<section data-idx="21"><p data-idx="22">小节</p></section>'), '子流块子树应完整');
 
-  // 骨架与 flow 容器不入新 html
-  for (const id of [4, 10, 11]) {
+  // 流容器/非流包装层/骨架/dump 壳不在任何键——不入文章
+  for (const id of [4, 10, 11, 20, 9]) {
     assert.ok(!html.includes(`data-idx="${id}"`), `id ${id} 应不入`);
   }
+  assert.ok(!html.includes('class="toc"'), 'dump 空壳应不入文章');
 
-  // 分组顺序：1 → 2 → 3 → 5 → 6 → 8
-  const order = [1, 2, 3, 5, 6, 8].map((id) => html.indexOf(`data-idx="${id}"`));
+  // 文档序：1 → 2 → 5 → 6 → 7 → 21 → 23 → 24 → 8（嵌套数组位置不影响顺序）
+  const order = [1, 2, 5, 6, 7, 21, 23, 24, 8].map((id) => html.indexOf(`data-idx="${id}"`));
   for (let i = 1; i < order.length; i++) {
     assert.ok(order[i] > order[i - 1], `id 顺序应递增: ${order}`);
     assert.ok(order[i - 1] >= 0, '元素应存在');
@@ -104,218 +115,61 @@ test('extract_article.mjs: 分组顺序提取进新 body，骨架与 flow 容器
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('extract_article.mjs: 同一元素既是 description 又是 flow 子元素时只出现一次', async () => {
-  const dup = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>去重</title></head><body><h1 data-idx="1">标题</h1><div data-idx="4"><p style="color: red" data-idx="2">作者行</p><p data-idx="5">正文</p></div></body></html>`;
-  const { tmpRoot, urlDir } = setupTmp('dup', { titleIds: [1], descriptionIds: [2], listFlowIds: [4] });
-  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), dup);
-  const script = path.resolve('script/extract_article.mjs');
-  const r = await runScript(process.execPath, [script, '--url', URL], {
-    env: { U2M_WORKING_ROOT: tmpRoot },
-    timeoutMs: 30000,
+test('extract_article.mjs: titleId 为 null 正常；description 落在段落块子树内随外层整块带入', async () => {
+  const nestedDesc = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>嵌套说明</title></head><body><div data-idx="10"><div data-idx="3">作者 日期</div><section data-idx="4"><div data-idx="5"><p data-idx="51">作者行</p><p data-idx="52">正文</p></div><p data-idx="6">段落</p><p data-idx="7">尾段</p></section></div></body></html>`;
+  const { tmpRoot, urlDir } = setupTmp('nested-desc', {
+    titleId: null,
+    descriptionIds: [3, 51],
+    paragraphIds: [5, 6, 7],
+    dumpIds: [],
   });
-  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
-  assert.equal(out.elementCount, 3, '去重后应只提取 3 个元素（1/2/5）');
-  const html = fs.readFileSync(out.article, 'utf8');
-  assert.equal((html.match(/data-idx="2"/g) || []).length, 1, 'id 2 应只出现一次');
-  assert.ok(html.includes('<p style="color: red" data-idx="2">作者行</p>'), '属性应原样');
-  assert.ok(!html.includes('data-idx="4"'), 'flow 容器应不入');
-  fs.rmSync(tmpRoot, { recursive: true, force: true });
-});
-
-test('extract_article.mjs: flow 内未包标签的非空白文本按文档序迁入', async () => {
-  const bare = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>裸文本</title></head><body><h1 data-idx="1">标题</h1><div data-idx="4">文本 1<p data-idx="5">段落</p>文本 2<figure data-idx="6">…</figure></div></body></html>`;
-  const { tmpRoot, urlDir } = setupTmp('bare', { titleIds: [1], descriptionIds: [], listFlowIds: [4] });
-  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), bare);
-  const script = path.resolve('script/extract_article.mjs');
-  const r = await runScript(process.execPath, [script, '--url', URL], {
-    env: { U2M_WORKING_ROOT: tmpRoot },
-    timeoutMs: 30000,
-  });
-  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
-  assert.equal(out.elementCount, 3, '元素数应为 3（h1/p/figure），裸文本不计入');
-
-  const html = fs.readFileSync(out.article, 'utf8');
-  // 文本 1/文本 2 迁入，且与元素按文档序交错；flow 容器不入
-  assert.ok(html.includes('<body style="max-width: 768px; margin: 4rem auto"><h1 data-idx="1">标题</h1>文本 1<p data-idx="5">段落</p>文本 2<figure data-idx="6">…</figure></body>'),
-    `body 应按文档序交错迁入裸文本: ${html.slice(html.indexOf('<body>'))}`);
-  assert.ok(!html.includes('data-idx="4"'), 'flow 容器应不入');
-  fs.rmSync(tmpRoot, { recursive: true, force: true });
-});
-
-test('extract_article.mjs: 纯空白文本与注释不迁入', async () => {
-  const ws = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>空白</title></head><body><h1 data-idx="1">标题</h1><div data-idx="4"> <p data-idx="5">段落</p><!--注--></div></body></html>`;
-  const { tmpRoot, urlDir } = setupTmp('ws', { titleIds: [1], descriptionIds: [], listFlowIds: [4] });
-  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), ws);
-  const script = path.resolve('script/extract_article.mjs');
-  const r = await runScript(process.execPath, [script, '--url', URL], {
-    env: { U2M_WORKING_ROOT: tmpRoot },
-    timeoutMs: 30000,
-  });
-  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
-  assert.equal(out.elementCount, 2, '元素数应为 2（h1/p）');
-
-  const html = fs.readFileSync(out.article, 'utf8');
-  // 纯空白文本节点与注释被跳过，body 内元素直接相连，无 <!--注-->
-  assert.ok(html.includes('<body style="max-width: 768px; margin: 4rem auto"><h1 data-idx="1">标题</h1><p data-idx="5">段落</p></body>'),
-    `body 不应含空白或注释: ${html.slice(html.indexOf('<body>'))}`);
-  assert.ok(!html.includes('<!--'), '注释不应迁入');
-  fs.rmSync(tmpRoot, { recursive: true, force: true });
-});
-
-test('extract_article.mjs: listFlowDeleteIds 噪音为 flow 直接子元素时剔除', async () => {
-  const noise = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>噪音</title></head><body><h1 data-idx="1">标题</h1><div data-idx="4"><p data-idx="5">段落</p><div class="ad" data-idx="9">广告</div><p data-idx="10">尾段</p></div></body></html>`;
-  const { tmpRoot, urlDir } = setupTmp('del-child', { titleIds: [1], descriptionIds: [], listFlowIds: [4], listFlowDeleteIds: [9] });
-  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), noise);
-  const script = path.resolve('script/extract_article.mjs');
-  const r = await runScript(process.execPath, [script, '--url', URL], {
-    env: { U2M_WORKING_ROOT: tmpRoot },
-    timeoutMs: 30000,
-  });
+  const r = await runArticle(tmpRoot, nestedDesc, urlDir);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
-  assert.equal(out.elementCount, 3, '应提取 3 个元素（h1/p5/p10），噪音已剔');
-  assert.equal(out.removedNoiseCount, 1, '应报告剔除 1 个噪音');
+  assert.equal(out.elementCount, 4, '应迁移 4 个元素（desc 3 + 块 5/6/7），desc 51 随块 5 带入不单列');
 
   const html = fs.readFileSync(out.article, 'utf8');
-  assert.ok(!html.includes('data-idx="9"'), '噪音元素应不入文章视图');
-  assert.ok(!html.includes('广告'), '噪音内容应不入文章视图');
-  assert.ok(html.includes('<p data-idx="5">段落</p>'), '噪音前的正文应保留');
-  assert.ok(html.includes('<p data-idx="10">尾段</p>'), '噪音后的正文应保留');
+  assert.equal((html.match(/data-idx="51"/g) || []).length, 1,
+    '嵌套 desc 应只出现一次（在最外层块的子树内，不被单独追加到文末）');
+  assert.ok(html.includes('<div data-idx="5"><p data-idx="51">作者行</p><p data-idx="52">正文</p></div>'),
+    '包含 desc 的块子树应原样');
+  assert.ok(!html.includes('data-idx="4"'), '流容器应不入');
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('extract_article.mjs: 噪音嵌在迁移子元素内部时整棵剔除、外层保留', async () => {
-  const nested = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>嵌套噪音</title></head><body><h1 data-idx="1">标题</h1><div data-idx="4"><section data-idx="5"><p data-idx="6">正文</p><div class="ad" data-idx="9">广告<em data-idx="99">词</em></div></section></div></body></html>`;
-  const { tmpRoot, urlDir } = setupTmp('del-nested', { titleIds: [1], descriptionIds: [], listFlowIds: [4], listFlowDeleteIds: [9] });
-  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), nested);
-  const script = path.resolve('script/extract_article.mjs');
-  const r = await runScript(process.execPath, [script, '--url', URL], {
-    env: { U2M_WORKING_ROOT: tmpRoot },
-    timeoutMs: 30000,
+test('extract_article.mjs: paragraphIds 乱序列举时输出仍按文档序', async () => {
+  const shuffled = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>乱序</title></head><body><h1 data-idx="1">标题</h1><div data-idx="4"><p data-idx="5">前段</p><section data-idx="6"><p data-idx="7">小节</p></section><p data-idx="8">后段</p></div></body></html>`;
+  const { tmpRoot, urlDir } = setupTmp('order', {
+    titleId: 1,
+    descriptionIds: [],
+    paragraphIds: [8, 5, 6],
+    dumpIds: [],
   });
+  const r = await runArticle(tmpRoot, shuffled, urlDir);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
-  assert.equal(out.elementCount, 2, '应提取 2 个元素（h1/section5），孙代噪音不计数');
-  assert.equal(out.removedNoiseCount, 1);
 
   const html = fs.readFileSync(out.article, 'utf8');
-  assert.ok(html.includes('<section data-idx="5">'), '噪音的外层容器应保留');
-  assert.ok(html.includes('<p data-idx="6">正文</p>'), '噪音兄弟正文应保留');
-  assert.ok(!html.includes('data-idx="9"'), '噪音子树根应剔除');
-  assert.ok(!html.includes('data-idx="99"'), '噪音后代应整棵剔除');
-  assert.ok(!html.includes('广告'), '噪音内容应剔除');
-  fs.rmSync(tmpRoot, { recursive: true, force: true });
-});
-
-test('extract_article.mjs: 嵌套 listFlowIds 最外层优先——内层子节点跳过、结构保留、文档序不变', async () => {
-  const nestedFlows = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>嵌套流</title></head><body><h1 data-idx="1">标题</h1><div data-idx="4"><section data-idx="5"><p data-idx="6">正文</p><div data-idx="7"><p data-idx="8">小节正文</p></div></section><p data-idx="10">尾段</p></div></body></html>`;
-  const { tmpRoot, urlDir } = setupTmp('nested-flows', { titleIds: [1], descriptionIds: [], listFlowIds: [4, 7], listFlowDeleteIds: [] });
-  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), nestedFlows);
-  const script = path.resolve('script/extract_article.mjs');
-  const r = await runScript(process.execPath, [script, '--url', URL], {
-    env: { U2M_WORKING_ROOT: tmpRoot },
-    timeoutMs: 30000,
-  });
-  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
-  assert.equal(out.status, 'ok');
-  assert.equal(out.elementCount, 3, '应提取 3 个元素（h1/section5/p10），内层流子节点 8 随 5 整体带入不单列');
-
-  const html = fs.readFileSync(out.article, 'utf8');
-  // 内层流容器 7 连同其子元素 8 原样留在 section 5 内——不被拔出、不留空壳
-  assert.ok(html.includes('<div data-idx="7"><p data-idx="8">小节正文</p></div>'),
-    `内层流应整体保留在 section 内: ${html.slice(html.indexOf('<body>'))}`);
-  assert.equal((html.match(/data-idx="8"/g) || []).length, 1, 'id 8 应只出现一次');
-  // 文档序：1 → 5 → 8（在 5 内）→ 10
-  const order = [1, 5, 8, 10].map((id) => html.indexOf(`data-idx="${id}"`));
+  const order = [1, 5, 6, 8].map((id) => html.indexOf(`data-idx="${id}"`));
   for (let i = 1; i < order.length; i++) {
-    assert.ok(order[i] > order[i - 1], `id 顺序应递增: ${order}`);
+    assert.ok(order[i] > order[i - 1], `乱序列举不应打乱输出文档序: ${order}`);
     assert.ok(order[i - 1] >= 0, '元素应存在');
   }
-  fs.rmSync(tmpRoot, { recursive: true, force: true });
-});
-
-test('extract_article.mjs: listFlowIds 列表乱序时输出仍按文档序', async () => {
-  const twoFlows = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>乱序流</title></head><body><h1 data-idx="1">标题</h1><div data-idx="4"><p data-idx="5">前段</p></div><div data-idx="7"><p data-idx="8">后段</p></div></body></html>`;
-  const { tmpRoot, urlDir } = setupTmp('order', { titleIds: [1], descriptionIds: [], listFlowIds: [7, 4], listFlowDeleteIds: [] });
-  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), twoFlows);
-  const script = path.resolve('script/extract_article.mjs');
-  const r = await runScript(process.execPath, [script, '--url', URL], {
-    env: { U2M_WORKING_ROOT: tmpRoot },
-    timeoutMs: 30000,
-  });
-  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
-  assert.equal(out.status, 'ok');
-  assert.equal(out.elementCount, 3, '应提取 3 个元素（h1/p5/p8）');
-
-  const html = fs.readFileSync(out.article, 'utf8');
-  assert.ok(html.indexOf('data-idx="5"') < html.indexOf('data-idx="8"'),
-    `列表乱序不应打乱输出文档序: ${html.slice(html.indexOf('<body>'))}`);
-  fs.rmSync(tmpRoot, { recursive: true, force: true });
-});
-
-test('extract_article.mjs: standaloneIds 游离内容各成一块、按文档序落位在流之间', async () => {
-  const standalone = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>游离内容</title></head><body><h1 data-idx="1">标题</h1><div data-idx="4"><p data-idx="5">前流段落</p></div><h2 data-idx="6">流间小标题</h2><p data-idx="7">流间引言</p><div data-idx="8"><p data-idx="9">后流段落</p></div></body></html>`;
-  const { tmpRoot, urlDir } = setupTmp('standalone', { titleIds: [1], descriptionIds: [], standaloneIds: [6, 7], listFlowIds: [4, 8], listFlowDeleteIds: [] });
-  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), standalone);
-  const script = path.resolve('script/extract_article.mjs');
-  const r = await runScript(process.execPath, [script, '--url', URL], {
-    env: { U2M_WORKING_ROOT: tmpRoot },
-    timeoutMs: 30000,
-  });
-  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
-  assert.equal(out.status, 'ok');
-  assert.equal(out.elementCount, 5, '应提取 5 个元素（h1/p5/h2-6/p7/p9）');
-
-  const html = fs.readFileSync(out.article, 'utf8');
-  // 游离块落在两个流之间：1 → 5 → 6 → 7 → 9
-  const order = [1, 5, 6, 7, 9].map((id) => html.indexOf(`data-idx="${id}"`));
-  for (let i = 1; i < order.length; i++) {
-    assert.ok(order[i] > order[i - 1], `id 顺序应递增: ${order}`);
-    assert.ok(order[i - 1] >= 0, '元素应存在');
-  }
-  fs.rmSync(tmpRoot, { recursive: true, force: true });
-});
-
-test('extract_article.mjs: standaloneIds 与 listFlowDeleteIds 重叠时报 error', async () => {
-  const snap = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>重叠</title></head><body><h1 data-idx="1">标题</h1><div data-idx="4"><p data-idx="5">段落</p><div class="ad" data-idx="6">广告</div></div></body></html>`;
-  const { tmpRoot, urlDir } = setupTmp('standalone-overlap', { titleIds: [1], descriptionIds: [], standaloneIds: [6], listFlowIds: [4], listFlowDeleteIds: [6] });
-  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), snap);
-  const script = path.resolve('script/extract_article.mjs');
-  const r = await runScript(process.execPath, [script, '--url', URL], {
-    env: { U2M_WORKING_ROOT: tmpRoot },
-    timeoutMs: 30000,
-  });
-  assert.equal(r.code, 1);
-  const out = JSON.parse(r.stdout);
-  assert.equal(out.status, 'error');
-  assert.ok(out.reason.includes('重叠'), `reason 应说明重叠: ${out.reason}`);
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
 test('extract_article.mjs: key id 未命中时报 error 并列出缺失 id', async () => {
-  const { tmpRoot, urlDir } = setupTmp('miss', { titleIds: [1], descriptionIds: [99], listFlowIds: [4] });
-  const script = path.resolve('script/extract_article.mjs');
-  const r = await runScript(process.execPath, [script, '--url', URL], {
-    env: { U2M_WORKING_ROOT: tmpRoot },
-    timeoutMs: 30000,
+  const { tmpRoot } = setupTmp('miss', {
+    titleId: 1,
+    descriptionIds: [99],
+    paragraphIds: [5],
+    dumpIds: [],
   });
+  const r = await runArticle(tmpRoot);
   assert.equal(r.code, 1);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'error');
@@ -324,67 +178,46 @@ test('extract_article.mjs: key id 未命中时报 error 并列出缺失 id', asy
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('extract_article.mjs: listFlowDeleteIds 未命中时报 error 且不写产物', async () => {
-  const { tmpRoot, urlDir } = setupTmp('del-miss', { titleIds: [1], descriptionIds: [], listFlowIds: [4], listFlowDeleteIds: [99] });
-  const script = path.resolve('script/extract_article.mjs');
-  const r = await runScript(process.execPath, [script, '--url', URL], {
-    env: { U2M_WORKING_ROOT: tmpRoot },
-    timeoutMs: 30000,
-  });
-  assert.equal(r.code, 1);
-  const out = JSON.parse(r.stdout);
-  assert.equal(out.status, 'error');
-  assert.ok(out.reason.includes('99'), `reason 应含缺失 id: ${out.reason}`);
-  assert.ok(!fs.existsSync(path.join(urlDir, '6_article.html')), '失败不应写产物');
-  fs.rmSync(tmpRoot, { recursive: true, force: true });
+test('extract_article.mjs: paragraphIds 为空或含非法成员时报 error', async () => {
+  const empty = setupTmp('empty', { titleId: 1, descriptionIds: [], paragraphIds: [], dumpIds: [] });
+  const r1 = await runArticle(empty.tmpRoot);
+  assert.equal(r1.code, 1);
+  assert.ok(JSON.parse(r1.stdout).reason.includes('paragraphIds'), `reason 应指向 paragraphIds: ${JSON.parse(r1.stdout).reason}`);
+  fs.rmSync(empty.tmpRoot, { recursive: true, force: true });
+
+  const bad = setupTmp('badmember', { titleId: 1, descriptionIds: [], paragraphIds: [5, 'x'], dumpIds: [] });
+  const r2 = await runArticle(bad.tmpRoot);
+  assert.equal(r2.code, 1);
+  assert.ok(JSON.parse(r2.stdout).reason.includes('非法'), `reason 应指出非法成员: ${JSON.parse(r2.stdout).reason}`);
+  fs.rmSync(bad.tmpRoot, { recursive: true, force: true });
 });
 
-test('extract_article.mjs: listFlowDeleteIds 与 key id 重叠时报 error', async () => {
-  const { tmpRoot } = setupTmp('del-overlap', { titleIds: [1], descriptionIds: [], listFlowIds: [4], listFlowDeleteIds: [1] });
-  const script = path.resolve('script/extract_article.mjs');
-  const r = await runScript(process.execPath, [script, '--url', URL], {
-    env: { U2M_WORKING_ROOT: tmpRoot },
-    timeoutMs: 30000,
-  });
-  assert.equal(r.code, 1);
-  const out = JSON.parse(r.stdout);
-  assert.equal(out.status, 'error');
-  assert.ok(out.reason.includes('listFlowDeleteIds'), `reason 应指向 listFlowDeleteIds: ${out.reason}`);
-  assert.ok(out.reason.includes('重叠'), `reason 应说明重叠: ${out.reason}`);
-  fs.rmSync(tmpRoot, { recursive: true, force: true });
-});
+test('extract_article.mjs: 四键标记重叠时报 error', async () => {
+  const a = setupTmp('overlap-tp', { titleId: 5, descriptionIds: [], paragraphIds: [5, 6], dumpIds: [] });
+  const r1 = await runArticle(a.tmpRoot);
+  assert.equal(r1.code, 1);
+  const out1 = JSON.parse(r1.stdout);
+  assert.equal(out1.status, 'error');
+  assert.ok(out1.reason.includes('重叠'), `reason 应说明重叠: ${out1.reason}`);
+  fs.rmSync(a.tmpRoot, { recursive: true, force: true });
 
-test('extract_article.mjs: listFlowIds 为空时报 error', async () => {
-  const { tmpRoot, urlDir } = setupTmp('empty', { titleIds: [1], descriptionIds: [], listFlowIds: [] });
-  const script = path.resolve('script/extract_article.mjs');
-  const r = await runScript(process.execPath, [script, '--url', URL], {
-    env: { U2M_WORKING_ROOT: tmpRoot },
-    timeoutMs: 30000,
-  });
-  assert.equal(r.code, 1);
-  const out = JSON.parse(r.stdout);
-  assert.equal(out.status, 'error');
-  assert.ok(out.reason.includes('listFlowIds'), `reason 应指向 listFlowIds: ${out.reason}`);
-  fs.rmSync(tmpRoot, { recursive: true, force: true });
+  // dumpIds 虽不被步骤 6 消费，仍参与互斥校验（与步骤 4 同一校验事实源）
+  const b = setupTmp('overlap-pd', { titleId: null, descriptionIds: [], paragraphIds: [5], dumpIds: [5] });
+  const r2 = await runArticle(b.tmpRoot);
+  assert.equal(r2.code, 1);
+  assert.ok(JSON.parse(r2.stdout).reason.includes('重叠'));
+  fs.rmSync(b.tmpRoot, { recursive: true, force: true });
 });
 
 test('extract_article.mjs: 缺步骤 5 产物 / 缺 key_ids 时报 error 并指路', async () => {
-  const script = path.resolve('script/extract_article.mjs');
-
-  const noJuiced = setupTmp('nojuice', { titleIds: [1], listFlowIds: [4] }, { withJuiced: false });
-  const r1 = await runScript(process.execPath, [script, '--url', URL], {
-    env: { U2M_WORKING_ROOT: noJuiced.tmpRoot },
-    timeoutMs: 30000,
-  });
+  const noJuiced = setupTmp('nojuice', { titleId: 1, descriptionIds: [], paragraphIds: [5], dumpIds: [] }, { withJuiced: false });
+  const r1 = await runArticle(noJuiced.tmpRoot);
   assert.equal(r1.code, 1);
   assert.ok(JSON.parse(r1.stdout).reason.includes('步骤 5'));
   fs.rmSync(noJuiced.tmpRoot, { recursive: true, force: true });
 
   const noKeyIds = setupTmp('nokey', null);
-  const r2 = await runScript(process.execPath, [script, '--url', URL], {
-    env: { U2M_WORKING_ROOT: noKeyIds.tmpRoot },
-    timeoutMs: 30000,
-  });
+  const r2 = await runArticle(noKeyIds.tmpRoot);
   assert.equal(r2.code, 1);
   assert.ok(JSON.parse(r2.stdout).reason.includes('步骤 3'));
   fs.rmSync(noKeyIds.tmpRoot, { recursive: true, force: true });
@@ -398,13 +231,13 @@ const DATASTAR_JUICED = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>瘦身</title></head><body><h1 data-idx="1">标题</h1><div data-idx="4"><p data-variant="lead" data-idx="5">段落<span data-color="accent" style="background-color: rgb(255, 255, 0)" data-idx="6">行内</span></p><code data-language="python" data-wrap-long-lines="false" data-idx="7">print(1)</code></div></body></html>`;
 
 test('extract_article.mjs: 瘦身规则①——data-* 只留 data-idx 与 data-language', async () => {
-  const { tmpRoot, urlDir } = setupTmp('datastar', { titleIds: [1], descriptionIds: [], listFlowIds: [4] });
-  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), DATASTAR_JUICED);
-  const script = path.resolve('script/extract_article.mjs');
-  const r = await runScript(process.execPath, [script, '--url', URL], {
-    env: { U2M_WORKING_ROOT: tmpRoot },
-    timeoutMs: 30000,
+  const { tmpRoot, urlDir } = setupTmp('datastar', {
+    titleId: 1,
+    descriptionIds: [],
+    paragraphIds: [5, 7],
+    dumpIds: [],
   });
+  const r = await runArticle(tmpRoot, DATASTAR_JUICED, urlDir);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
@@ -437,13 +270,13 @@ const MATH_JUICED = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>公式</title></head><body><h1 data-idx="1">标题</h1><div data-idx="4"><p data-idx="5">设 <span data-idx="60"><span data-idx="61"><math data-idx="62"><semantics><mrow><mi>M</mi></mrow><annotation encoding="application/x-tex">M</annotation></semantics></math></span><span data-idx="63"><span data-idx="64">M</span></span></span> 为最小长度，</p><p data-idx="8">裸公式 <math data-idx="70"><semantics><mrow><mi>L</mi></mrow><annotation encoding="application/x-tex">L &lt; M</annotation></semantics></math> 成立，</p><p data-idx="9">无源公式 <math data-idx="80"><mrow><mi>x</mi></mrow></math> 保留。</p><p data-idx="10">带文字的包装 <span data-idx="90"><span data-idx="91">see <math data-idx="92"><semantics><mrow><mi>M</mi></mrow><annotation encoding="application/x-tex">M</annotation></semantics></math></span><span data-idx="93"><span data-idx="94">M</span></span></span> 尾部</p><p data-idx="11">未声明编码 <math data-idx="95"><semantics><mrow><mi>r</mi></mrow><annotation style="display: block;">r</annotation></semantics></math> 换，他声明 <math data-idx="96"><semantics><mrow><mi>q</mi></mrow><annotation encoding="application/mathml-presentation+xml">not-latex</annotation></semantics></math> 不换。</p></div></body></html>`;
 
 test('extract_article.mjs: 瘦身规则②——MathML 按三档替换为 $LaTeX$', async () => {
-  const { tmpRoot, urlDir } = setupTmp('math', { titleIds: [1], descriptionIds: [70], listFlowIds: [4] });
-  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), MATH_JUICED);
-  const script = path.resolve('script/extract_article.mjs');
-  const r = await runScript(process.execPath, [script, '--url', URL], {
-    env: { U2M_WORKING_ROOT: tmpRoot },
-    timeoutMs: 30000,
+  const { tmpRoot, urlDir } = setupTmp('math', {
+    titleId: 1,
+    descriptionIds: [70],
+    paragraphIds: [5, 8, 9, 10, 11],
+    dumpIds: [],
   });
+  const r = await runArticle(tmpRoot, MATH_JUICED, urlDir);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
@@ -454,37 +287,39 @@ test('extract_article.mjs: 瘦身规则②——MathML 按三档替换为 $LaTeX
   for (const id of [60, 61, 62, 63, 64]) {
     assert.ok(!html.includes(`data-idx="${id}"`), `katex 包装 id ${id} 应随整体替换消失`);
   }
-  // spec §5.1 第二档语义：保真替换不受保护集约束——70 已入 descriptionIds
-  // （key id、被保护），公式照换不保留原树，以下两条断言兼证之
+  // desc 70 落在块 8 子树内：随外层整块带入（不单列），且保真替换不受
+  // 保护集约束——70 已入 descriptionIds（key id、被保护），公式照换不保留原树
   assert.ok(html.includes('裸公式 $L &lt; M$ 成立'), '裸 math 应替换为 LaTeX 文本');
   assert.ok(!html.includes('data-idx="70"'), '裸 math 的 id 应消失');
   assert.ok(html.includes('<math data-idx="80"'), '无 annotation 的 math 应保留原树');
   assert.ok(html.includes('see $M$') && html.includes('尾部'),
     '孪生守卫：带文字包装回退只换 <math>，前后文字不随整体替换丢失');
   // 分级信任（高度还原）：未声明 encoding 的裸 annotation 也信——参考页
-  // 19 个公式全是此方言（style 无 encoding 属性）；显式声明非 TeTeX 编码
+  // 19 个公式全是此方言（style 无 encoding 属性）；显式声明非 TeX 编码
   // 的不信（内容可能是其他格式，当 LaTeX 替换即失真）
   assert.ok(html.includes('未声明编码 $r$ 换'), '裸 annotation（无 encoding）应替换');
   assert.ok(!html.includes('data-idx="95"'), '裸 annotation 的 math id 应消失');
-  assert.ok(html.includes('<math data-idx="96"'), '声明非 TeTeX 编码的 annotation 不信、原树保留');
+  assert.ok(html.includes('<math data-idx="96"'), '声明非 TeX 编码的 annotation 不信、原树保留');
   assert.equal(out.slim.mathReplaced, 4, '应替换 4 处（双胞胎 + 裸 math + 守卫回退 + 裸 annotation）');
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
 // 瘦身规则③④：无文本/纯符号（/[\p{L}\p{N}]/u 不命中——⋮ 即此类）button
 // 与无文本 svg 整删（随 button 删除的内部 svg 不重复计数）；有文本
-// button（中文/字母数字）解包降级保留文本；保护集中的 button 不动
+// button（中文/字母数字）解包降级保留文本。
+// 四键下 button 可为块（成行展开钮）——被标为块的 button 入保护集、
+// 原样保留；未标记的交互残留只可能存在于块内部（后代照常瘦身）
 const BUTTON_JUICED = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>按钮</title></head><body><h1 data-idx="1">标题</h1><div data-idx="4"><p data-idx="5">正文</p><button data-idx="20"><svg data-idx="21"><path d="M0 0"/></svg></button><button data-idx="22">⋮</button><svg data-idx="28"><rect width="1"/></svg><button data-idx="23">JavaScript</button><button data-idx="24">查看答案</button></div></body></html>`;
+<html lang="zh-CN"><head><title>按钮</title></head><body><h1 data-idx="1">标题</h1><button data-idx="23">JavaScript</button><div data-idx="5"><p data-idx="50">正文</p><button data-idx="20"><svg data-idx="21"><path d="M0 0"/></svg></button><button data-idx="22">⋮</button><svg data-idx="28"><rect width="1"/></svg><button data-idx="24">查看答案</button></div></body></html>`;
 
-test('extract_article.mjs: 瘦身规则③④——纯符号 button/空 svg 删除、文本 button 解包、保护集跳过', async () => {
-  const { tmpRoot, urlDir } = setupTmp('button', { titleIds: [1], descriptionIds: [23], listFlowIds: [4] });
-  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), BUTTON_JUICED);
-  const script = path.resolve('script/extract_article.mjs');
-  const r = await runScript(process.execPath, [script, '--url', URL], {
-    env: { U2M_WORKING_ROOT: tmpRoot },
-    timeoutMs: 30000,
+test('extract_article.mjs: 瘦身规则③④——块内残留按钮清理、button 块受保护不解包', async () => {
+  const { tmpRoot, urlDir } = setupTmp('button', {
+    titleId: 1,
+    descriptionIds: [],
+    paragraphIds: [23, 5],
+    dumpIds: [],
   });
+  const r = await runArticle(tmpRoot, BUTTON_JUICED, urlDir);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
@@ -494,8 +329,8 @@ test('extract_article.mjs: 瘦身规则③④——纯符号 button/空 svg 删�
     assert.ok(!html.includes(`data-idx="${id}"`), `id ${id} 应删除`);
   }
   assert.ok(html.includes('data-idx="23">JavaScript</button>'),
-    '保护集中的 button 应原样保留（不解包）');
-  assert.ok(!/<button[^>]*data-idx="24"/.test(html), '有文本 button 应解包');
+    '被标为块的 button 应原样保留（保护集 = key 元素全集）');
+  assert.ok(!/<button[^>]*data-idx="24"/.test(html), '块内未标记的有文本 button 应解包');
   assert.ok(html.includes('查看答案'), '解包后文本应保留');
   assert.equal(out.slim.buttonsRemoved, 2, '无文本/纯符号 button 删 2 个（20 图标钮 + 22 ⋮）');
   assert.equal(out.slim.svgsRemoved, 1, '独立空 svg 删 1 个（21 随 button 走不重复计数）');
@@ -510,13 +345,13 @@ const HREF_JUICED = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>链接</title></head><body><h1 data-idx="1">标题</h1><div data-idx="4"><p data-idx="5"><a href="codex://threads/new?prompt=%E6%8F%90%E7%A4%BA" data-idx="30">深问</a>、<a href="https://example.com/a" data-idx="31">正常链</a>、<a href="mailto:x@example.com" data-idx="32">邮件</a>、<a href="javascript:void(0)" data-idx="33">假链</a>、<a href="#anchor" data-idx="34">锚点</a>。</p></div></body></html>`;
 
 test('extract_article.mjs: 瘦身规则⑤——非白名单协议 <a> 解包、合法链接保留', async () => {
-  const { tmpRoot, urlDir } = setupTmp('href', { titleIds: [1], descriptionIds: [], listFlowIds: [4] });
-  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), HREF_JUICED);
-  const script = path.resolve('script/extract_article.mjs');
-  const r = await runScript(process.execPath, [script, '--url', URL], {
-    env: { U2M_WORKING_ROOT: tmpRoot },
-    timeoutMs: 30000,
+  const { tmpRoot, urlDir } = setupTmp('href', {
+    titleId: 1,
+    descriptionIds: [],
+    paragraphIds: [5],
+    dumpIds: [],
   });
+  const r = await runArticle(tmpRoot, HREF_JUICED, urlDir);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
@@ -538,13 +373,13 @@ const SPAN_JUICED = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>空壳</title></head><body><h1 data-idx="1">标题</h1><div data-idx="4"><pre data-idx="30"><code data-language="python" data-idx="31"><span data-idx="32"><span data-idx="33">print</span>(<span data-idx="34">1</span>)</span></code></pre><p data-idx="5">段落<span style="background-color: rgb(255, 255, 0)" data-idx="35">高亮</span>与<span data-idx="36">空壳</span></p></div></body></html>`;
 
 test('extract_article.mjs: 瘦身规则⑥——空壳 span 塌缩为纯文本、带样式与保护集 span 保留', async () => {
-  const { tmpRoot, urlDir } = setupTmp('span', { titleIds: [1], descriptionIds: [36], listFlowIds: [4] });
-  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), SPAN_JUICED);
-  const script = path.resolve('script/extract_article.mjs');
-  const r = await runScript(process.execPath, [script, '--url', URL], {
-    env: { U2M_WORKING_ROOT: tmpRoot },
-    timeoutMs: 30000,
+  const { tmpRoot, urlDir } = setupTmp('span', {
+    titleId: 1,
+    descriptionIds: [36],
+    paragraphIds: [30, 5],
+    dumpIds: [],
   });
+  const r = await runArticle(tmpRoot, SPAN_JUICED, urlDir);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
@@ -553,7 +388,7 @@ test('extract_article.mjs: 瘦身规则⑥——空壳 span 塌缩为纯文本�
   assert.ok(html.includes('<pre data-idx="30"><code data-language="python" data-idx="31">print(1)</code></pre>'),
     `嵌套空壳 span 应塌缩为纯文本: ${html.slice(html.indexOf('<body'))}`);
   assert.ok(html.includes('background-color: rgb(255, 255, 0)'), '带 style 的 span 应保留');
-  assert.ok(html.includes('data-idx="36"'), '保护集中的空壳 span 应保留');
+  assert.ok(html.includes('data-idx="36"'), '保护集中的空壳 span（嵌在块内的 desc）应保留');
   assert.equal(out.slim.spansUnwrapped, 3, '应解包 3 层（32/33/34）');
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });

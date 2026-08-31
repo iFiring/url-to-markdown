@@ -16,10 +16,12 @@
  *     解包——参考页 codex:// 营销链接单个 ~1KB prompt 曾漏进 9_markdown）
  *  ⑥ 空壳 span 拆包（属性只剩 data-idx，迭代到不动点——pre 内语法
  *     高亮 token span 的样式已被步骤 5 清空，结构在、信息不在）
- * 保护集 protectedIds = titleIds ∪ descriptionIds ∪ standaloneIds
- * （listFlowIds 不入——容器本身不迁移）：删除/解包类（③④⑤⑥）跳过
- * 保护元素本身、其后代照常瘦身；保真替换类（②）不受约束——替换保留
- * 内容只换形态。id 随元素消失只影响 6/7 血统：步骤 8 用 1_snapshot/
+ * 保护集 protectedIds = 迁入的 key 元素全集（titleId ∪ descriptionIds
+ * ∪ paragraphIds 块——四键契约，由 extract_article.mjs 组装）：删除/
+ * 解包类（③④⑤⑥）跳过保护元素本身、其后代照常瘦身——body 顶层全是
+ * 步骤 3 显式标记的内容单元，启发式只清理块内部的未标记残留、不重塑
+ * 被标记单元；保真替换类（②）不受约束——替换保留内容只换形态。
+ * id 随元素消失只影响 6/7 血统：步骤 8 用 1_snapshot/
  * live 的 id 对位，零影响。
  */
 function __u2mSlimArticle(protectedIds) {

@@ -95,9 +95,10 @@ const LONG_TEXT = {
 // 死端口 URL：live 重渲染即时失败；其派生目录名与测试预置目录一致
 const LIVE_URL = 'http://127.0.0.1:9/test-sstrans';
 
-// 步骤 3 产物默认值：与基础 SNAPSHOT 的正文对应（标题 1、流 2/20）。
-// 其余夹具按各自快照传覆盖值；trans2img id 由 CLI 自行并入 keep 集。
-const KEY_IDS = { titleIds: [1], descriptionIds: [], standaloneIds: [], listFlowIds: [2, 20], listFlowDeleteIds: [] };
+// 步骤 3 产物默认值（四键契约）：与基础 SNAPSHOT 的正文对应（标题 1、
+// 块 2/20）。其余夹具按各自快照传覆盖值；trans2img id 由 CLI 自行并入
+// keep 集。
+const KEY_IDS = { titleId: 1, descriptionIds: [], paragraphIds: [2, 20], dumpIds: [] };
 
 function setupTmp(name, { snapshot = SNAPSHOT, skeleton = SKELETON, longText = LONG_TEXT, keyIds = KEY_IDS } = {}) {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), `u2m-sstrans-${name}-`));
@@ -116,13 +117,20 @@ test('screenshot_trans.mjs: live 不可达时快照兜底截图 + resolved skele
   const { tmpRoot, urlDir, assetsDir } = setupTmp('ok');
   const script = path.resolve('script/screenshot_trans.mjs');
   const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
-    env: { U2M_WORKING_ROOT: tmpRoot },
+    env: { U2M_WORKING_ROOT: tmpRoot, U2M_DEBUG: '1' },
     timeoutMs: 60000,
   });
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
   assert.equal(out.count, 2, '链上每个 id 各截一张（9、10）');
+
+  // 分类层 keep 集 = titleId 1 ∪ 块 2/20 ∪ trans2img 9/10——五个 id 全部
+  // 命中（live 死端口 → 仅快照页执行一次分类层排除）。keep 集漏键（如仍
+  // 读旧五键）时正文 id 被 visibility 隐藏、keep 命中数缩水
+  const keepLines = r.stderr.split('\n').filter((l) => l.includes('分类层排除'));
+  assert.ok(keepLines.some((l) => /keep 命中 5$/.test(l)),
+    `keep 集应命中全部四键内容 id + trans id（分类层调试行: ${keepLines.join(' | ') || '无'}）`);
   assert.equal(out.source, 'snapshot', 'live 重渲染失败（死端口）应整体走快照兜底');
   assert.equal(out.resolvedSkeleton, path.join(urlDir, '8_resolved_skeleton.json'));
 
@@ -154,7 +162,7 @@ test('screenshot_trans.mjs: 择优按宽度优先——内层更宽时选内层'
   const { tmpRoot, urlDir } = setupTmp('innerwider', {
     snapshot: SNAPSHOT_INNER_WIDER,
     skeleton: [{ trans2img: [30, 31] }],
-    keyIds: { titleIds: [], descriptionIds: [], standaloneIds: [], listFlowIds: [], listFlowDeleteIds: [] },
+    keyIds: { titleId: null, descriptionIds: [], paragraphIds: [31], dumpIds: [] },
   });
   const script = path.resolve('script/screenshot_trans.mjs');
   const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
@@ -177,7 +185,7 @@ test('screenshot_trans.mjs: 宽高全同的平局选最外层', async () => {
   const { tmpRoot, urlDir } = setupTmp('tie', {
     snapshot: SNAPSHOT_TIE,
     skeleton: [{ trans2img: [40, 41] }],
-    keyIds: { titleIds: [], descriptionIds: [], standaloneIds: [], listFlowIds: [], listFlowDeleteIds: [] },
+    keyIds: { titleId: null, descriptionIds: [], paragraphIds: [41], dumpIds: [] },
   });
   const script = path.resolve('script/screenshot_trans.mjs');
   const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
@@ -226,7 +234,7 @@ test('screenshot_trans.mjs: display:none 折叠模块强制展开后出图，不
   const { tmpRoot, urlDir, assetsDir } = setupTmp('accordion', {
     snapshot: SNAPSHOT_ACCORDION,
     skeleton: [{ trans2img: [50, 51, 52] }],
-    keyIds: { titleIds: [1], descriptionIds: [], standaloneIds: [], listFlowIds: [60], listFlowDeleteIds: [] },
+    keyIds: { titleId: 1, descriptionIds: [], paragraphIds: [60], dumpIds: [] },
   });
   const script = path.resolve('script/screenshot_trans.mjs');
   const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
@@ -263,7 +271,7 @@ test('screenshot_trans.mjs: max-height:0 裁剪模块强制展开后出真实内
   const { tmpRoot, urlDir, assetsDir } = setupTmp('maxheight', {
     snapshot: SNAPSHOT_MAXHEIGHT,
     skeleton: [{ trans2img: [71, 72] }],
-    keyIds: { titleIds: [1], descriptionIds: [], standaloneIds: [], listFlowIds: [60], listFlowDeleteIds: [] },
+    keyIds: { titleId: 1, descriptionIds: [], paragraphIds: [60], dumpIds: [] },
   });
   const script = path.resolve('script/screenshot_trans.mjs');
   const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
@@ -308,7 +316,7 @@ test('screenshot_trans.mjs: display:contents 透明包装跳过不报错，视�
   const { tmpRoot, urlDir, assetsDir } = setupTmp('contents', {
     snapshot: SNAPSHOT_CONTENTS,
     skeleton: [{ trans2img: [83, 84] }],
-    keyIds: { titleIds: [1], descriptionIds: [], standaloneIds: [], listFlowIds: [60], listFlowDeleteIds: [] },
+    keyIds: { titleId: 1, descriptionIds: [], paragraphIds: [60], dumpIds: [] },
   });
   const script = path.resolve('script/screenshot_trans.mjs');
   const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
@@ -335,7 +343,7 @@ test('screenshot_trans.mjs: 条目全部 id 结构性无盒时报 error 指明�
   const { tmpRoot } = setupTmp('contents-only', {
     snapshot: SNAPSHOT_CONTENTS,
     skeleton: [{ trans2img: [83] }],
-    keyIds: { titleIds: [1], descriptionIds: [], standaloneIds: [], listFlowIds: [60], listFlowDeleteIds: [] },
+    keyIds: { titleId: 1, descriptionIds: [], paragraphIds: [60], dumpIds: [] },
   });
   const script = path.resolve('script/screenshot_trans.mjs');
   const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
@@ -388,7 +396,7 @@ test('screenshot_trans.mjs: 超宽表格横向 reveal 截全 + 遮挡者隐藏 +
   const { tmpRoot, urlDir, assetsDir } = setupTmp('wide', {
     snapshot: SNAPSHOT_WIDE,
     skeleton: [{ trans2img: [91, 92] }],
-    keyIds: { titleIds: [1], descriptionIds: [], standaloneIds: [], listFlowIds: [2, 60], listFlowDeleteIds: [98] },
+    keyIds: { titleId: 1, descriptionIds: [], paragraphIds: [2, 60], dumpIds: [98] },
   });
   const script = path.resolve('script/screenshot_trans.mjs');
   try {
@@ -444,6 +452,31 @@ test('screenshot_trans.mjs: trans2img value 非法（旧格式/空数组/非整�
     const out = JSON.parse(r.stdout);
     assert.equal(out.status, 'error');
     assert.ok(out.reason.includes('trans2img'), `${c.name} reason 应指向 trans2img: ${out.reason}`);
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('screenshot_trans.mjs: 3_key_ids.json 非四键契约时报 error（旧五键文件/键重叠/非法成员）', async () => {
+  const script = path.resolve('script/screenshot_trans.mjs');
+  const cases = [
+    // 旧五键文件：无 paragraphIds → 拒收并指回步骤 3
+    { name: 'oldfive', keyIds: { titleIds: [1], descriptionIds: [], standaloneIds: [], listFlowIds: [2, 20], listFlowDeleteIds: [] }, match: 'paragraphIds' },
+    // titleId 与段落块重叠：四键互不相交
+    { name: 'overlap', keyIds: { titleId: 5, descriptionIds: [], paragraphIds: [5, 20], dumpIds: [] }, match: '重叠' },
+    // paragraphIds 非法成员：块 ID 应为正整数
+    { name: 'badmember', keyIds: { titleId: 1, descriptionIds: [], paragraphIds: [2, 'x'], dumpIds: [] }, match: '非法成员' },
+  ];
+  for (const c of cases) {
+    const { tmpRoot } = setupTmp(`badkeys-${c.name}`, { keyIds: c.keyIds });
+    const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
+      env: { U2M_WORKING_ROOT: tmpRoot },
+      timeoutMs: 60000,
+    });
+    assert.equal(r.code, 1, `${c.name} 应报 error: ${r.stdout}`);
+    const out = JSON.parse(r.stdout);
+    assert.equal(out.status, 'error');
+    assert.ok(out.reason.includes(c.match), `${c.name} reason 应含「${c.match}」: ${out.reason}`);
+    assert.ok(out.reason.includes('步骤 3'), `${c.name} reason 应指回步骤 3: ${out.reason}`);
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
 });

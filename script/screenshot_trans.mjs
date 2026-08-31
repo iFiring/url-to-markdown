@@ -44,9 +44,9 @@
  *      强制展开（只覆写正在隐藏的属性，可见时零改动；签名在展开前算好，
  *      不受影响）。截图循环之前另有双层排除：分类层
  *      page-exclude-noncontent.js 每页一次（keep =
- *      titleIds∪descriptionIds∪standaloneIds∪listFlowIds∪trans2img id，
+ *      titleId∪descriptionIds∪paragraphIds 块（嵌套展开）∪trans2img id，
  *      隐藏集 = id 全集 − keep − keep 祖先 − keep 子孙，并入
- *      listFlowDeleteIds，保优先；visibility:hidden 零重排），几何层
+ *      dumpIds，保优先；visibility:hidden 零重排），几何层
  *      即上述 page-reveal-hidden.js 逐 id 四段（纵向展开 + 横向裁剪 reveal +
  *      留白扩盒（四边 20px 呼吸位，负 margin 抵消内容零重排）+ 非亲族遮挡者
  *      隐藏——fixed/sticky 一律、其余盒相交即藏，亲族保留）；
@@ -65,7 +65,7 @@
  *    "images":I,"failedImages":[...],"resolvedSkeleton":"..."}   → 退出码 0
  *   {"status":"ok","skipped":"no_trans2img","images":I,"failedImages":[...],
  *    "resolvedSkeleton":"..."}       无 trans2img 条目 → 退出码 0
- *   {"status":"error","reason":"..."} 前置缺失 / id 未命中 / 未定义编号 → 1
+ *   {"status":"error","reason":"..."} 前置缺失 / 非四键契约 / id 未命中 / 未定义编号 → 1
  *
  * 退出码: 0 成功；1 失败；2 参数错误。
  */
@@ -75,6 +75,7 @@ import path from 'node:path';
 import { chromium } from 'playwright';
 import { emit, emitError, usage, log, debug } from './lib/contract.mjs';
 import { urlDir, storageStatePath } from './lib/env.mjs';
+import { parseKeyIds } from './lib/key-ids.mjs';
 import { readSharedScript } from './lib/placeholder.mjs';
 import { proxyLaunchOptions, gotoSettled, newU2MContext } from './lib/browser.mjs';
 import { snapshotScroll } from './lib/snapshot-scroll.mjs';
@@ -180,6 +181,13 @@ async function main() {
   }
   const keyIds = JSON.parse(await fsPromises.readFile(keyIdsPath, 'utf8'));
 
+  // 四键契约校验与 paragraphIds 嵌套展开共享 lib/key-ids.mjs（与步骤 4/6
+  // 同一校验事实源），开浏览器前拦截形状与自相矛盾输入
+  const parsed = parseKeyIds(keyIds);
+  if (parsed.error) return emitError(parsed.error);
+  const { titleId, descriptionIds, blockIds, dumpIds } = parsed;
+  debug(`key_ids: title=${titleId ?? '无'} desc=${descriptionIds.length} blocks=${blockIds.length} dump=${dumpIds.length}`);
+
   const skeleton = JSON.parse(await fsPromises.readFile(skeletonPath, 'utf8'));
   const longText = JSON.parse(await fsPromises.readFile(longTextPath, 'utf8'));
 
@@ -220,15 +228,15 @@ async function main() {
     transEntries.push(v);
   }
   const transIds = [...new Set(transEntries.flat())];
-  // 分类层 keep 集（spec §3.1）：四类正文 id ∪ trans2img id（截图目标必须保）
+  // 分类层 keep 集（spec §3.1）：titleId ∪ descriptionIds ∪ paragraphIds 块
+  // （已展开）∪ trans2img id（截图目标必须保）；噪音集 = dumpIds
   const keepIds = [...new Set([
-    ...(keyIds.titleIds || []),
-    ...(keyIds.descriptionIds || []),
-    ...(keyIds.standaloneIds || []),
-    ...(keyIds.listFlowIds || []),
+    ...(titleId !== null ? [titleId] : []),
+    ...descriptionIds,
+    ...blockIds,
     ...transIds,
   ])];
-  const noiseIds = Array.isArray(keyIds.listFlowDeleteIds) ? keyIds.listFlowDeleteIds : [];
+  const noiseIds = dumpIds;
   const imgUrls = [];
   for (const entry of resolvedSkeleton) {
     const img = unpackImgEntry(entry.img);
