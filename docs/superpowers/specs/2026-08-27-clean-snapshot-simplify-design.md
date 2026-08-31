@@ -154,10 +154,26 @@ K2 清）。媒体元素不折叠、不 token 化。
 今日 R5 原样：删纯空白文本节点当且仅当前后兄弟都非行内文本敏感节点。置于
 K8 之后（run 已并单节点，行内间空白语义由 token 吞并）。
 
+### K10 空壳 span 拆包（仅清洗版，2026-08-31 七次修订）
+
+K2 剥掉 style/class 后，「只剩 data-u2m-id」一个属性的 span 是纯行内包装，
+对步骤 3（key id 识别）无语义。K10 迭代（≤10 轮）把这类 span 解包——子节点
+hoist 到父、删 span，内容不丢、只粒度变粗，省 step 3 输入字节（实测微信页
+133KB → 89KB，省 33%）。机制与步骤 6 `page-slim-article.js` 规则⑥同款，但
+彼处带保护集（titleIds 等 key 元素不拆）、此处 step 2 在 step 3 之前无保护集
+——裸 span 是行内包装、内容流入可选块级父（p/section/h2-h6，实测占绝大多数），
+无内容丢失。
+
+**仅 clean 趟执行**：带样式版保留这些 span——其 `style` 携 `font-weight`/`color`
+等供步骤 5 finalize 保留与步骤 7 LLM 判粗体/颜色，不能拆。由此孪生 id 集由
+「相等」放宽为 `clean ⊆ styled`（step 3 在子集挑、step 4 在超集查恒命中）；
+LONG_TEXT 占位符在共享段已赋值，拆包只挪位置不改 k，占位符集合守卫不受影响。
+span 限定——div 等块级可能承 trans2img 模块边界，不碰。置于 K9 之后。
+
 ### 规则间顺序
 
-K1 → K2 → K3 → K4 → K5 → K6 → K7 → K8 → K9。折叠类（K5/K6/K7）目标消失即
-容忍跳过；K8 在全部折叠之后，只处理残余文本。
+K1 → K2 → K3 → K4 → K5 → K6 → K7 → K8 → K9 → K10。折叠类（K5/K6/K7）目标消失即
+容忍跳过；K8 在全部折叠之后，只处理残余文本；K10 末段拆空壳 span。
 
 ## 6. 不变量：清洗版是终端视图
 
@@ -267,3 +283,5 @@ U2M_DEBUG：删 juice 耗时行与护栏警告行；保留/新增一行汇总
   测试：K2 用例断言由「aria-label 删净」反转为「aria-label 保留（短值原样）」；新增 K2b 用例覆盖中文 `。`/英文 `.`/分号 `；` 三类终止符的 ≥3 句截断、≤2 句原样、逗号不切句、两趟孪生一致。golden 未变（参考页 aria-label 均为短值，截断 no-op）。
 - 2026-08-31（六次修订）：**H1/H2/H3 整子树豁免占位**。动机：占位把超阈值的标题文本折成 `{{LONG_TEXT_k|N}}`，步骤 3 的 LLM 看到的是编号而非真实标题文本，无从判标题层级与 key id 取舍——这与 `<title>` 不占位同款 rationale（title 因占位 treewalker 只走 body 而天然不占位，这里是把同款豁免扩到正文标题）。改动：共享段步骤 9 `skipPlaceholder()` 的 `closest` 选择器由 `'svg, style'` 扩为 `'svg, style, h1, h2, h3'`——文本节点的最近祖先若是 H1/H2/H3 即跳过占位，**整子树**豁免（嵌套 span/a/code 等后代文本节点一并保留原文、子树结构原样）；H4/H5/H6 仍按阈值占位（字面取 H1/H2/H3，深层子标题不当结构锚点）。标题文本不进 `2_long_text.json`，两版（clean + styled）字面保留、直接流进步骤 3/7；还原链不变（标题文本本就无需还原）。共享段同位执行→两版豁免集合天然一致（孪生守卫不受影响）；编号在两版间仍逐一对应（跳过判定是结构的纯函数）。
   测试：新增「H1/H2/H3 整子树豁免占位」用例——H2 嵌套 span/a 的长文本 + H3 直接长文本两版均原文保留、不进恢复清单；同夹具里 H4 长文本仍占位 `{{LONG_TEXT_k|n_chars}}`、普通长段落仍占位。golden `article-1.styled.html` 与 `article-1.longtext.json` 重生成（3 个 H3 标题翻为字面 + 后续键重编号，200 → 197 条）；`clean-simplify` golden 不变（其 H1 仅 6 字、本就不占位）。
+- 2026-08-31（七次修订）：**K10 空壳 span 拆包（仅清洗版）**。动机：clean 趟 K2 剥掉 style/class 后，「只剩 data-u2m-id」的 span 是纯行内包装，对步骤 3 key id 识别无语义却占字节——实测微信页 clean 版 133KB 里这类 span + 其 data-u2m-id 占 ~30KB+。改动：clean 模式 K9 之后新增 K10，迭代（≤10 轮）把唯一属性为 data-u2m-id 的 `<span>` 解包（子节点 hoist 到父、删 span），机制照搬步骤 6 `page-slim-article.js` 规则⑥，但此处无保护集（step 2 在 step 3 之前、无 key id；裸 span 是行内包装、内容流入可选块级父，无内容丢失、只粒度变粗）。**仅 clean 趟执行**——带样式版保留这些 span（其 `style` 携 `font-weight`/`color` 供步骤 5 finalize 保留与步骤 7 LLM 判粗体/颜色）。由此孪生 id 集由「相等」放宽为 `clean ⊆ styled`（step 3 在子集挑、step 4 在超集查恒命中）；LONG_TEXT 占位符在共享段已赋值、拆包只挪位置不改 k，占位符集合守卫不受影响。
+  测试：新增 K10 用例（裸 span 拆包、带 class 保留、嵌套迭代拆净、裸 span 包占位符时占位符集合与 styled 一致且 longtext 不变）；既有「空元素级联」「R4+R5 astro 解包」两用例的裸 span 加 class 屏蔽 K10（保持各自测点聚焦）。golden 未变（K10 只动 clean 版、golden 守 styled 与 longtext，两版逐字节不变）。实测微信页 clean 133KB→89KB（省 33%）、styled 与 longtext 逐字节不变、clean id 集 ⊆ styled。

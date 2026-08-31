@@ -549,6 +549,39 @@ function __u2mCleanSnapshot(cfg) {
   }
   for (var i = 0; i < wsNodes.length; i++) wsNodes[i].parentNode.removeChild(wsNodes[i]);
 
+  // K10. 空壳 span 拆包（仅清洗版）：K2 已剥 style/class 等，「只剩
+  //     data-u2m-id」一个属性的 span 是纯行内包装，对步骤 3（key id 识别）
+  //     无语义；解包把子节点并入父块——内容不丢、只粒度变粗，省 step 3
+  //     输入字节（实测微信页 ~133KB clean 省 ~30KB）。与步骤 6 规则⑥同款
+  //     拆包机制，但彼处带保护集（titleIds 等 key 元素不拆）、此处 step 2
+  //     在 step 3 之前无保护集——裸 span 是行内包装、内容流入可选块级父
+  //     （p/section/h2-h6 等，实测占绝大多数），无内容丢失。
+  //     仅 clean 趟执行：带样式版保留这些 span——其 style 携 font-weight/
+  //     color 供步骤 5 finalize 保留与步骤 7 LLM 判粗体/颜色，不能拆。孪生
+  //     id 集由此由「相等」放宽为 clean ⊆ styled（step 3 在子集挑、step 4
+  //     在超集查恒命中）；LONG_TEXT 占位符在共享段已赋值，拆包只挪位置不
+  //     改 k，占位符集合守卫不受影响。嵌套空壳 span 迭代到不动点（≤10 轮）。
+  //     span 限定——div 等块级可能承 trans2img 模块边界，不碰。
+  for (var round = 0; round < 10; round++) {
+    var bareSpans = document.querySelectorAll('span');
+    var changed = false;
+    for (var i = 0; i < bareSpans.length; i++) {
+      var sp = bareSpans[i];
+      if (!sp.isConnected) continue;
+      var bare = true;
+      for (var j = 0; j < sp.attributes.length; j++) {
+        if (sp.attributes[j].name !== 'data-u2m-id') { bare = false; break; }
+      }
+      if (!bare) continue;
+      var spPar = sp.parentNode;
+      if (!spPar) continue;
+      while (sp.firstChild) spPar.insertBefore(sp.firstChild, sp);
+      spPar.removeChild(sp);
+      changed = true;
+    }
+    if (!changed) break;
+  }
+
   // （原步骤 19 R6 juice 隐藏折叠已废除：样式检测管线整体移除，隐藏折叠由
   //   上方 K5 以 hidden 裸属性零样式计算实现）
 

@@ -104,7 +104,7 @@ test('clean_snapshot.mjs: 空元素级联删除，有内容的元素保留', asy
     </div>
     <div data-u2m-id="5">   </div>
     <div data-u2m-id="6">正文内容</div>
-    <div data-u2m-id="7"><span data-u2m-id="8">行内文本</span></div>
+    <div data-u2m-id="7"><span data-u2m-id="8" class="keep">行内文本</span></div>
     <span data-u2m-id="9"></span>
     <img data-u2m-id="10" src="x.png" alt="x">
     <svg data-u2m-id="11"></svg>
@@ -808,7 +808,7 @@ test('R4+R5: astro 包装解包；安全位置空白删除、行内间空白保�
 <body>
   <div data-u2m-id="1">
     <astro-island data-u2m-id="2" component-url="/x.js"><p data-u2m-id="3">岛内容</p></astro-island>
-    <astro-slot data-u2m-id="4"><span data-u2m-id="5">槽内容</span></astro-slot>
+    <astro-slot data-u2m-id="4"><span data-u2m-id="5" class="keep">槽内容</span></astro-slot>
     <div data-u2m-id="6">
       <p data-u2m-id="7">a</p>
       <p data-u2m-id="8">b</p>
@@ -975,6 +975,48 @@ test('H1/H2/H3 整子树豁免占位——长标题原文保留作步骤 3 识�
     assert.ok(vals.includes(zhH4) && vals.includes(zhP), 'H4 与段落长文本应进恢复清单');
     // 带样式版同样豁免
     assert.ok(styled.includes(zhH2) && styled.includes(zhH3) && styled.includes(zhSubA), '带样式版标题原文保留');
+  } finally { cleanup(); }
+});
+
+test('K10: 空壳 span 拆包（仅 clean）——仅 data-u2m-id 的 span 解包、带 class 保留、嵌套迭代拆净、占位符集合与 styled 一致', async () => {
+  // clean 趟 K2 剥掉 style/class 后，「只剩 data-u2m-id」的 span 是纯行内包装，
+  // 对步骤 3 key id 识别无语义；K10 解包把子节点并入（可选中）父块——内容不
+  // 丢、只粒度变粗，省 step 3 输入字节。带样式版保留这些 span（其 style 携
+  // font-weight/color 供步骤 5-7），故只 clean 趟执行；孪生 id 集由「相等」
+  // 放宽为 clean ⊆ styled（step 3 在子集挑、step 4 在超集查恒命中）。
+  const long = '这是一段超过十六个汉字的长文本用于占位';
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-u2m-id="1">
+    <p data-u2m-id="2"><span data-u2m-id="3" style="color:red">裸 span 纯文本</span></p>
+    <p data-u2m-id="4"><span data-u2m-id="5" class="keep-me" style="color:red">带 class 的 span</span></p>
+    <p data-u2m-id="6"><span data-u2m-id="7" style="x:1"><span data-u2m-id="8" style="x:1">嵌套裸 span</span></span></p>
+    <p data-u2m-id="9"><span data-u2m-id="10" style="color:red">${long}</span></p>
+  </div>
+</body></html>`;
+  const { cleaned, styled, out, cleanup } = await runClean(snapshot, 'k10-bare-span');
+  try {
+    // 裸 span（仅 data-u2m-id）拆包：文本并入父 <p>
+    const p2 = cleaned.match(/<p data-u2m-id="2">([\s\S]*?)<\/p>/)[1];
+    assert.ok(p2.includes('裸 span 纯文本') && !/<span/.test(p2), `裸 span 应拆包、文本并入 <p>: ${p2}`);
+    assert.ok(!cleaned.includes('data-u2m-id="3"'), '裸 span 的 data-u2m-id="3" 应随拆包消失');
+    // 带 class 的 span 保留（class 是语义信号）
+    assert.ok(/<span data-u2m-id="5" class="keep-me">带 class 的 span<\/span>/.test(cleaned), '带 class 的 span 应保留');
+    // 嵌套裸 span 迭代拆净——两层都拆、文本落到 <p>
+    const p6 = cleaned.match(/<p data-u2m-id="6">([\s\S]*?)<\/p>/)[1];
+    assert.ok(p6.includes('嵌套裸 span') && !/<span/.test(p6), `嵌套裸 span 应迭代拆净: ${p6}`);
+    assert.ok(!cleaned.includes('data-u2m-id="7"') && !cleaned.includes('data-u2m-id="8"'), '嵌套裸 span 的 id 都应消失');
+    // 裸 span 包占位符：拆包后占位符落到 <p>，占位符串不变
+    const p9 = cleaned.match(/<p data-u2m-id="9">([\s\S]*?)<\/p>/)[1];
+    assert.ok(/\{\{LONG_TEXT_1\|\d+_chars\}\}/.test(p9), `占位符应落到 <p>: ${p9}`);
+    assert.ok(!/<span/.test(p9), '包占位符的裸 span 应拆包');
+    // 带样式版保留全部 span（含 style，供步骤 5-7）
+    assert.ok(styled.includes('data-u2m-id="3"') && styled.includes('data-u2m-id="7"') && styled.includes('data-u2m-id="10"'), '带样式版应保留这些 span');
+    // 孪生守卫：占位符集合两版一致（拆包只挪位置不改 k）
+    const ph = (h) => (h.match(/\{\{LONG_TEXT_\d+\|\d+_[a-z]+\}\}/g) || []).sort();
+    assert.deepEqual(ph(cleaned), ph(styled), '占位符集合两版应一致');
+    assert.equal(out.longTextCount, 1, '恢复清单条数不变');
   } finally { cleanup(); }
 });
 
