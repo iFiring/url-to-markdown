@@ -1,7 +1,7 @@
 /**
  * 步骤 5 函数值收集。在浏览器 evaluate 中执行，运行于 juice 内联后的页面
  * （<style> 已移除、style 属性已就位），返回需要真实值替换的声明对：
- *   [{ id: data-u2m-id, props: [属性名, …] }, …]
+ *   [{ id: data-idx, props: [属性名, …] }, …]
  * 收集条件：style 属性声明值含函数间接引用——var() / color-mix() / calc()，
  * 或值为空串（简写属性带 var 的 CSSOM 形态：如 border-style: var(--x) 在
  * 本页（无样式表、变量不可解析）被展开为 border-top-style 等 longhand 且
@@ -28,7 +28,7 @@ function __u2mCollectFnValues() {
       if (v === '' || FUNC_RE.test(v)) props.push(p);
     }
     if (props.length > 0) {
-      out.push({ id: styled[i].getAttribute('data-u2m-id'), props: props });
+      out.push({ id: styled[i].getAttribute('data-idx'), props: props });
     }
   }
   return out;

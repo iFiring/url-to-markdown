@@ -10,7 +10,7 @@ const snapshotScript = path.resolve('script/snapshot.mjs');
 const transScript = path.resolve('script/screenshot_trans.mjs');
 
 // 可翻版的 live 夹具服务器：v1 → v2 在模块前插入新段落并改模块文本，
-// 使 data-u2m-id 平移 + 签名失配 → 步骤 8 应自动降级快照兜底。
+// 使 data-idx 平移 + 签名失配 → 步骤 8 应自动降级快照兜底。
 // 内联 script 刻意保留：验证「剥 script 再标记」的确定性在两次渲染间成立。
 function startLiveServer() {
   let variant = 'v1';
@@ -26,7 +26,7 @@ function startLiveServer() {
 <script>document.title = 'hydration';</script></head><body>
 <h1>标题一级</h1>
 <p>${'正文填充文本。'.repeat(8)}</p>
-<p>翻版后新插入的段落，使后续 data-u2m-id 整体平移。</p>
+<p>翻版后新插入的段落，使后续 data-idx 整体平移。</p>
 <div class="module" style="background-color: rgb(30, 30, 30); color: rgb(255, 255, 255); padding: 16px">模块内容翻新版</div>
 <p>结尾段落。</p>
 </body></html>`;
@@ -76,8 +76,8 @@ test('步骤 8 live 重渲染：同内容两次渲染 id 对位 → source:"live
   const urlDir = path.dirname(out1.snapshot);
   const snapHtml = fs.readFileSync(out1.snapshot, 'utf8');
 
-  // 从快照解析模块的 data-u2m-id（属性序两种可能都兼容）
-  const m = snapHtml.match(/<div[^>]*(?:class="module"[^>]*data-u2m-id="(\d+)"|data-u2m-id="(\d+)"[^>]*class="module")[^>]*>/);
+  // 从快照解析模块的 data-idx（属性序两种可能都兼容）
+  const m = snapHtml.match(/<div[^>]*(?:class="module"[^>]*data-idx="(\d+)"|data-idx="(\d+)"[^>]*class="module")[^>]*>/);
   assert.ok(m, '快照中应能定位 class="module" 元素');
   const moduleId = m[1] || m[2];
   assert.ok(Number(moduleId) > 0, `模块 id 应为正数: ${moduleId}`);

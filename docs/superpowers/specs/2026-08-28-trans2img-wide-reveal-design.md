@@ -36,7 +36,7 @@ spike 程序化验证数据（openai 文档页，production 等价 before → �
 新共享脚本 `script/lib/page-exclude-noncontent.js`（具名函数 `__u2mExcludeNonContent(keepIds)`），每页一次：
 
 - **keep 集**（调用侧拼好传入）= `3_key_ids.json` 的 `titleIds ∪ descriptionIds ∪ standaloneIds ∪ listFlowIds` ∪ 步骤 8 骨架的 trans2img id 全集——正文事实源与截图目标都必须保；
-- **隐藏集** = 页内 `data-u2m-id` 全集 − keep − keep 的祖先 − **keep 的子孙**，再并入 `listFlowDeleteIds`（LLM 明判的菜单/导航/广告/推荐噪音，keep 子树内的也藏——藏的是分类已定性的噪音；`visibility` 留空位不破坏模块形状）。**保优先**：任何来源的隐藏候选与 keep 或 keep 祖先重叠时一律不藏（步骤 3 理论上可产出 delete id 是 keep 祖先的坏分类，藏了会把 keep 元素连坐藏空）；
+- **隐藏集** = 页内 `data-idx` 全集 − keep − keep 的祖先 − **keep 的子孙**，再并入 `listFlowDeleteIds`（LLM 明判的菜单/导航/广告/推荐噪音，keep 子树内的也藏——藏的是分类已定性的噪音；`visibility` 留空位不破坏模块形状）。**保优先**：任何来源的隐藏候选与 keep 或 keep 祖先重叠时一律不藏（步骤 3 理论上可产出 delete id 是 keep 祖先的坏分类，藏了会把 keep 元素连坐藏空）；
   - **keep 的子孙不藏**是关键保护：模块/正文**内部**元素是模块视觉本身，naive 补集会把模块内部挖空；
   - keep 的祖先是容器与背景，藏了就毁模块；
 - 落地手段 `visibility:hidden !important`：与 DOM 删除像素等价、零重排（模块位置不变、boundingBox 择优不受影响）、页 A（无 JS 的 file://）同样适用。keep 穿透按构造封闭：被藏元素子树内不可能有 keep 元素（有则它是 keep 的祖先，已在排除之列）；子代**显式** `visibility:visible` 规则的穿透与几何层同式处理——对被藏元素的可见后代一并覆写 `visibility:hidden`；
@@ -99,7 +99,7 @@ __u2mExcludeNonContent(keepIds, deleteIds) → { hidden, kept }
 
 - **超宽裁剪夹具**：`html{overflow-x:auto} + body{overflow-x:hidden}` + 内部 `.wrap{overflow-x:auto;max-width:640px}` 装 2800px 表格 + 左右两条品红 `position:fixed; z-index:9999` 假导航横跨表格区域。**必须用真实盒裁剪形态**（见 §1）。
 - **亲族 fixed 夹具**：模块内 `position:fixed` 红色徽标（类比模块内吸顶表头）。
-- **分类层夹具**：快照含正文模块 + 带各自 `data-u2m-id` 的侧栏浮窗/推荐位（非 keep、非 keep 祖先），手写最小 `3_key_ids.json` 只标正文 → 断言浮窗特征像素 = 0、正文模块内容像素 > 阈值（完整未误伤）。`page-exclude-noncontent.js` 另配直接 evaluate 的**语义单测**（真实浏览器 setContent + 注入脚本，断言保护规则矩阵：keep 自身/祖先/子孙保、非内容藏、delete 在 keep 子树内藏、delete 为 keep 祖先时保优先）。`page-reveal-hidden.js` 的留白扩盒同样配语义单测（auto 宽块内容探针零移动/盒恰 +40/原不对称内边距保留、显式 border-box 宽自愈、幂等、display:contents 跳过）。
+- **分类层夹具**：快照含正文模块 + 带各自 `data-idx` 的侧栏浮窗/推荐位（非 keep、非 keep 祖先），手写最小 `3_key_ids.json` 只标正文 → 断言浮窗特征像素 = 0、正文模块内容像素 > 阈值（完整未误伤）。`page-exclude-noncontent.js` 另配直接 evaluate 的**语义单测**（真实浏览器 setContent + 注入脚本，断言保护规则矩阵：keep 自身/祖先/子孙保、非内容藏、delete 在 keep 子树内藏、delete 为 keep 祖先时保优先）。`page-reveal-hidden.js` 的留白扩盒同样配语义单测（auto 宽块内容探针零移动/盒恰 +40/原不对称内边距保留、显式 border-box 宽自愈、幂等、display:contents 跳过）。
 
 断言（`pixelStats` 辅助：产物 webp 装进 chromium canvas，逐像素统计——颜色匹配每通道 ±40 容差抗 webp 有损压缩；带密度 = 超视口带内与带内众色不同的像素占比）：
 
@@ -126,7 +126,7 @@ __u2mExcludeNonContent(keepIds, deleteIds) → { hidden, kept }
 - **overflow 简写双轴副作用**：覆写 `overflow:visible` 同时解除该祖先的纵向裁剪（如文本省略容器）。触发条件要求横向真实溢出（`clientWidth < scrollWidth`）才动手，且纵向塌缩本就由 3.2 展开——风险收窄到"祖先刻意用 overflow 裁饰性纵向溢出"的长尾，可接受。
 - **visibility 穿透后代**：已用"遮挡者可见后代一并覆写"封闭；若站点 JS 在截图瞬间动态重建导航节点，新节点不在本次扫描内——spike 实测站点 JS 零回写，未观测到该风险。
 - **sticky 内容误伤**：理论上存在"非亲族 sticky 是页面正文的一部分且恰好视觉上属于模块"的构造，实践中 sticky 的语义就是视口吸附，判定为可接受。
-- **性能**：遮挡扫描每 id 一次全量 `body *` getComputedStyle；数千元素页面数十 ms 量级，不构成瓶颈。分类层每页一次 `querySelectorAll('[data-u2m-id]')` + 祖先链判定，量级更小。
+- **性能**：遮挡扫描每 id 一次全量 `body *` getComputedStyle；数千元素页面数十 ms 量级，不构成瓶颈。分类层每页一次 `querySelectorAll('[data-idx]')` + 祖先链判定，量级更小。
 - **分类层 id 对齐**：keep 数字 id 在页 A（`1_snapshot`）与页 B（live 重标记）间只在两次渲染结构一致时对位——签名严校验本就保证结构漂移时不用 B 截图；漂移场景由几何层兜底。
 - **分类层误伤**：keep 子孙保护规则封死"模块内部挖空"；`listFlowDeleteIds` 藏错的风险与步骤 6 删除同源（同一 LLM 分类事实源），可接受。
 - **双层叠加**：两层幂等覆写同一 `visibility:hidden` 声明，无冲突、无顺序依赖（分类层先执行只是语义整洁）。

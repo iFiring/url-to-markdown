@@ -230,20 +230,20 @@ const SNAPSHOT_WIDE = `<!DOCTYPE html>
   body { overflow-x: hidden; margin: 0; }
   .wrap { overflow-x: auto; max-width: 640px; }
 </style></head><body>
-<h1 data-u2m-id="1">超宽模块测试</h1>
-<p data-u2m-id="2">正文段落。</p>
+<h1 data-idx="1">超宽模块测试</h1>
+<p data-idx="2">正文段落。</p>
 <div style="position: fixed; top: 0; left: 0; width: 40px; height: 100%; background: rgb(255, 0, 255); z-index: 9999"></div>
 <div style="position: fixed; top: 0; right: 0; width: 40px; height: 100%; background: rgb(255, 0, 255); z-index: 9999"></div>
-<div class="wrap" data-u2m-id="91">
-<table data-u2m-id="92" style="width: 2800px; border-collapse: collapse; background: rgb(255, 255, 255)">
+<div class="wrap" data-idx="91">
+<table data-idx="92" style="width: 2800px; border-collapse: collapse; background: rgb(255, 255, 255)">
 <tr>${wideCells('rgb(200, 220, 240)')}</tr>
 <tr>${wideCells('rgb(225, 235, 250)')}</tr>
 <tr>${wideCells('rgb(200, 220, 240)')}</tr>
-<tr><td colspan="28" style="height: 40px; border: 1px solid rgb(120, 120, 120); background: rgb(225, 235, 250)"><span data-u2m-id="95" style="position: absolute; top: 200px; left: 300px; width: 60px; height: 60px; background: rgb(255, 0, 0); z-index: 9999"></span></td></tr>
+<tr><td colspan="28" style="height: 40px; border: 1px solid rgb(120, 120, 120); background: rgb(225, 235, 250)"><span data-idx="95" style="position: absolute; top: 200px; left: 300px; width: 60px; height: 60px; background: rgb(255, 0, 0); z-index: 9999"></span></td></tr>
 </table>
 </div>
-<div data-u2m-id="96" style="position: relative; margin-top: -120px; height: 60px; background: rgb(255, 165, 0); z-index: 50"></div>
-<p data-u2m-id="60">结尾段落。</p>
+<div data-idx="96" style="position: relative; margin-top: -120px; height: 60px; background: rgb(255, 165, 0); z-index: 50"></div>
+<p data-idx="60">结尾段落。</p>
 </body></html>`;
 
 test('screenshot_trans.mjs: 超宽表格横向 reveal 截全 + 遮挡者隐藏 + 亲族保留', async () => {
@@ -303,7 +303,7 @@ Expected: 新测试 FAIL（旧测试仍 PASS）——修复前 wrap 裁剪使超
  * 隐藏：display:none（自身或祖先）盒为 null、max-height:0 盒高为 0，
  * el.screenshot() 自动等可见会挂到超时；更隐蔽的是被塌缩祖先裁剪的模块
  * ——自身盒正常但像素被裁空，不展开就截是空白图。
- * 对给定 data-u2m-id 的元素**无条件**自元素向 body 逐级扫一遍，**只覆写
+ * 对给定 data-idx 的元素**无条件**自元素向 body 逐级扫一遍，**只覆写
  * 正在隐藏的属性**（行内 !important）——不能以元素自身盒作前置守卫：被
  * 塌缩祖先裁剪/visibility 隐藏的模块盒正常但像素全空，守卫会放行出空白图。
  * 三段（执行顺序）：
@@ -346,7 +346,7 @@ Expected: 新测试 FAIL（旧测试仍 PASS）——修复前 wrap 裁剪使超
  * 视觉由链上其余 id 承载。
  */
 function __u2mRevealHidden(id) {
-  var el = document.querySelector('[data-u2m-id="' + id + '"]');
+  var el = document.querySelector('[data-idx="' + id + '"]');
   if (!el) return { found: false, touched: 0, wideTouched: 0, occluders: 0, box: null, boxless: false };
 
   function boxOf(e) {
@@ -517,10 +517,10 @@ test('page-exclude-noncontent.js: 函数可被 evaluate 格式调用', () => {
 //   #4 非内容包装（→藏），内含 #5 delete（→藏）
 //   #6 delete 但同时是 keep #7 的祖先（保优先→保），#7 keep（→保）
 const MATRIX_HTML = `<!DOCTYPE html><html><body>
-<div data-u2m-id="1" id="title">标题 <span data-u2m-id="2" id="inner">内文</span> <span data-u2m-id="8" id="del-inside">子树噪音</span></div>
-<div data-u2m-id="3" id="sidebar">侧栏 <span data-u2m-id="9" id="penetrator" style="visibility: visible">穿透</span></div>
-<div data-u2m-id="4" id="outer">包装 <span data-u2m-id="5" id="del-noise">噪音</span></div>
-<div data-u2m-id="6" id="del-ancestor">容器 <span data-u2m-id="7" id="kept-child">正文</span></div>
+<div data-idx="1" id="title">标题 <span data-idx="2" id="inner">内文</span> <span data-idx="8" id="del-inside">子树噪音</span></div>
+<div data-idx="3" id="sidebar">侧栏 <span data-idx="9" id="penetrator" style="visibility: visible">穿透</span></div>
+<div data-idx="4" id="outer">包装 <span data-idx="5" id="del-noise">噪音</span></div>
+<div data-idx="6" id="del-ancestor">容器 <span data-idx="7" id="kept-child">正文</span></div>
 </body></html>`;
 
 test('__u2mExcludeNonContent: 保护规则矩阵（keep/祖先/子孙/delete/保优先/穿透）', async () => {
@@ -592,7 +592,7 @@ Expected: FAIL——文件不存在（`ENOENT`）。
  * 事实源是步骤 3 的 LLM 分类 + 步骤 7 的 trans2img 标记：
  *   keep = titleIds ∪ descriptionIds ∪ standaloneIds ∪ listFlowIds
  *          ∪ trans2img id 全集（调用侧拼好传入）
- *   隐藏 = 页内 data-u2m-id 全集 − keep − keep 的祖先 − keep 的子孙
+ *   隐藏 = 页内 data-idx 全集 − keep − keep 的祖先 − keep 的子孙
  *          ∪ listFlowDeleteIds（LLM 明判的菜单/导航/广告/推荐噪音，
  *          keep 子树内的也藏——步骤 7 是在噪音已删的 6_article.html 上
  *          标记模块的，截图应还原 LLM 所见的模块形态）
@@ -616,7 +616,7 @@ function __u2mExcludeNonContent(keepIds, deleteIds) {
   for (var i = 0; i < keepIds.length; i++) keep[keepIds[i]] = true;
   for (var j = 0; j < deleteIds.length; j++) del[deleteIds[j]] = true;
 
-  var tagged = document.querySelectorAll('[data-u2m-id]');
+  var tagged = document.querySelectorAll('[data-idx]');
 
   // keep 命中 + 祖先集（含未打标的 body/html——不在 tagged 内本就非候选）+ 子孙集
   var keepEls = [];
@@ -624,7 +624,7 @@ function __u2mExcludeNonContent(keepIds, deleteIds) {
   var subSet = new Set();
   for (var t = 0; t < tagged.length; t++) {
     var e = tagged[t];
-    if (!keep[parseInt(e.getAttribute('data-u2m-id'), 10)]) continue;
+    if (!keep[parseInt(e.getAttribute('data-idx'), 10)]) continue;
     keepEls.push(e);
     for (var a = e.parentElement; a; a = a.parentElement) ancSet.add(a);
     var desc = e.querySelectorAll('*');
@@ -634,7 +634,7 @@ function __u2mExcludeNonContent(keepIds, deleteIds) {
   var hidden = 0;
   for (var u = 0; u < tagged.length; u++) {
     var el = tagged[u];
-    var id = parseInt(el.getAttribute('data-u2m-id'), 10);
+    var id = parseInt(el.getAttribute('data-idx'), 10);
     if (keep[id]) continue;                    // keep 自身
     if (ancSet.has(el)) continue;              // keep 祖先——保优先（delete 也不例外）
     if (!del[id] && subSet.has(el)) continue;  // keep 子孙保护；delete 噪音例外
@@ -718,14 +718,14 @@ keyIds: { titleIds: [1], descriptionIds: [], standaloneIds: [], listFlowIds: [2,
 
 （默认 KEY_IDS 覆盖基础 SNAPSHOT 与 code/imgs/mix 等用例，无需逐个改。）
 
-3. SNAPSHOT_WIDE 追加分类层元素——在 `<p data-u2m-id="2">正文段落。</p>` 之后插一行侧栏，在表格最后一行 `<tr>` 之前插青色广告行：
+3. SNAPSHOT_WIDE 追加分类层元素——在 `<p data-idx="2">正文段落。</p>` 之后插一行侧栏，在表格最后一行 `<tr>` 之前插青色广告行：
 
 ```js
-<div data-u2m-id="97" style="position: absolute; top: 160px; right: 0; width: 120px; height: 400px; background: rgb(75, 0, 130); z-index: 100"></div>
+<div data-idx="97" style="position: absolute; top: 160px; right: 0; width: 120px; height: 400px; background: rgb(75, 0, 130); z-index: 100"></div>
 ```
 
 ```html
-<tr><td colspan="28" style="height: 40px; border: 1px solid rgb(120, 120, 120); background: rgb(200, 220, 240)"><div data-u2m-id="98" style="height: 40px; background: rgb(0, 255, 255)">广告位</div></td></tr>
+<tr><td colspan="28" style="height: 40px; border: 1px solid rgb(120, 120, 120); background: rgb(200, 220, 240)"><div data-idx="98" style="height: 40px; background: rgb(0, 255, 255)">广告位</div></td></tr>
 ```
 
 4. WIDE 测试的 pixelStats 查询追加两项断言：

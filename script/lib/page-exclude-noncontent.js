@@ -7,7 +7,7 @@
  * 事实源是步骤 3 的 LLM 分类 + 步骤 7 的 trans2img 标记：
  *   keep = titleIds ∪ descriptionIds ∪ standaloneIds ∪ listFlowIds
  *          ∪ trans2img id 全集（调用侧拼好传入）
- *   隐藏 = 页内 data-u2m-id 全集 − keep − keep 的祖先 − keep 的子孙
+ *   隐藏 = 页内 data-idx 全集 − keep − keep 的祖先 − keep 的子孙
  *          ∪ listFlowDeleteIds（LLM 明判的菜单/导航/广告/推荐噪音，
  *          keep 子树内的也藏——步骤 7 是在噪音已删的 6_article.html 上
  *          标记模块的，截图应还原 LLM 所见的模块形态）
@@ -31,7 +31,7 @@ function __u2mExcludeNonContent(keepIds, deleteIds) {
   for (var i = 0; i < keepIds.length; i++) keep[keepIds[i]] = true;
   for (var j = 0; j < deleteIds.length; j++) del[deleteIds[j]] = true;
 
-  var tagged = document.querySelectorAll('[data-u2m-id]');
+  var tagged = document.querySelectorAll('[data-idx]');
 
   // keep 命中 + 祖先集（含未打标的 body/html——不在 tagged 内本就非候选）+ 子孙集
   var keepEls = [];
@@ -39,7 +39,7 @@ function __u2mExcludeNonContent(keepIds, deleteIds) {
   var subSet = new Set();
   for (var t = 0; t < tagged.length; t++) {
     var e = tagged[t];
-    if (!keep[parseInt(e.getAttribute('data-u2m-id'), 10)]) continue;
+    if (!keep[parseInt(e.getAttribute('data-idx'), 10)]) continue;
     keepEls.push(e);
     for (var a = e.parentElement; a; a = a.parentElement) ancSet.add(a);
     var desc = e.querySelectorAll('*');
@@ -49,7 +49,7 @@ function __u2mExcludeNonContent(keepIds, deleteIds) {
   var hidden = 0;
   for (var u = 0; u < tagged.length; u++) {
     var el = tagged[u];
-    var id = parseInt(el.getAttribute('data-u2m-id'), 10);
+    var id = parseInt(el.getAttribute('data-idx'), 10);
     if (keep[id]) continue;                    // keep 自身
     if (ancSet.has(el)) continue;              // keep 祖先——保优先（delete 也不例外）
     if (!del[id] && subSet.has(el)) continue;  // keep 子孙保护；delete 噪音例外

@@ -10,7 +10,7 @@
 
 实践问题：真实文章页正文常非标准 `h1/h2/h3/p/span/a` 标签，而是复杂多层 DIV。写死的尺寸/密度阈值在长页主列上会把文本密度稀释到阈值以下（虽有 `maxHeuristicText=500` 上限豁免，仍频繁误判），把整列正文当非文本吞掉、或漏判复杂结构。代码无法枚举所有页面结构。
 
-此外，`prepare_classify` 与 `clear_trans_html` 各自重新开页、各跑一遍 prepare 以求 `data-u2m-id` 字节级匹配——真实 URL 的广告/A-B/时间戳致 DOM 漂移会使 id 失配，是脆弱不变量。
+此外，`prepare_classify` 与 `clear_trans_html` 各自重新开页、各跑一遍 prepare 以求 `data-idx` 字节级匹配——真实 URL 的广告/A-B/时间戳致 DOM 漂移会使 id 失配，是脆弱不变量。
 
 另一条背景：现行双运行时架构（Node 与 Python 互为镜像、产两份平行初稿供人工择优）使每项逻辑、每个测试都要写两遍并持续保持字节级对齐，维护成本远超双稿择优带来的边际收益。本设计借分类重构之机**移除 Python 运行时与双稿择优流程**，收敛为 Node 单运行时——快照/plan 单一来源恰好也使"镜像不变性"这条最难维护的约束自然退役。
 
@@ -28,12 +28,12 @@
 ## 3 · 关键决策（经头脑风暴确认）
 
 1. **下载一次，后续全在快照上工作**：登录 + 充分滚动 + DOM 稳定后，捕获全保真**自包含** `snapshot.html`（外部 `<link>` CSS 抓取文本内联成 `<style>`、剥尽 `<script>`/`<noscript>`/`<template>`/`on*`、保留 `<style>`/元素 inline style/图片/`<video>`、注入 `<base href=origin>`）；渲染类分派（截图/SVG/图片下载）此后都 `setContent` 加载此快照，不再重开原 URL、不依赖网络取 CSS。
-2. **双产物**：全保真 `snapshot.html`（渲染源）+ 派生 `classify_input.html`（占位符 + 信号样式 + id，仅给 LLM）。两者由同一次开页、同一 DOM 状态派生，故 `data-u2m-id` 在两份里天然一致。
-3. **块寻址 = 列表流选择器 + 稳定 id**：LLM 用一个选择器指出"列表流"父容器；prepare 给候选块注入稳定 `data-u2m-id`；逐块方案用 id 引用。兼顾"找父组件"与抗动态 class 失配。
+2. **双产物**：全保真 `snapshot.html`（渲染源）+ 派生 `classify_input.html`（占位符 + 信号样式 + id，仅给 LLM）。两者由同一次开页、同一 DOM 状态派生，故 `data-idx` 在两份里天然一致。
+3. **块寻址 = 列表流选择器 + 稳定 id**：LLM 用一个选择器指出"列表流"父容器；prepare 给候选块注入稳定 `data-idx`；逐块方案用 id 引用。兼顾"找父组件"与抗动态 class 失配。
 4. **列表流划定块流，其外为噪声**：列表流内的块按 `action` 逐块分派；列表流外的一切一律删除（新的结构去噪）。Readability 仍在其后对存活 DOM 抽主体（三层去噪不重叠，§4.2）。
 5. **type + clean 合并为 action**：旧 schema 的 `type`（分派类型）与 `clean`（keep/delete/flatten）折叠为单字段 `action`（`keep|delete|code_block|screenshot|passthrough_svg|svg_convert|latex|block_screenshot`）；`flatten` 退役（`keep` 的多层 DIV 交给 Readability 拍平）。
 6. **代码块全占位 + 本地判语言**：所有长文本（含代码）→占位符，原件存于快照；LLM 靠结构（`<pre>`/`<code>`/`.hljs`/`.highlight`/`prism`/`data-lang`）识别 `code_block`，不读内容；语言由本地脚本从 `data-lang`/class 取，无则本地启发式检测。
-7. **单运行时 + 快照唯一来源**：移除 Python 运行时与双稿择优流程，管线为 Node 单运行时；`snapshot.html` 与 `classify_plan.json` 全局唯一，`clear_trans_html` `setContent` 加载同一份快照，`data-u2m-id` 与 `classify_input.html` 天然一致（不再有"各自重开页求 id 匹配"的不变量）；预清洗/占位/id 注入逻辑只存在于共享 `page-*.js`，跑一次即烘进快照。
+7. **单运行时 + 快照唯一来源**：移除 Python 运行时与双稿择优流程，管线为 Node 单运行时；`snapshot.html` 与 `classify_plan.json` 全局唯一，`clear_trans_html` `setContent` 加载同一份快照，`data-idx` 与 `classify_input.html` 天然一致（不再有"各自重开页求 id 匹配"的不变量）；预清洗/占位/id 注入逻辑只存在于共享 `page-*.js`，跑一次即烘进快照。
 
 ## 4 · 架构与管线
 
@@ -45,7 +45,7 @@
 
 步骤 3/4 从此只消费**单份初稿**——双稿择优流程随 Python 运行时移除（步骤 3 的 LLM 转换与步骤 4 的清洗提示词不变，只是不再有第二份可择优）。
 
-- **1.6 `capture_snapshot.mjs`**（Node-only，与 `detect_page.mjs`/`login_url.mjs` 同形态）：复用登录态开页 → 注入 `pageInit`（不变：IO 劫持 + mermaid 源码快照）→ 跑与 `detect_page` **同一序列**的 `progressiveScroll`/`waitForDomStable`（懒加载内容到位）→ evaluate 共享 `page-prepare.js` 的 `__u2mPrepareBody`（合并同源 iframe + 剥 `<script>` + 注入 `<base>` + 给候选块打 `data-u2m-id`）→ 同一 DOM 上分别序列化出 `snapshot.html`（全保真）与 `classify_input.html`（派生精简）→ emit 一行 JSON。
+- **1.6 `capture_snapshot.mjs`**（Node-only，与 `detect_page.mjs`/`login_url.mjs` 同形态）：复用登录态开页 → 注入 `pageInit`（不变：IO 劫持 + mermaid 源码快照）→ 跑与 `detect_page` **同一序列**的 `progressiveScroll`/`waitForDomStable`（懒加载内容到位）→ evaluate 共享 `page-prepare.js` 的 `__u2mPrepareBody`（合并同源 iframe + 剥 `<script>` + 注入 `<base>` + 给候选块打 `data-idx`）→ 同一 DOM 上分别序列化出 `snapshot.html`（全保真）与 `classify_input.html`（派生精简）→ emit 一行 JSON。
 - **1.8 分类（agent 步骤，写入 SKILL.md）**：agent 读 `classify_input.html` + `script/lib/fewshot/` 少样本 → 写 `classify_plan.json`（列表流选择器 + 逐块 action）。LLM 判断本体，沿用步骤 3/4 的 agent 驱动模式。
 - **步骤 2 `clear_trans_html`（Node-only）**：`setContent(snapshot.html)` 加载快照（**不再 openPage+scroll+waitForDomStable**）→ 读 `classify_plan.json` → 删列表流外噪声 → 按 `action` 逐块分派（替换 `__u2mClassify` 循环）→ Readability/Turndown → sketch.md + manifest.json。
 
@@ -55,9 +55,9 @@
 
 ```
 working/<url-dir>/
-├─ snapshot.html                 ← 全保真自包含快照（渲染源；DOM + 内联 CSS + 元素 inline style，剥尽 <script>，带 data-u2m-id + <base>）
+├─ snapshot.html                 ← 全保真自包含快照（渲染源；DOM + 内联 CSS + 元素 inline style，剥尽 <script>，带 data-idx + <base>）
 ├─ classify/
-│  ├─ classify_input.html        ← 派生：长文本占位 + 信号样式内联 + data-u2m-id
+│  ├─ classify_input.html        ← 派生：长文本占位 + 信号样式内联 + data-idx
 │  └─ classify_plan.json         ← agent 写的判断结果
 ├─ sketch.md                     ← 步骤 2 产出（单份初稿）
 ├─ assets/                       ← 复杂元素 draft/final 产物
@@ -85,7 +85,7 @@ working/<url-dir>/
 3. **剥尽 JS 与噪声标签**：移除 `<script>`（mermaid 源码已由 pageInit 存为 `data-u2m-mermaid-src`，剥离 `<script>` 不丢）、`<noscript>`、`<template>`，以及所有 `on*` 事件属性。**不剥** `<style>`/`<video>`/`<audio>`/图片/元素 inline style——全保真快照需保留以供渲染（`video`/`audio` 是 `screenshot` 分派目标）。
 4. **剥叶子噪声**：`.copy`、`.copy-btn`、`button[aria-label*="copy" i]`（防代码块里的复制按钮泄漏为文本噪声）。
 5. **注入 `<base href="<origin URL>">`** 到 `<head>`，使相对图片 URL、inlined CSS 里的相对 `url()`、以及兜底 `<link>` 在 `setContent` 重载时仍解析回源站。
-6. **打 `data-u2m-id`**：给"决策单元"候选打 ID（文档序递增 `data-u2m-id="n"`）——`div, section, article, aside, nav, header, footer, main, figure, table, thead, tbody, tr, canvas, svg, video, iframe, picture, ul, ol, li, dl, pre, blockquote, details, [role], [data-chart], .chart, .echarts, .highcharts, .MathJax, .MathJax_Display, .katex, .katex-display`。叶子文本元素（`p, span, a, code, em, strong, h1-h6, td, th`）不打 ID——由 Readability+Turndown 当文本处理。
+6. **打 `data-idx`**：给"决策单元"候选打 ID（文档序递增 `data-idx="n"`）——`div, section, article, aside, nav, header, footer, main, figure, table, thead, tbody, tr, canvas, svg, video, iframe, picture, ul, ol, li, dl, pre, blockquote, details, [role], [data-chart], .chart, .echarts, .highcharts, .MathJax, .MathJax_Display, .katex, .katex-display`。叶子文本元素（`p, span, a, code, em, strong, h1-h6, td, th`）不打 ID——由 Readability+Turndown 当文本处理。
 7. 原地返回 `true`。
 
 **`page-derive.js` · `function __u2mDeriveClassifyInput(cfg)`**（在已 prepare 的活页 DOM 上序列化出**精简版**，**仅给 LLM**；**不改变活页 DOM 的持久态**——在克隆上做，或于 `capture_snapshot` 取 snapshot 之后再跑）：
@@ -93,7 +93,7 @@ working/<url-dir>/
 1. **长文本占位**：每个 `>N` 字符（默认 `N=40`，cfg 可覆盖）的文本节点内容替换为 `{{T<k>}}`（无损；原件不复制，仍在 `snapshot.html` 里）。**包括代码块文本**——代码靠结构识别，内容不读。
 2. **剥 `<style>`/`<link rel=stylesheet>`/`<noscript>`/`<template>`**。
 3. **白名单样式内联**：仅内联信号性属性——`position, display, float, clear, visibility, overflow, border(-*)?, border-radius, background(-color)?, box-shadow, width, height, min/max-(width|height), transform, z-index, flex(-*)?, grid(-*)?, gap`。**不内联** `color/font/text-*`（文本样式对"文本 vs 非文本"无信号且徒增 token）。
-4. 返回 `document.body.outerHTML`（`data-u2m-id` 已由 `__u2mPrepareBody` 打好，与 `snapshot.html` 同源 → id 一致）。
+4. 返回 `document.body.outerHTML`（`data-idx` 已由 `__u2mPrepareBody` 打好，与 `snapshot.html` 同源 → id 一致）。
 
 **关键顺序**（`capture_snapshot` 内）：`__u2mPrepareBody` 变异活页 DOM → 取 `document.documentElement.outerHTML` 作 `snapshot.html`（全保真）→ 跑 `__u2mDeriveClassifyInput` 序列化精简版（其占位/剥 style 的变异只影响这次序列化结果，snapshot 字符串已先取走）。
 
@@ -120,7 +120,7 @@ working/<url-dir>/
 
 ### 5.4 关键不变量（简化）
 
-`data-u2m-id` 由 `__u2mPrepareBody` 在活页 DOM 上注入一次，随后烘进 `snapshot.html`；`classify_input.html` 从同一 DOM 派生，id 同源。`clear_trans_html` `setContent(snapshot.html)` 加载的是这唯一一份快照 → id 天然一致、DOM 起点确定，**不再有"各自重开页求匹配"的不变量与真实 URL 漂移边界**。滚动/稳定只在 `capture_snapshot` 发生——`clear_trans_html` 不再 `openPage`+`progressiveScroll`+`waitForDomStable`（改为 `setContent`）。`capture_snapshot` 内联的 `progressiveScroll`/`waitForDomStable` 参数（60 轮 / 150ms / stableMs=1000 / maxMs=15000 / poll 200ms）**须与 `page-detect.js` 的 cfg 默认一致**（snapshot 的滚动深度须覆盖到 detect_page 已检出的懒加载内容）；以注释标明该约束，无需抽共享常量模块（clear_trans 已不滚动，唯一硬编码点即此 CLI）。
+`data-idx` 由 `__u2mPrepareBody` 在活页 DOM 上注入一次，随后烘进 `snapshot.html`；`classify_input.html` 从同一 DOM 派生，id 同源。`clear_trans_html` `setContent(snapshot.html)` 加载的是这唯一一份快照 → id 天然一致、DOM 起点确定，**不再有"各自重开页求匹配"的不变量与真实 URL 漂移边界**。滚动/稳定只在 `capture_snapshot` 发生——`clear_trans_html` 不再 `openPage`+`progressiveScroll`+`waitForDomStable`（改为 `setContent`）。`capture_snapshot` 内联的 `progressiveScroll`/`waitForDomStable` 参数（60 轮 / 150ms / stableMs=1000 / maxMs=15000 / poll 200ms）**须与 `page-detect.js` 的 cfg 默认一致**（snapshot 的滚动深度须覆盖到 detect_page 已检出的懒加载内容）；以注释标明该约束，无需抽共享常量模块（clear_trans 已不滚动，唯一硬编码点即此 CLI）。
 
 ## 6 · `classify_plan.json` schema + agent 步骤 1.8 + 少样本集
 
@@ -146,7 +146,7 @@ working/<url-dir>/
 
 - `mode`：`whole`（整页一次）/ `region`（`too_large` 降级分区合并）。
 - `listFlowSelector`：一个 CSS 选择器，指向"列表流"父容器（多个章节/段落块的父组件）。clear_trans_html 解析它定位块流；其外的元素一律删除。
-- `blocks[*].id`：`data-u2m-id`（int），仅指列表流内的候选块。
+- `blocks[*].id`：`data-idx`（int），仅指列表流内的候选块。
 - `blocks[*].action`：`keep | delete | code_block | screenshot | passthrough_svg | svg_convert | latex | block_screenshot`。
   - `keep`：留 DOM，Readability+Turndown 当文本（多层 DIV 由 Readability 拍平，故无需 `flatten`）。
   - `delete`：删除该块（列表流内的广告/推荐块）。
@@ -184,7 +184,7 @@ prompt 写进 SKILL.md 步骤 1.8 操作说明（不内联示例正文，仅指 
 - `big-svg-and-latex` — 大 SVG → `passthrough_svg`；MathJax → `latex`
 - `code-block` — `<pre class="hljs" data-lang="python">` → `code_block`（占位文本，结构识别）
 
-每对断言：输入片段含合法 `data-u2m-id` + 信号内联样式 + 长文本已占位；输出 plan 合 schema、`listFlowSelector` 合法、blocks 的 id ⊆ 输入 id 集、`action` 取值正确、列表流外无 id。
+每对断言：输入片段含合法 `data-idx` + 信号内联样式 + 长文本已占位；输出 plan 合 schema、`listFlowSelector` 合法、blocks 的 id ⊆ 输入 id 集、`action` 取值正确、列表流外无 id。
 
 ### 6.5 schema 校验
 
@@ -212,12 +212,12 @@ readability → turndown → sketch.md + manifest.json // 不变
 
 1. 校验 plan schema（§6.5）；非法 → throw。
 2. **解析 `listFlowSelector`**：`frame.$(listFlowSelector)`；null → throw（agent 选错，stderr 反馈）。**删除列表流子树外的顶层节点**：在 listFlow 的父节点上，移除与 listFlow 同级的兄弟节点（导航/侧栏/页脚/广告等结构噪声）。**不删 listFlow 子树内部**——逐块由 `action` 处理（见下）。
-3. **逐块按 `action` 分派**（plan 序，跳 detached）：每 item 取 `frame.$('[data-u2m-id="n"]')`；**id 必然命中**（来自同一快照），不设漂移 warning 路径。命中即：
+3. **逐块按 `action` 分派**（plan 序，跳 detached）：每 item 取 `frame.$('[data-idx="n"]')`；**id 必然命中**（来自同一快照），不设漂移 warning 路径。命中即：
    - `keep`：不动。
    - `delete`：`remove()`。
    - `code_block`（**新分支**）：读该块在快照里的原文文本（`element.textContent`，未占位——快照是全保真）→ 判语言（`data-lang`/class 优先，否则本地启发式检测）→ 把该块替换为规范 `<pre><code class="language-<lang>">原文</code></pre>`（标 `data-u2m-code` 以被 `processImages` 跳过）→ **不进 manifest、不经步骤 3**：代码是文本而非复杂资源，Readability+Turndown 自然把 `<pre><code class="language-x">` 转成带语言的围栏代码块。
    - `screenshot`/`passthrough_svg`/`svg_convert`/`latex`：复用 `placeholder` 既有分支一字不改。
-   - `block_screenshot`：解析 `blockOf`（默认 `id`）→ `frame.$('[data-u2m-id="blockOf"]')` → `screenshot({path: abs/COMPLEX_DIV_n.png})` → `replaceWithHtml('<img src=... data-u2m-asset>')` → manifest `{type:"block_screenshot", final, status:"done"}`。
+   - `block_screenshot`：解析 `blockOf`（默认 `id`）→ `frame.$('[data-idx="blockOf"]')` → `screenshot({path: abs/COMPLEX_DIV_n.png})` → `replaceWithHtml('<img src=... data-u2m-asset>')` → manifest `{type:"block_screenshot", final, status:"done"}`。
 4. 返回处理数。
 
 ### 7.3 `setContent` 资源解析
@@ -232,7 +232,7 @@ plan 缺失或非法 → `emitError("缺/非法 classify_plan.json: ...", 1)`（
 
 沿用既有分层（`node --test test/unit` + `node --test test/integration`，夹具服务器 + 子进程 CLI）：
 
-- **`page-prepare.js` 集成**：夹具页含 `<script>`/`<style>`/`<link rel=stylesheet>`（同源可 CORS）/广告/`<video>`/`onerror`/同源 iframe → 断言 `<script>`/`<noscript>`/`<template>`/`on*` 已剥、外部 `<link>` 的 CSS 文本已并成 `<style data-u2m-inlined>` 且 `<link>` 已移除、既有 `<style>` 保留、元素 inline style 保留、`<base>` 已注入、`data-u2m-id` 仅落在候选集（叶子文本无 id）、iframe 已合并。
+- **`page-prepare.js` 集成**：夹具页含 `<script>`/`<style>`/`<link rel=stylesheet>`（同源可 CORS）/广告/`<video>`/`onerror`/同源 iframe → 断言 `<script>`/`<noscript>`/`<template>`/`on*` 已剥、外部 `<link>` 的 CSS 文本已并成 `<style data-u2m-inlined>` 且 `<link>` 已移除、既有 `<style>` 保留、元素 inline style 保留、`<base>` 已注入、`data-idx` 仅落在候选集（叶子文本无 id）、iframe 已合并。
 - **跨源 CSS 兜底测试**：夹具含一个无 CORS 的跨源 `<link>`（夹具服务器返回该 CSS 但带 `access-control-allow-origin` 头缺失）→ 断言 fetch 失败时该 `<link>` 原样保留、warning 记录。
 - **`page-derive.js` 集成**：断言长文本 → `{{T*k}}`（含代码块文本占位）、`<style>`/`<link>` 已剥、信号属性已内联、`color/font-*` 未内联、id 与 `snapshot.html` 同源一致。
 - **快照保真集成**：`setContent(snapshot.html)` 加载后断言某复杂元素带颜色/图片渲染（CSS 已内联、`<script>` 不执行、样式不依赖网络）。
@@ -253,7 +253,7 @@ plan 缺失或非法 → `emitError("缺/非法 classify_plan.json: ...", 1)`（
 | 1.8 classify | agent 产 plan 非法/缺字段 | clear_trans_html emit `error`（一行），stderr 指出错项；agent 据 stderr 修正重写 |
 | 1.8 classify | `listFlowSelector` 解析为 null | clear_trans_html emit `error`，stderr 指出选择器失配；agent 修正重写 |
 | 1.8 classify | plan 缺失（未跑步骤 1.8） | clear_trans_html emit `error`，提示先跑 1.8 |
-| 2 clear | 单 action 分派异常 | 沿用现状：`warnings.push` + 移除该 `data-u2m-id` 继续 |
+| 2 clear | 单 action 分派异常 | 沿用现状：`warnings.push` + 移除该 `data-idx` 继续 |
 | 全程 | emit 后进程退出 | 沿用：浏览器/viewer 在 emit 前关闭，无孤儿 chromium |
 
 ## 10 · 受影响文件

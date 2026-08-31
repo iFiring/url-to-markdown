@@ -19,7 +19,7 @@ test('page-reveal-hidden.js: 文件存在且包含 __u2mRevealHidden 函数', ()
 // 测量辅助：目标盒（border box）、四侧 padding/margin 计算值、内容探针
 // （目标第一个子元素）的 rect——内容零重排的判定锚点
 const MEASURE = `(() => {
-  const t = document.querySelector('[data-u2m-id]');
+  const t = document.querySelector('[data-idx]');
   const mark = t.firstElementChild;
   const r = t.getBoundingClientRect();
   const cs = getComputedStyle(t);
@@ -39,7 +39,7 @@ const AUTO_HTML = `<!DOCTYPE html><html><head><style>
   body { margin: 0; }
   #t { padding: 4px 8px 12px 16px; margin: 10px; background: rgb(240, 240, 240); }
 </style></head><body>
-<div data-u2m-id="1" id="t"><div id="mark" style="width: 200px; height: 50px; background: rgb(30, 30, 30)">内容探针</div></div>
+<div data-idx="1" id="t"><div id="mark" style="width: 200px; height: 50px; background: rgb(30, 30, 30)">内容探针</div></div>
 </body></html>`;
 
 async function evalReveal(page) {
@@ -91,7 +91,7 @@ test('__u2mRevealHidden: 显式 border-box 宽（Tailwind 形态）自愈——�
       body { margin: 0; }
       #t { width: 500px; background: rgb(240, 240, 240); }
     </style></head><body>
-    <div data-u2m-id="1" id="t"><div id="mark" style="width: 480px; height: 50px; background: rgb(30, 30, 30)">内容探针</div></div>
+    <div data-idx="1" id="t"><div id="mark" style="width: 480px; height: 50px; background: rgb(30, 30, 30)">内容探针</div></div>
     </body></html>`);
     const before = await page.evaluate(MEASURE);
     await evalReveal(page);
@@ -131,11 +131,11 @@ test('__u2mRevealHidden: display:contents 无盒目标跳过留白扩盒', async
   const page = await browser.newPage();
   try {
     await page.setContent(`<!DOCTYPE html><html><body>
-    <div data-u2m-id="1" style="display: contents"><div id="mark" style="width: 100px; height: 20px">内容</div></div>
+    <div data-idx="1" style="display: contents"><div id="mark" style="width: 100px; height: 20px">内容</div></div>
     </body></html>`);
     const rev = await evalReveal(page);
     assert.equal(rev.boxless, true, 'contents 应判为无盒');
-    const inline = await page.evaluate(() => document.querySelector('[data-u2m-id]').getAttribute('style'));
+    const inline = await page.evaluate(() => document.querySelector('[data-idx]').getAttribute('style'));
     assert.equal(inline, 'display: contents', '不应写入任何行内覆写');
   } finally {
     await browser.close();

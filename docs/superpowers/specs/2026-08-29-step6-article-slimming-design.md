@@ -23,7 +23,7 @@ URL-encoded prompt）已验证漏进 `9_markdown.md`（grep 2 处）。
 
 - 参考页 `6_article.html` 239.5 KB → **≤ 140 KB**（预估 ~110-120 KB）；
   `5_juice_styles.html` 同步约 −20%（仅零值过滤贡献）。
-- 步骤 7 真正需要的信号一项不丢：文本、data-u2m-id、font-size/weight
+- 步骤 7 真正需要的信号一项不丢：文本、data-idx、font-size/weight
   （标题层级）、display:flex/grid（布局）、**有值的** border/background/
   radius（视觉模块判据）、data-language（代码语言）。
 - 修复 codex 链接污染：`9_markdown.md` 中非白名单协议链接归零。
@@ -124,7 +124,7 @@ inline 声明推断规则：juice 已把全级联解析进 style 属性，缺省
 
 ### 5.2 规则① data-\* 清理（保留白名单）
 
-保留恰好两种：`data-u2m-id`（管线元素寻址）、`data-language`（步骤 7
+保留恰好两种：`data-idx`（管线元素寻址）、`data-language`（步骤 7
 判代码围栏语言的唯一机械信号）。其余 data-\* 一律删除。参考页实测 7 种
 57 处（1.3 KB）：data-wrap-long-lines、data-variant、data-size、
 data-color、data-actions-placement、data-state、data-selected——全是
@@ -178,7 +178,7 @@ mailto/tel 是对分析文档"非 http(s) 全剥"的**收窄**：短且 markdown
 
 ### 5.7 规则⑥ 空壳 span 拆壳（不动点）
 
-属性集 ⊆ {`data-u2m-id`} 的 span → 解包。**迭代到不动点**（嵌套 token
+属性集 ⊆ {`data-idx`} 的 span → 解包。**迭代到不动点**（嵌套 token
 span 逐层塌缩），防御性上限 10 轮（实测通常一轮收敛，上限纯防御性、
 静默）。span 限定——div 等块级
 元素可能承载 trans2img 模块边界，不碰。id 随元素消失只影响 6/7 血统：

@@ -35,7 +35,7 @@
  *      页 A 加载 file://1_snapshot.html——真实文本 + 全量内联样式，既是
  *      签名基准也是兜底截图源；直接用 --url 开页 B 重渲染（gotoSettled +
  *      复用 snapshotScroll 渐进滚动触发懒加载 + 重注入 page-prepare.js
- *      重标记——data-u2m-id 按文档序编号是 prepare 后 DOM 的纯函数，
+ *      重标记——data-idx 按文档序编号是 prepare 后 DOM 的纯函数，
  *      两次渲染结构一致则 id 精确对位）。两侧用同一
  *      page-element-signature.js 对每个 trans2img id 计算签名，全等才在
  *      B 上截图，失配/B 侧缺失/live 整体失败（站点不可达等）在 A 上兜底。
@@ -384,7 +384,7 @@ async function main() {
           debug(`trans2img ${id} 展开后仍无有效盒（${srcLabel(page)}）→ 换页`);
           continue;
         }
-        const h = await page.$(`[data-u2m-id="${id}"]`);
+        const h = await page.$(`[data-idx="${id}"]`);
         if (!h) continue;
         try {
           // 有界超时：防御未预见隐藏形态，不整页挂死

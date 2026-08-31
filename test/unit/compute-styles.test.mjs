@@ -42,7 +42,7 @@ test('compute_styles.mjs: 无参数时输出 usage_error', async () => {
 
 // 模拟步骤 4 产物：<style> 规则 + 原有内联样式（结构化/盒模型几何/字体类混杂）+ class + 文本/非文本元素
 const EXTRACT = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>样式计算</title><style>.box{border:2px solid red;background-color:#f0f0f0;box-shadow:0 2px 4px rgba(0,0,0,.1);text-align:center;overflow-x:auto;overflow-wrap:break-word;transform:translateY(2px)}.plain{color:#333;font-weight:bold;font-family:Georgia;letter-spacing:1px;line-height:1.6}p{font-size:18px}</style></head><body><div class="box" style="margin:0;padding:10px;width:100%;box-sizing:border-box;position:relative;font-family:Arial,sans-serif;-webkit-font-smoothing:antialiased;font-style:normal;color:inherit" data-u2m-id="1"><p class="plain" data-u2m-id="2">文本</p><div style="display:flex;flex-direction:column;gap:8px;padding:12px" data-u2m-id="3">默认文本</div><em style="font-style:italic" data-u2m-id="5">强调</em><span style="color:#f00;background-color:#ffff00" data-u2m-id="4"></span></div></body></html>`;
+<html lang="zh-CN"><head><title>样式计算</title><style>.box{border:2px solid red;background-color:#f0f0f0;box-shadow:0 2px 4px rgba(0,0,0,.1);text-align:center;overflow-x:auto;overflow-wrap:break-word;transform:translateY(2px)}.plain{color:#333;font-weight:bold;font-family:Georgia;letter-spacing:1px;line-height:1.6}p{font-size:18px}</style></head><body><div class="box" style="margin:0;padding:10px;width:100%;box-sizing:border-box;position:relative;font-family:Arial,sans-serif;-webkit-font-smoothing:antialiased;font-style:normal;color:inherit" data-idx="1"><p class="plain" data-idx="2">文本</p><div style="display:flex;flex-direction:column;gap:8px;padding:12px" data-idx="3">默认文本</div><em style="font-style:italic" data-idx="5">强调</em><span style="color:#f00;background-color:#ffff00" data-idx="4"></span></div></body></html>`;
 
 const URL = 'https://example.com/test-article';
 
@@ -90,7 +90,7 @@ test('compute_styles.mjs: juice 内联并删净 <style> 与 class，只产一份
   assert.ok(juiced.includes('translateY(2px)'), 'transform 声明应保留');
   // 白名单按属性判定而非按元素：行内元素（高亮 span）的背景同样保留
   assert.ok(juiced.includes('rgb(255, 255, 0)'), 'span 的背景色应保留');
-  assert.ok(juiced.includes('data-u2m-id="2"'), 'data-u2m-id 应保留');
+  assert.ok(juiced.includes('data-idx="2"'), 'data-idx 应保留');
 
   // 字体类仅保留 font-size / font-weight（步骤 7 判标题层级的信号）
   assert.ok(juiced.includes('font-size: 18px'), 'font-size 声明应保留');
@@ -114,7 +114,7 @@ test('compute_styles.mjs: juice 内联并删净 <style> 与 class，只产一份
   assert.ok(!juiced.includes('-webkit-'), '-webkit- 前缀声明应删除');
   assert.ok(!juiced.includes('inherit'), '值为 inherit 的声明应删除');
   // 只剩被删声明的元素：style 属性整体移除
-  assert.ok(juiced.includes('<em data-u2m-id="5">'), 'em 仅 font-style，清空后不应残留 style 属性');
+  assert.ok(juiced.includes('<em data-idx="5">'), 'em 仅 font-style，清空后不应残留 style 属性');
 
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
@@ -123,7 +123,7 @@ test('compute_styles.mjs: juice 内联并删净 <style> 与 class，只产一份
 // （步骤 7 LLM 判图片权重的语义信号：小图标 / 大图 / 图片组），其余规则
 // 不变：img 的 margin 照删、其他元素的宽高照删
 const IMG_SIZE_EXTRACT = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>img 宽高</title><style>body{transition:opacity .2s}</style></head><body><figure data-u2m-id="1"><img src="https://example.com/a/pic.png" style="width:120px;height:80px;margin:10px" data-u2m-id="2"><figcaption data-u2m-id="3">图注</figcaption></figure><div style="width:100%;height:40px;border:1px solid black" data-u2m-id="4">文本</div></body></html>`;
+<html lang="zh-CN"><head><title>img 宽高</title><style>body{transition:opacity .2s}</style></head><body><figure data-idx="1"><img src="https://example.com/a/pic.png" style="width:120px;height:80px;margin:10px" data-idx="2"><figcaption data-idx="3">图注</figcaption></figure><div style="width:100%;height:40px;border:1px solid black" data-idx="4">文本</div></body></html>`;
 
 test('compute_styles.mjs: img 的 style 宽高保留（步骤 7 语义信号），其余元素宽高仍删', async () => {
   const { tmpRoot } = setupTmp('img-size', { extractHtml: IMG_SIZE_EXTRACT });
@@ -157,7 +157,7 @@ test('compute_styles.mjs: img 的 style 宽高保留（步骤 7 语义信号）�
 // 来，故夹具必须带一个 <style>。修复：juice decodeStyleAttributes 在解析
 // 层对 style 属性值做实体解码。
 const ENTITY_EXTRACT = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>实体引号</title><style>body{transition:opacity .2s}</style></head><body style="font-family: Optima, &quot;Microsoft YaHei&quot;, serif; border: 1px solid black; margin: 10px"><div data-u2m-id="1">文本</div></body></html>`;
+<html lang="zh-CN"><head><title>实体引号</title><style>body{transition:opacity .2s}</style></head><body style="font-family: Optima, &quot;Microsoft YaHei&quot;, serif; border: 1px solid black; margin: 10px"><div data-idx="1">文本</div></body></html>`;
 
 test('compute_styles.mjs: 行内 style 属性含 &quot; 实体引号时不再崩溃', async () => {
   const { tmpRoot } = setupTmp('entity', { extractHtml: ENTITY_EXTRACT });
@@ -185,7 +185,7 @@ test('compute_styles.mjs: 行内 style 属性含 &quot; 实体引号时不再崩
 // B. 实体双引号内含撇号（&quot;D'Nealian&quot;）——正则版修复前后都崩。
 // 正解：juice decodeStyleAttributes 在解析层解码实体，两种形状都是合法 CSS。
 const MIXED_QUOTE_EXTRACT = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>混排引号</title><style>body{transition:opacity .2s}</style></head><body style="font-family: 'a&quot;b', serif; border: 1px solid black; margin: 10px"><div style="font-family: &quot;D'Nealian&quot;, serif; outline: 1px solid blue" data-u2m-id="1">文本</div></body></html>`;
+<html lang="zh-CN"><head><title>混排引号</title><style>body{transition:opacity .2s}</style></head><body style="font-family: 'a&quot;b', serif; border: 1px solid black; margin: 10px"><div style="font-family: &quot;D'Nealian&quot;, serif; outline: 1px solid blue" data-idx="1">文本</div></body></html>`;
 
 test('compute_styles.mjs: 引号混排（字面单引号 × 实体双引号 × 实体内撇号）不再崩溃', async () => {
   const { tmpRoot } = setupTmp('mixed-quote', { extractHtml: MIXED_QUOTE_EXTRACT });
@@ -210,7 +210,7 @@ test('compute_styles.mjs: 引号混排（字面单引号 × 实体双引号 × �
 // -style 结尾的非 style 属性（data-style 等，真实 Webflow 页面存在）不得被
 // 实体解码波及——正则 \bstyle=" 会误配它们，把合法 JSON 破坏成 {'k':'v'}。
 const DATA_STYLE_EXTRACT = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>data-style</title><style>body{transition:opacity .2s}</style></head><body><div data-style="{&quot;theme&quot;:&quot;dark&quot;}" style="border: 1px solid black" data-u2m-id="1">文本</div></body></html>`;
+<html lang="zh-CN"><head><title>data-style</title><style>body{transition:opacity .2s}</style></head><body><div data-style="{&quot;theme&quot;:&quot;dark&quot;}" style="border: 1px solid black" data-idx="1">文本</div></body></html>`;
 
 test('compute_styles.mjs: data-style 等后缀属性不被引号处理波及', async () => {
   const { tmpRoot } = setupTmp('data-style', { extractHtml: DATA_STYLE_EXTRACT });
@@ -253,9 +253,9 @@ const LAYERED_EXTRACT = `<!DOCTYPE html>
 }
 .direct { outline: 1px solid blue }
 </style></head><body>
-<figure class="rounded-lg border border-default bg-surface p-4" data-u2m-id="1872">图</figure>
-<div class="nested-deep" data-u2m-id="2">嵌套层</div>
-<div class="direct" data-u2m-id="3">顶层规则</div>
+<figure class="rounded-lg border border-default bg-surface p-4" data-idx="1872">图</figure>
+<div class="nested-deep" data-idx="2">嵌套层</div>
+<div class="direct" data-idx="3">顶层规则</div>
 </body></html>`;
 
 test('compute_styles.mjs: @layer 内的工具类规则解包后正常内联（Tailwind v4）', async () => {
@@ -305,8 +305,8 @@ const FUNCVAL_EXTRACT = `<!DOCTYPE html>
 .bordered { border-style: var(--tw-border-style); border-width: 1px; border-color: var(--color-border) }
 .bigtext { font-size: var(--font-big) }
 </style></head><body>
-<div class="bordered" data-u2m-id="1">边框</div>
-<p class="bigtext" data-u2m-id="2">大字</p>
+<div class="bordered" data-idx="1">边框</div>
+<p class="bigtext" data-idx="2">大字</p>
 </body></html>`;
 
 test('compute_styles.mjs: var/color-mix/calc 残留替换为浏览器计算的真实值', async () => {
@@ -346,13 +346,13 @@ const HIDDEN_STRIP_EXTRACT = `<!DOCTYPE html>
 .byvar { display: var(--gone); border: 1px solid red }
 .attrhide { border: 3px solid blue }
 </style></head><body>
-<div class="panel" data-u2m-id="1"><p>类规则收起的中文内容</p></div>
-<div class="row collapse" data-u2m-id="2"><span>自然恢复 flex</span></div>
-<div class="invis" data-u2m-id="3">可见化并保留边框</div>
-<div class="byvar" data-u2m-id="4">变量驱动收起的内容</div>
-<div class="attrhide" hidden="true" data-u2m-id="5">裸 hidden 属性收起的内容</div>
-<div style="display: none; border: 4px solid purple" data-u2m-id="6">内联收起的内容</div>
-<p data-u2m-id="7">正文段落</p>
+<div class="panel" data-idx="1"><p>类规则收起的中文内容</p></div>
+<div class="row collapse" data-idx="2"><span>自然恢复 flex</span></div>
+<div class="invis" data-idx="3">可见化并保留边框</div>
+<div class="byvar" data-idx="4">变量驱动收起的内容</div>
+<div class="attrhide" hidden="true" data-idx="5">裸 hidden 属性收起的内容</div>
+<div style="display: none; border: 4px solid purple" data-idx="6">内联收起的内容</div>
+<p data-idx="7">正文段落</p>
 </body></html>`;
 
 test('compute_styles.mjs: 隐藏声明剥离——收起元素展开、自然 display 恢复', async () => {
@@ -375,9 +375,9 @@ test('compute_styles.mjs: 隐藏声明剥离——收起元素展开、自然 di
   }
   // 只删隐藏声明、规则其余声明保留：collapse 剥除后 .row 的 flex 自然恢复
   // （不是 display:block 盲改——flex 结构信号对步骤 7 LLM 完整）。
-  // 逐元素断言用整标签匹配（style 属性可能排在 data-u2m-id 之前，从 id
+  // 逐元素断言用整标签匹配（style 属性可能排在 data-idx 之前，从 id
   // 往后切片会切掉它）
-  const tagOf = (id) => juiced.match(new RegExp(`<[^>]*data-u2m-id="${id}"[^>]*>`))?.[0] || '';
+  const tagOf = (id) => juiced.match(new RegExp(`<[^>]*data-idx="${id}"[^>]*>`))?.[0] || '';
   assert.ok(tagOf(2).includes('display: flex'), `自然 display:flex 应恢复: ${tagOf(2)}`);
   assert.ok(tagOf(2).includes('gap'), `row 的其余声明（gap）应保留: ${tagOf(2)}`);
   // visibility:hidden 剥除但同规则 border 保留
@@ -404,21 +404,21 @@ test('compute_styles.mjs: 隐藏声明剥离——收起元素展开、自然 di
 // 被 juice 内联的产物）。
 const ZERO_VOID_EXTRACT = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>零值</title><style>body{transition:opacity .2s}</style></head><body>
-<div style="border: 0px solid" data-u2m-id="1">零边框</div>
-<div style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none" data-u2m-id="2">medium加none</div>
-<div style="border: 1px solid red" data-u2m-id="3">实边框</div>
-<div style="border: solid" data-u2m-id="4">style实值width缺省</div>
-<div style="border-width: 5px" data-u2m-id="5">width有值style缺省</div>
-<div style="border-radius: 0px; background-color: rgb(249, 249, 249)" data-u2m-id="6">零圆角实背景</div>
-<div style="border-radius: 8px" data-u2m-id="7">实圆角</div>
-<div style="box-shadow: none" data-u2m-id="8">阴影none</div>
-<div style="background-color: transparent" data-u2m-id="9">透明背景</div>
-<div style="background-color: rgba(0, 0, 0, 0)" data-u2m-id="10">alpha零背景</div>
-<div style="overflow: visible" data-u2m-id="11">溢出可见</div>
-<div style="overflow: auto" data-u2m-id="12">滚动裁剪</div>
-<div style="flex: 0 0 auto" data-u2m-id="13">flex信号</div>
-<div style="outline: 1px solid blue" data-u2m-id="14">实outline</div>
-<div style="outline-width: 0px; outline-style: solid" data-u2m-id="15">零宽outline</div>
+<div style="border: 0px solid" data-idx="1">零边框</div>
+<div style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none" data-idx="2">medium加none</div>
+<div style="border: 1px solid red" data-idx="3">实边框</div>
+<div style="border: solid" data-idx="4">style实值width缺省</div>
+<div style="border-width: 5px" data-idx="5">width有值style缺省</div>
+<div style="border-radius: 0px; background-color: rgb(249, 249, 249)" data-idx="6">零圆角实背景</div>
+<div style="border-radius: 8px" data-idx="7">实圆角</div>
+<div style="box-shadow: none" data-idx="8">阴影none</div>
+<div style="background-color: transparent" data-idx="9">透明背景</div>
+<div style="background-color: rgba(0, 0, 0, 0)" data-idx="10">alpha零背景</div>
+<div style="overflow: visible" data-idx="11">溢出可见</div>
+<div style="overflow: auto" data-idx="12">滚动裁剪</div>
+<div style="flex: 0 0 auto" data-idx="13">flex信号</div>
+<div style="outline: 1px solid blue" data-idx="14">实outline</div>
+<div style="outline-width: 0px; outline-style: solid" data-idx="15">零宽outline</div>
 </body></html>`;
 
 test('compute_styles.mjs: 零值声明过滤——等于全元素初始值的声明删除、实信号保留', async () => {
@@ -432,7 +432,7 @@ test('compute_styles.mjs: 零值声明过滤——等于全元素初始值的声
   assert.equal(out.status, 'ok');
 
   const juiced = fs.readFileSync(out.juiceStyles, 'utf8');
-  const tagOf = (id) => juiced.match(new RegExp(`<[^>]*data-u2m-id="${id}"[^>]*>`))?.[0] || '';
+  const tagOf = (id) => juiced.match(new RegExp(`<[^>]*data-idx="${id}"[^>]*>`))?.[0] || '';
 
   // 只剩零值声明的元素：style 属性整体消失
   for (const id of [1, 2, 5, 8, 9, 10, 11, 15]) {

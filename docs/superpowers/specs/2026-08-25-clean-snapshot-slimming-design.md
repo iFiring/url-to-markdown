@@ -13,9 +13,9 @@
 
 | 构成 | 字节 | 说明 |
 |---|---|---|
-| `<pre>` 代码块 | 90,133 | shiki 语法高亮把每个 token 包成 `<span class="shiki-token" data-u2m-id>`；**纯代码文本仅 7,514 字节，约 12 倍标记开销**（1,352 个 token 级 id 占 27 KB） |
+| `<pre>` 代码块 | 90,133 | shiki 语法高亮把每个 token 包成 `<span class="shiki-token" data-idx>`；**纯代码文本仅 7,514 字节，约 12 倍标记开销**（1,352 个 token 级 id 占 27 KB） |
 | class 属性 | 102,832（内容）+ ~25K（`class=""` 包装） | tailwind 工具类 ~64 KB + 框架哈希类（astro-xxx 等）~11 KB 为纯噪声；语义类仅 ~28 KB |
-| data-u2m-id | 65,067 | 契约必需，不动 |
+| data-idx | 65,067 | 契约必需，不动 |
 | 其它 data-* | 22,445 | `data-1p-ignore`、`data-copy-ignore`、`data-syntax-highlighter-id` 等噪声 |
 | 隐藏子树 | 实测顶层 29 个、含 150,267 字节 | 模态/抽屉（`fixed inset-0`）、折叠 expander（`expn-content hidden`）、响应式隐藏（`xl:hidden`）、tab 变体 |
 | href / aria / 注释 / 空白 | ~31K | 链接语义保留；注释与标签间空白可删 |
@@ -41,7 +41,7 @@
 |---|---|---|
 | R1 | pre 内容替换为 `code...` | −82K（token span + 代码文本） |
 | R2 | class 噪声过滤（剥工具/哈希 token，保语义 token） | −60~70K |
-| R3 | data-* 白名单（只留 `data-u2m-id`、`data-language`、`data-u2m-hidden`） | −25K |
+| R3 | data-* 白名单（只留 `data-idx`、`data-language`、`data-u2m-hidden`） | −25K |
 | R4 | astro 包装解包（`astro-island`/`astro-slot` 替换为子元素） | −3K |
 | R5 | 保守空白压缩（仅删安全位置的纯空白文本节点） | −5K |
 | R6 | 隐藏子树折叠为标记（juice 级联计算，见 §4-5） | −147K |
@@ -52,7 +52,7 @@
 
 - `<pre>` 的直接子元素中，**首个** `<code>` 壳保留（含其属性，如 `data-language="javascript"`），其余子元素删除；
   该 `<code>`（或无 code 壳时的 `<pre>` 自身）的全部子节点替换为单条文本 `code...`。
-- pre 标签自身的 `data-u2m-id` 与属性保留。
+- pre 标签自身的 `data-idx` 与属性保留。
 - **行内 `<code>` 不动**（实测 91 个 code 中 77 个为行内，是句子成分）。
 - 步骤 7 在 `6_article.html`（带样式路径）仍见完整代码写进骨架，最终 markdown 不丢代码。
 
@@ -69,13 +69,13 @@ class 值按空白切 token，逐 token 判定去留：
 
 ### 3.3 R3：data-* 白名单
 
-清洗版只保留 `data-u2m-id`、`data-language`、`data-u2m-hidden`（R6 产物）；其余 `data-*` 全删。
+清洗版只保留 `data-idx`、`data-language`、`data-u2m-hidden`（R6 产物）；其余 `data-*` 全删。
 `id` 属性保留（锚点/身份线索）。aria-* 保留（量小且有结构提示价值）。
 
 ### 3.4 R4：astro 包装解包
 
 `astro-island`、`astro-slot` 元素一律替换为其子元素（框架脚手架标签，实测 36+25 个）：
-子元素原样上提，包装自身属性（含其 data-u2m-id）弃置——清洗版不可见即不可引用，语义与折叠一致。
+子元素原样上提，包装自身属性（含其 data-idx）弃置——清洗版不可见即不可引用，语义与折叠一致。
 
 ### 3.5 R5：保守空白压缩
 
@@ -96,7 +96,7 @@ class 值按空白切 token，逐 token 判定去留：
   内容永不可达性为零）。
 - 折叠发生在**共享清洗 + 长文本占位之后**、清洗版序列化之前：占位符编号不受影响
   （折叠掉的占位符只从清洗版消失，`2_long_text.json` 与带样式版引用完整——实测 80/80 无缺失）。
-- 根元素带 `data-u2m-id`，步骤 3 仍可将其纳入 listFlowIds 引用；步骤 6 从带样式版取全文，
+- 根元素带 `data-idx`，步骤 3 仍可将其纳入 listFlowIds 引用；步骤 6 从带样式版取全文，
   最终 markdown 含折叠块原文（如 FAQ 答案）。
 - 原生 `<details>` 关闭态：juice 无 UA 样式表，内容按可见处理 → 不折叠 → 保留（与浏览器
   computed `display:block` 的实测结论一致，双重安全）。
@@ -177,7 +177,7 @@ class 值按空白切 token，逐 token 判定去留：
 夹具覆盖：
 1. shiki 结构代码块 → 清洗版 pre 内为 `code...`，`data-language` 保留；带样式版完整。
 2. 混合 class（`class="article flex px-4 astro-abc12"`）→ 清洗版剩 `class="article"`。
-3. data-* 白名单：噪声属性消失，`data-u2m-id`/`data-language` 保留。
+3. data-* 白名单：噪声属性消失，`data-idx`/`data-language` 保留。
 4. `fixed` 隐藏模态 + 流内 expander → 清洗版均折叠为标记（值含 `,fixed` 与否）；
    **带样式版两者原文完整**。
 5. `xl:hidden` 响应式块 → **不折叠（实现边界，钉行为测试固定）**：`@media` 规则 juice

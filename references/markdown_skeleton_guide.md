@@ -4,7 +4,7 @@
 
 ## 专有名词
 
-**「单传祖先链元素」**：对某个目标模块，从 `<body>` 下包裹它的子元素开始向下走到模块容器为止——每一级的子元素中，没有有效内容（子树内无文字/图标/图片，`h/p/span/table/img/文本/...`）的空元素当它不存在；剩下的有效子元素只有一个 → 穿过它继续下探；剩余多个 → 停在该元素（含该元素），它就是**模块容器**。链上所有元素的 `data-u2m-id` 组成该模块的 ID 集
+**「单传祖先链元素」**：对某个目标模块，从 `<body>` 下包裹它的子元素开始向下走到模块容器为止——每一级的子元素中，没有有效内容（子树内无文字/图标/图片，`h/p/span/table/img/文本/...`）的空元素当它不存在；剩下的有效子元素只有一个 → 穿过它继续下探；剩余多个 → 停在该元素（含该元素），它就是**模块容器**。链上所有元素的 `data-idx` 组成该模块的 ID 集
 
 DOM 结构示例：
 > 单传祖先链元素：[1]-[3]
@@ -12,18 +12,18 @@ DOM 结构示例：
 ```html
 <body>
 <!-- 祖先链从 <body> 开始 -->
-<div data-u2m-id="1">
+<div data-idx="1">
   <!-- 元素 [2] 为没有任何有效内容「文字/图标/图片」的空元素，直接忽略 -->
-  <div data-u2m-id="2"></div>
+  <div data-idx="2"></div>
   <!-- 元素 [3] 虽然有兄弟，但兄弟没有效内容 -->
   <!-- 祖先链到含有多个有效子元素的 [3] 为止 -->
-  <div data-u2m-id="3">
+  <div data-idx="3">
     <!-- 元素 [4]/[6] 有有效兄弟元素 -->
-    <div data-u2m-id="4">
-      <img data-u2m-id="5" src="url">
+    <div data-idx="4">
+      <img data-idx="5" src="url">
     </div>
-    <div data-u2m-id="6">
-      <p data-u2m-id="7">text</p>
+    <div data-idx="6">
+      <p data-idx="7">text</p>
     </div>
   </div>
 </div>
@@ -41,7 +41,7 @@ DOM 结构示例：
 | `img` | 图片绝对 URL：`![img](url)`|
 | `code` | 语言类型 + 独立代码内容：`{"lang": "tsx", "content": "..."}` |
 | `table` | 完整 markdown 表格：含 `|--|--|` 分隔行 |
-| `trans2img` | 独立复杂视觉模块：取「单传祖先链元素」的 `data-u2m-id` |
+| `trans2img` | 独立复杂视觉模块：取「单传祖先链元素」的 `data-idx` |
 
 - 保持文档序、不重不漏；不要修改原义
 - key 是**语义判断**的结果，具体按照下面的**判定规则**判定
@@ -233,19 +233,19 @@ DOM 结构示例：
 ```html
 <body>
 <!-- 多层「背景/边框/圆角/阴影」块元素样式 → `trans2img` -->
-<div data-u2m-id="9">
-  <section data-u2m-id="10" style="background-color: xxx; border: xxx">
-    <div data-u2m-id="11">
-      <div data-u2m-id="12"><p data-u2m-id="13">{{LONG_TEXT_k}}</p></div>
+<div data-idx="9">
+  <section data-idx="10" style="background-color: xxx; border: xxx">
+    <div data-idx="11">
+      <div data-idx="12"><p data-idx="13">{{LONG_TEXT_k}}</p></div>
     </div>
-    <div data-u2m-id="14" style="display: flex;">
-      <div data-u2m-id="15" style="background-color: xxx; border: xxx">
-        <pre data-u2m-id="16">
+    <div data-idx="14" style="display: flex;">
+      <div data-idx="15" style="background-color: xxx; border: xxx">
+        <pre data-idx="16">
           <code><span><span><span></code>
         </pre>
       </div>
-      <div data-u2m-id="21" style="background-color: xxx; border: xxx">
-        <pre data-u2m-id="22">
+      <div data-idx="21" style="background-color: xxx; border: xxx">
+        <pre data-idx="22">
           <code><span><span><span></code>
         </pre>
       </div>
@@ -255,13 +255,13 @@ DOM 结构示例：
 
 <!-- ID 取值规则 -->
 <!-- 从 <body> 的子元素 [27] 开始 -->
-<div data-u2m-id="27">
+<div data-idx="27">
   <!-- 元素 [28] 为没有任何有效内容「文字/图标/图片」的空元素，直接忽略 -->
-  <div data-u2m-id="28"></div>
+  <div data-idx="28"></div>
   <!-- 元素 [29] 虽然有兄弟，但兄弟没有效内容 -->
-  <section data-u2m-id="29" style="background-color: xxx; border: xxx">
+  <section data-idx="29" style="background-color: xxx; border: xxx">
     <!-- 祖先链到含有多个有效子元素的 [30] 为止 -->
-    <div data-u2m-id="30">
+    <div data-idx="30">
       <div style="background-color: xxx; border: xxx">
         <div><p>{{LONG_TEXT_k}}</p></div>
       </div>
@@ -297,12 +297,12 @@ DOM 结构示例：
   <p>{{LONG_TEXT_2}}</p>
 </div>
 <!-- 卡片组：文本为主、仅小图标 → ul -->
-<div data-u2m-id="30" style="display: flex">
+<div data-idx="30" style="display: flex">
   <div><img src="https://example.com/i/icon-1.png"><span>{{LONG_TEXT_10}}</span></div>
   <div><img src="https://example.com/i/icon-2.png"><span>{{LONG_TEXT_11}}</span></div>
 </div>
 <!-- 卡片组：图片为主、文本较短 → trans2img -->
-<div data-u2m-id="40" style="display: grid">
+<div data-idx="40" style="display: grid">
   <figure><img src="https://example.com/a/shot-1.png"><figcaption>{{LONG_TEXT_12}}</figcaption></figure>
   <figure><img src="https://example.com/a/shot-2.png"><figcaption>{{LONG_TEXT_13}}</figcaption></figure>
 </div>

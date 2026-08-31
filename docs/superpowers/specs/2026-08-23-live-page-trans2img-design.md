@@ -13,7 +13,7 @@
 
 ## 2. 核心机制：重标记是确定性的
 
-`data-u2m-id` 按文档序递增编号，是「prepare 之后 DOM」的纯函数。`page-prepare.js` 的变换序列——同源 iframe 合并 → 注 `<base>` → 内联外部 CSS → **剥尽 script/noscript/template** → 剥 on* 属性 → 剥复制按钮 → src 绝对化 → 文档序标记——在同一 URL 的两次渲染上执行结果相同。因此步骤 8 重新渲染 URL 后把同一套 `page-init.js + page-prepare.js`（共享脚本，唯一事实源）再注入一遍，DOM 未变则 id 精确落在同一元素，**无需任何 id/class 反查搜索**。
+`data-idx` 按文档序递增编号，是「prepare 之后 DOM」的纯函数。`page-prepare.js` 的变换序列——同源 iframe 合并 → 注 `<base>` → 内联外部 CSS → **剥尽 script/noscript/template** → 剥 on* 属性 → 剥复制按钮 → src 绝对化 → 文档序标记——在同一 URL 的两次渲染上执行结果相同。因此步骤 8 重新渲染 URL 后把同一套 `page-init.js + page-prepare.js`（共享脚本，唯一事实源）再注入一遍，DOM 未变则 id 精确落在同一元素，**无需任何 id/class 反查搜索**。
 
 "两次渲染 DOM 一般不变"是被**校验**的前提而非被依赖的假设：变了（广告插入/水合差异/A/B）则 id 平移，严校验拦截，该 id 降级快照兜底——降级而非错图。
 

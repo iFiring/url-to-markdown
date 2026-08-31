@@ -30,7 +30,7 @@ test('extract_styled.mjs: 无参数时输出 usage_error', async () => {
 
 // 模拟步骤 2 带样式版快照：style 属性 + head/body 两处 <style> + 噪声分支
 const STYLED_SNAPSHOT = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>测试页</title><style>.hero{color:red}</style></head><body><div class="main" data-u2m-id="1"><header class="hero" style="margin:0" data-u2m-id="2"><h1 data-u2m-id="3">标题</h1><p data-u2m-id="4">作者 日期</p></header><section class="content" style="padding:10px" data-u2m-id="5"><p data-u2m-id="6">段落一</p><div style="border:1px solid" data-u2m-id="7">图容器</div></section><aside class="noise" data-u2m-id="8"><style>.deep{color:blue}</style><p data-u2m-id="9">推荐阅读</p></aside></div><div class="ads" data-u2m-id="10"><p data-u2m-id="11">广告</p></div></body></html>`;
+<html lang="zh-CN"><head><title>测试页</title><style>.hero{color:red}</style></head><body><div class="main" data-idx="1"><header class="hero" style="margin:0" data-idx="2"><h1 data-idx="3">标题</h1><p data-idx="4">作者 日期</p></header><section class="content" style="padding:10px" data-idx="5"><p data-idx="6">段落一</p><div style="border:1px solid" data-idx="7">图容器</div></section><aside class="noise" data-idx="8"><style>.deep{color:blue}</style><p data-idx="9">推荐阅读</p></aside></div><div class="ads" data-idx="10"><p data-idx="11">广告</p></div></body></html>`;
 
 const URL = 'https://example.com/test-article';
 
@@ -68,7 +68,7 @@ test('extract_styled.mjs: 保留 key 子树+骨架链与属性，删噪声，bod
 
   // key 子树 + 祖先链保留，属性一字不动
   for (const id of [1, 2, 3, 4, 5, 6, 7]) {
-    assert.ok(html.includes(`data-u2m-id="${id}"`), `id ${id} 应保留`);
+    assert.ok(html.includes(`data-idx="${id}"`), `id ${id} 应保留`);
   }
   assert.ok(html.includes('class="main"'), '骨架链属性应保留');
   assert.ok(html.includes('class="hero"'));
@@ -78,7 +78,7 @@ test('extract_styled.mjs: 保留 key 子树+骨架链与属性，删噪声，bod
 
   // 噪声分支删除
   for (const id of [8, 9, 10, 11]) {
-    assert.ok(!html.includes(`data-u2m-id="${id}"`), `id ${id} 应删除`);
+    assert.ok(!html.includes(`data-idx="${id}"`), `id ${id} 应删除`);
   }
   assert.ok(!html.includes('推荐阅读'), '噪声文本应删除');
   assert.ok(!html.includes('广告'), '噪声文本应删除');
@@ -99,7 +99,7 @@ test('extract_styled.mjs: 保留 key 子树+骨架链与属性，删噪声，bod
 
 test('extract_styled.mjs: standaloneIds 游离内容子树保留、同层噪音裁掉', async () => {
   const snap = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>游离</title></head><body><div class="wrap" data-u2m-id="1"><h2 data-u2m-id="2">流外标题</h2><p data-u2m-id="3">流外引言文本<em data-u2m-id="31">强调</em></p><section data-u2m-id="4"><p data-u2m-id="5">段落一</p></section><aside class="ad" data-u2m-id="6">广告</aside></div></body></html>`;
+<html lang="zh-CN"><head><title>游离</title></head><body><div class="wrap" data-idx="1"><h2 data-idx="2">流外标题</h2><p data-idx="3">流外引言文本<em data-idx="31">强调</em></p><section data-idx="4"><p data-idx="5">段落一</p></section><aside class="ad" data-idx="6">广告</aside></div></body></html>`;
   const { tmpRoot, urlDir } = setupTmp('standalone', { titleIds: [], descriptionIds: [], standaloneIds: [2, 3], listFlowIds: [4] });
   fs.writeFileSync(path.join(urlDir, '2_clean_style_snapshot.html'), snap);
   const script = path.resolve('script/extract_styled.mjs');
@@ -114,9 +114,9 @@ test('extract_styled.mjs: standaloneIds 游离内容子树保留、同层噪音�
   const html = fs.readFileSync(out.styledExtract, 'utf8');
   // 游离元素子树（含后代 31）+ 祖先链 1 + 流 4/5 保留；同层噪音 6 裁掉
   for (const id of [1, 2, 3, 31, 4, 5]) {
-    assert.ok(html.includes(`data-u2m-id="${id}"`), `id ${id} 应保留`);
+    assert.ok(html.includes(`data-idx="${id}"`), `id ${id} 应保留`);
   }
-  assert.ok(!html.includes('data-u2m-id="6"'), '噪音应删除');
+  assert.ok(!html.includes('data-idx="6"'), '噪音应删除');
   assert.ok(!html.includes('广告'), '噪音文本应删除');
   assert.ok(html.includes('流外引言文本<em'), '游离元素后代应原样保留');
   fs.rmSync(tmpRoot, { recursive: true, force: true });

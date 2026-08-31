@@ -72,7 +72,7 @@ function __u2mPrepareBody(cfg) {
     try { if (el.src) el.setAttribute('src', el.src); } catch (e) { /* 忽略 */ }
   });
 
-  // 7. 打 data-u2m-id：body 内所有元素按文档序递增标记，仅排除
+  // 7. 打 data-idx：body 内所有元素按文档序递增标记，仅排除
   //    EXCLUDE_TAGS（纯文本修饰/薄语义行内标签）与 svg/math 内部后代
   //    （根元素本身标记；内部细节对下游不可见——步骤 2 剥 svg 属性，
   //    转换按原子块处理，标记内部只会膨胀快照）
@@ -82,7 +82,7 @@ function __u2mPrepareBody(cfg) {
   while (el) {
     const insideForeign = el.parentElement && el.parentElement.closest('svg, math');
     if (!EXCLUDE_TAGS.has(el.tagName.toUpperCase()) && !insideForeign) {
-      el.setAttribute('data-u2m-id', String(++n));
+      el.setAttribute('data-idx', String(++n));
     }
     el = walker.nextNode();
   }

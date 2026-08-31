@@ -42,16 +42,16 @@
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>组合夹具</title>
 <style>.modal{display:none}</style></head>
 <body>
-<div data-u2m-id="1">
-  <h1 data-u2m-id="2">组合夹具标题</h1>
-  <p data-u2m-id="3">这是一段足够长的中文文本，用来触发行内文本的占位行为与还原清单的生成逻辑。</p>
-  <p data-u2m-id="4">This paragraph contains a fairly long English sentence that exceeds twelve words to trigger the placeholder mechanism.</p>
-  <pre data-u2m-id="5" class="shiki overflow-auto"><code data-language="javascript" data-u2m-id="6">const x = 1; console.log(x);</code></pre>
-  <table data-u2m-id="7"><thead><tr><th>列A</th><th>列B</th></tr></thead><tbody><tr><td>值1</td><td>值2</td></tr></tbody></table>
-  <div data-u2m-id="8" hidden="true"><p>隐藏面板内容一</p><p>隐藏面板内容二</p></div>
-  <astro-slot data-u2m-id="9"><span data-u2m-id="10">槽内容</span></astro-slot>
-  <svg data-u2m-id="11" width="10"><text>SVG 内长文本内容如果参与占位会导致编号错位的问题</text></svg>
-  <p data-u2m-id="12">短文本</p>
+<div data-idx="1">
+  <h1 data-idx="2">组合夹具标题</h1>
+  <p data-idx="3">这是一段足够长的中文文本，用来触发行内文本的占位行为与还原清单的生成逻辑。</p>
+  <p data-idx="4">This paragraph contains a fairly long English sentence that exceeds twelve words to trigger the placeholder mechanism.</p>
+  <pre data-idx="5" class="shiki overflow-auto"><code data-language="javascript" data-idx="6">const x = 1; console.log(x);</code></pre>
+  <table data-idx="7"><thead><tr><th>列A</th><th>列B</th></tr></thead><tbody><tr><td>值1</td><td>值2</td></tr></tbody></table>
+  <div data-idx="8" hidden="true"><p>隐藏面板内容一</p><p>隐藏面板内容二</p></div>
+  <astro-slot data-idx="9"><span data-idx="10">槽内容</span></astro-slot>
+  <svg data-idx="11" width="10"><text>SVG 内长文本内容如果参与占位会导致编号错位的问题</text></svg>
+  <p data-idx="12">短文本</p>
 </div>
 </body></html>
 ```
@@ -192,7 +192,7 @@ test('守卫: 清洗版是终端视图——不含 {{LONG_TEXT_，步骤 2 不�
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
-  <div data-u2m-id="1"><p data-u2m-id="2">这是一段超过十六个汉字的长文本，清洗版不应为其生成占位符。</p></div>
+  <div data-idx="1"><p data-idx="2">这是一段超过十六个汉字的长文本，清洗版不应为其生成占位符。</p></div>
 </body></html>`;
   const { out, cleaned, styled, cleanup } = await runClean(snapshot, 'guard-terminal');
   try {
@@ -331,7 +331,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: Task 2 的 clean 分支结构
-- Produces: 清洗版属性白名单定稿——`class`(过滤后)/`id`/`data-u2m-id`/`data-language`/`hidden`/`type`/`role`/`alt`；页面脚本内新增共享函数 `isClassNoise(tok)`（Task 5 无依赖，仅本任务使用）
+- Produces: 清洗版属性白名单定稿——`class`(过滤后)/`id`/`data-idx`/`data-language`/`hidden`/`type`/`role`/`alt`；页面脚本内新增共享函数 `isClassNoise(tok)`（Task 5 无依赖，仅本任务使用）
 
 - [ ] **Step 1: 改写测试**
 
@@ -344,10 +344,10 @@ test('K1: class 语义过滤——工具/哈希/CSS-modules/变体剥除，语�
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
-  <div data-u2m-id="1">
-    <section data-u2m-id="2" class="article flex px-4 astro-3ef6ksr2 h-[30rem] text-xs hover:bg-x md:flex -top-0.5 !h-9 _Button_6dmow_1 overflow-x-hidden shiki">正文内容</section>
-    <div data-u2m-id="3" class="page-header btn-primary expn-content">语义类元素</div>
-    <div data-u2m-id="4" class="flex px-4 rounded overflow-auto border">全是噪声</div>
+  <div data-idx="1">
+    <section data-idx="2" class="article flex px-4 astro-3ef6ksr2 h-[30rem] text-xs hover:bg-x md:flex -top-0.5 !h-9 _Button_6dmow_1 overflow-x-hidden shiki">正文内容</section>
+    <div data-idx="3" class="page-header btn-primary expn-content">语义类元素</div>
+    <div data-idx="4" class="flex px-4 rounded overflow-auto border">全是噪声</div>
   </div>
 </body></html>`;
   const { cleaned, styled, cleanup } = await runClean(snapshot, 'k1-class');
@@ -355,11 +355,11 @@ test('K1: class 语义过滤——工具/哈希/CSS-modules/变体剥除，语�
     const sec = cleaned.match(/<section[^>]*>/)[0];
     assert.ok(sec.includes('class="article"'), `语义 token article 应保留: ${sec}`);
     assert.ok(!/(flex|px-4|astro-|30rem|text-xs|hover:|md:|top-0|!h-9|_Button_|overflow|shiki)/.test(sec), `噪声 token 应剥除: ${sec}`);
-    const keep = cleaned.match(/<div data-u2m-id="3"[^>]*>/)[0];
+    const keep = cleaned.match(/<div data-idx="3"[^>]*>/)[0];
     for (const tok of ['page-header', 'btn-primary', 'expn-content']) {
       assert.ok(keep.includes(tok), `两词 kebab 语义 token ${tok} 应保留: ${keep}`);
     }
-    assert.ok(!/<div data-u2m-id="4"[^>]*class=/.test(cleaned), '全噪声 class 应连同属性删除');
+    assert.ok(!/<div data-idx="4"[^>]*class=/.test(cleaned), '全噪声 class 应连同属性删除');
     assert.ok(styled.includes('astro-3ef6ksr2') && styled.includes('h-[30rem]'), '带样式版保留原始 class');
   } finally { cleanup(); }
 });
@@ -372,20 +372,20 @@ test('K2: 属性白名单——八属性存活，href/src/aria/style 等删净�
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
-  <div data-u2m-id="1">
-    <a data-u2m-id="2" href="https://example.com/x" aria-label="链接" target="_blank" data-1p-ignore="1">链接文本</a>
-    <img data-u2m-id="3" src="https://example.com/i.png" alt="示意图" width="10" height="10">
-    <div data-u2m-id="4" role="button" type="button" hidden="true" id="anchor" data-language="python" class="keep-me" tabindex="0" draggable="true">内容</div>
+  <div data-idx="1">
+    <a data-idx="2" href="https://example.com/x" aria-label="链接" target="_blank" data-1p-ignore="1">链接文本</a>
+    <img data-idx="3" src="https://example.com/i.png" alt="示意图" width="10" height="10">
+    <div data-idx="4" role="button" type="button" hidden="true" id="anchor" data-language="python" class="keep-me" tabindex="0" draggable="true">内容</div>
   </div>
 </body></html>`;
   const { cleaned, styled, cleanup } = await runClean(snapshot, 'k2-attrs');
   try {
-    const a = cleaned.match(/<a data-u2m-id="2"[^>]*>/)[0];
+    const a = cleaned.match(/<a data-idx="2"[^>]*>/)[0];
     assert.ok(!/href|aria-label|target|data-1p/.test(a), `a 的 URL/aria/data 噪声应删净: ${a}`);
-    const img = cleaned.match(/<img data-u2m-id="3"[^>]*>/)[0];
+    const img = cleaned.match(/<img data-idx="3"[^>]*>/)[0];
     assert.ok(!/src|width|height/.test(img), `img 的 src/宽高应删净: ${img}`);
     assert.ok(img.includes('alt="示意图"'), 'img 的 alt 语义保留');
-    const div = cleaned.match(/<div data-u2m-id="4"[^>]*>/)[0];
+    const div = cleaned.match(/<div data-idx="4"[^>]*>/)[0];
     for (const attr of ['role="button"', 'type="button"', 'hidden="true"', 'id="anchor"', 'data-language="python"', 'class="keep-me"']) {
       assert.ok(div.includes(attr), `白名单属性 ${attr} 应保留: ${div}`);
     }
@@ -396,10 +396,10 @@ test('K2: 属性白名单——八属性存活，href/src/aria/style 等删净�
 });
 ```
 
-3. svg 断言更新（属性白名单后 svg 壳保留 `data-u2m-id`）：
-   - `'对 article-1 快照执行清洗'` 的 `assert.ok(!cleaned.match(/<svg[^>]+[a-z-]+=/i), 'SVG 不应有属性')` 删除，改 `assert.ok(/<svg data-u2m-id="[0-9]+"><\/svg>/.test(cleaned) || !cleaned.includes('<svg'), 'SVG 壳保留 data-u2m-id')`。
-   - `'空元素级联删除…'` 的 `assert.ok(cleaned.includes('<svg></svg>'), 'svg 壳必须保留')` 改为 `assert.ok(cleaned.includes('<svg data-u2m-id="11"></svg>'), 'svg 壳必须保留且带 id')`。
-   - `'带样式快照保留样式…'` 的 `assert.ok(cleaned.includes('<svg></svg>'), '清洗版 SVG 应清空为壳')` 改为 `assert.ok(/<svg data-u2m-id="3"><\/svg>/.test(cleaned), '清洗版 SVG 清空为壳且保留 id')`。
+3. svg 断言更新（属性白名单后 svg 壳保留 `data-idx`）：
+   - `'对 article-1 快照执行清洗'` 的 `assert.ok(!cleaned.match(/<svg[^>]+[a-z-]+=/i), 'SVG 不应有属性')` 删除，改 `assert.ok(/<svg data-idx="[0-9]+"><\/svg>/.test(cleaned) || !cleaned.includes('<svg'), 'SVG 壳保留 data-idx')`。
+   - `'空元素级联删除…'` 的 `assert.ok(cleaned.includes('<svg></svg>'), 'svg 壳必须保留')` 改为 `assert.ok(cleaned.includes('<svg data-idx="11"></svg>'), 'svg 壳必须保留且带 id')`。
+   - `'带样式快照保留样式…'` 的 `assert.ok(cleaned.includes('<svg></svg>'), '清洗版 SVG 应清空为壳')` 改为 `assert.ok(/<svg data-idx="3"><\/svg>/.test(cleaned), '清洗版 SVG 清空为壳且保留 id')`。
 
 - [ ] **Step 2: 跑测试确认失败**
 
@@ -413,7 +413,7 @@ Expected: K1/K2 用例 FAIL（`-top-0.5`/`_Button_…`/`!h-9`/`overflow-x-hidden
 1. 步骤 11（SVG 清空）改为只清子树、不再删属性（属性交 K2 白名单裁剪）：
 
 ```js
-  // 11. SVG 清空子树（仅清洗版）：属性由 K2 白名单统一裁剪，data-u2m-id 等存活
+  // 11. SVG 清空子树（仅清洗版）：属性由 K2 白名单统一裁剪，data-idx 等存活
   for (var i = 0; i < svgs.length; i++) {
     while (svgs[i].firstChild) svgs[i].removeChild(svgs[i].firstChild);
   }
@@ -468,7 +468,7 @@ Expected: K1/K2 用例 FAIL（`-top-0.5`/`_Button_…`/`!h-9`/`overflow-x-hidden
 ```js
   // K2. 属性白名单（仅清洗版）：全文档只留 LLM 可理解的最小属性集；
   //     href/src/aria-*/style/tabindex 等一律删除——a/img 的 URL 就此清空
-  var ATTR_KEEP = { 'class': 1, 'id': 1, 'data-u2m-id': 1, 'data-language': 1, 'hidden': 1, 'type': 1, 'role': 1, 'alt': 1 };
+  var ATTR_KEEP = { 'class': 1, 'id': 1, 'data-idx': 1, 'data-language': 1, 'hidden': 1, 'type': 1, 'role': 1, 'alt': 1 };
   var allEls = document.querySelectorAll('*');
   for (var i = 0; i < allEls.length; i++) {
     var el2 = allEls[i];
@@ -517,20 +517,20 @@ test('K7: pre 折叠为 {{pre>code>N_chars}}——data-language 提升到 pre，
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
-  <div data-u2m-id="1">
-    <pre data-u2m-id="2" class="shiki" tabindex="0"><code data-u2m-id="3" data-language="javascript"><span data-u2m-id="4" class="syntax-highlighter-line"><span data-u2m-id="5" class="shiki-token">import</span><span data-u2m-id="6" class="shiki-token"> OpenAI </span></span></code></pre>
-    <p data-u2m-id="7">行内 <code data-u2m-id="8">client.create()</code> 代码</p>
+  <div data-idx="1">
+    <pre data-idx="2" class="shiki" tabindex="0"><code data-idx="3" data-language="javascript"><span data-idx="4" class="syntax-highlighter-line"><span data-idx="5" class="shiki-token">import</span><span data-idx="6" class="shiki-token"> OpenAI </span></span></code></pre>
+    <p data-idx="7">行内 <code data-idx="8">client.create()</code> 代码</p>
   </div>
 </body></html>`;
   const { cleaned, styled, cleanup } = await runClean(snapshot, 'k7-pre');
   try {
     assert.ok(
-      /<pre[^>]*data-u2m-id="2"[^>]*data-language="javascript"[^>]*>\{\{pre>code>\d+_chars\}\}<\/pre>/.test(cleaned),
+      /<pre[^>]*data-idx="2"[^>]*data-language="javascript"[^>]*>\{\{pre>code>\d+_chars\}\}<\/pre>/.test(cleaned),
       `pre 应折叠为 token 且 data-language 提升: ${cleaned.match(/<pre[\s\S]*?<\/pre>/)?.[0]}`
     );
-    assert.ok(!cleaned.includes('data-u2m-id="3"') && !cleaned.includes('data-u2m-id="4"'), 'pre 内部 id 随子树删除');
+    assert.ok(!cleaned.includes('data-idx="3"') && !cleaned.includes('data-idx="4"'), 'pre 内部 id 随子树删除');
     assert.ok(!cleaned.includes('shiki-token'), 'token span 应删除');
-    assert.ok(cleaned.includes('<code data-u2m-id="8">client.create()</code>'), '行内 code 不动');
+    assert.ok(cleaned.includes('<code data-idx="8">client.create()</code>'), '行内 code 不动');
     assert.ok(styled.includes('shiki-token') && styled.includes('import'), '带样式版完整保留代码');
     assert.ok(!styled.includes('{{pre>'), '守卫: 带样式版不得出现新 token');
   } finally { cleanup(); }
@@ -544,29 +544,29 @@ test('K6: table 整树折叠为 {{table>N}}——带样式版结构完整（含�
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
-  <div data-u2m-id="1">
-    <table data-u2m-id="2">
-      <colgroup data-u2m-id="3"><col data-u2m-id="4"><col data-u2m-id="5"></colgroup>
-      <thead data-u2m-id="6"><tr data-u2m-id="7"><th data-u2m-id="8">列A</th><th data-u2m-id="9"></th></tr></thead>
-      <tbody data-u2m-id="10">
-        <tr data-u2m-id="11"><td data-u2m-id="12">有值</td><td data-u2m-id="13"></td></tr>
+  <div data-idx="1">
+    <table data-idx="2">
+      <colgroup data-idx="3"><col data-idx="4"><col data-idx="5"></colgroup>
+      <thead data-idx="6"><tr data-idx="7"><th data-idx="8">列A</th><th data-idx="9"></th></tr></thead>
+      <tbody data-idx="10">
+        <tr data-idx="11"><td data-idx="12">有值</td><td data-idx="13"></td></tr>
       </tbody>
     </table>
-    <p data-u2m-id="14">正文段落</p>
+    <p data-idx="14">正文段落</p>
   </div>
 </body></html>`;
   const { cleaned, styled, cleanup } = await runClean(snapshot, 'k6-table');
   try {
-    const seg = cleaned.match(/<table data-u2m-id="2"[^>]*>([\s\S]*?)<\/table>/)[1];
+    const seg = cleaned.match(/<table data-idx="2"[^>]*>([\s\S]*?)<\/table>/)[1];
     assert.ok(/^\{\{table>\d+_(chars|words)\}\}$/.test(seg), `table 应折叠为字数 token: ${seg}`);
-    assert.ok(!cleaned.includes('列A') && !cleaned.includes('data-u2m-id="3"'), '表格内部结构与内容从清洗版消失');
+    assert.ok(!cleaned.includes('列A') && !cleaned.includes('data-idx="3"'), '表格内部结构与内容从清洗版消失');
     assert.ok(cleaned.includes('正文段落'), '表外正文保留');
     // 带样式版：表格结构全体保留（含空 th/td/col——删空单元格会让行列错位）
     for (const [tid, what] of [
       ['3', 'colgroup'], ['4', 'col'], ['6', 'thead'], ['8', '有值的 th'], ['9', '空 th'],
       ['12', '有值的 td'], ['13', '空 td'],
     ]) {
-      assert.ok(styled.includes(`data-u2m-id="${tid}"`), `${what} (id=${tid}) 带样式版必须保留`);
+      assert.ok(styled.includes(`data-idx="${tid}"`), `${what} (id=${tid}) 带样式版必须保留`);
     }
     assert.ok(!styled.includes('{{table>'), '守卫: 带样式版不得出现新 token');
   } finally { cleanup(); }
@@ -581,24 +581,24 @@ test('K5: hidden 裸属性折叠——最外层折为构成 token，嵌套取外
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
-  <div data-u2m-id="1">
-    <div data-u2m-id="2" hidden="true"><p data-u2m-id="3">${attrLong}</p><a data-u2m-id="4" href="/x">链接</a></div>
-    <div data-u2m-id="5" hidden><div data-u2m-id="6" hidden="until-found"><p data-u2m-id="7">嵌套隐藏</p></div></div>
-    <p data-u2m-id="8">正文段落</p>
+  <div data-idx="1">
+    <div data-idx="2" hidden="true"><p data-idx="3">${attrLong}</p><a data-idx="4" href="/x">链接</a></div>
+    <div data-idx="5" hidden><div data-idx="6" hidden="until-found"><p data-idx="7">嵌套隐藏</p></div></div>
+    <p data-idx="8">正文段落</p>
   </div>
 </body></html>`;
   const { cleaned, styled, cleanup } = await runClean(snapshot, 'k5-hidden');
   try {
-    const seg1 = cleaned.match(/<div data-u2m-id="2"[^>]*>([\s\S]*?)<\/div>/)[1];
+    const seg1 = cleaned.match(/<div data-idx="2"[^>]*>([\s\S]*?)<\/div>/)[1];
     assert.ok(/^\{\{\d+_(chars|words);1_p\/1_a\}\}$/.test(seg1), `子树应折为构成 token: ${seg1}`);
-    assert.ok(cleaned.match(/<div data-u2m-id="2"[^>]*>/)[0].includes('hidden'), 'hidden 属性保留（触发信号）');
-    assert.ok(!cleaned.includes(attrLong) && !cleaned.includes('data-u2m-id="3"') && !cleaned.includes('data-u2m-id="4"'), '折叠子树内容应消失');
-    const seg2 = cleaned.match(/<div data-u2m-id="5"[^>]*>([\s\S]*?)<\/div>/)[1];
+    assert.ok(cleaned.match(/<div data-idx="2"[^>]*>/)[0].includes('hidden'), 'hidden 属性保留（触发信号）');
+    assert.ok(!cleaned.includes(attrLong) && !cleaned.includes('data-idx="3"') && !cleaned.includes('data-idx="4"'), '折叠子树内容应消失');
+    const seg2 = cleaned.match(/<div data-idx="5"[^>]*>([\s\S]*?)<\/div>/)[1];
     assert.ok(/^\{\{\d+_(chars|words);1_div\/1_p\}\}$/.test(seg2), `嵌套 hidden 只折最外层: ${seg2}`);
-    assert.ok(!cleaned.includes('data-u2m-id="6"') && !cleaned.includes('data-u2m-id="7"'), '内层 id 随外层折叠消失');
+    assert.ok(!cleaned.includes('data-idx="6"') && !cleaned.includes('data-idx="7"'), '内层 id 随外层折叠消失');
     assert.ok(!cleaned.includes('data-u2m-hidden'), 'data-u2m-hidden 属性应取消');
     assert.ok(cleaned.includes('正文段落'), '可见正文保留');
-    assert.ok(styled.includes(attrLong) && styled.includes('data-u2m-id="3"'), '带样式版原文完整');
+    assert.ok(styled.includes(attrLong) && styled.includes('data-idx="3"'), '带样式版原文完整');
     assert.ok(!styled.includes(';1_p'), '守卫: 带样式版不得出现新 token');
   } finally { cleanup(); }
 });
@@ -721,24 +721,24 @@ test('K8: 行内 run token 化——阈值边界、构成、链接 run 整段吞
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
-  <div data-u2m-id="1">
-    <p data-u2m-id="2">${zh17}</p>
-    <p data-u2m-id="3">${zh16}</p>
-    <p data-u2m-id="4">${en13}</p>
-    <p data-u2m-id="5">${en12}</p>
-    <p data-u2m-id="6">Use the <a data-u2m-id="7" href="/x">Prompt Caching Dashboard</a> to monitor cache hit rates and usage over time.</p>
-    <p data-u2m-id="8">x <a data-u2m-id="9">链接</a> y</p>
+  <div data-idx="1">
+    <p data-idx="2">${zh17}</p>
+    <p data-idx="3">${zh16}</p>
+    <p data-idx="4">${en13}</p>
+    <p data-idx="5">${en12}</p>
+    <p data-idx="6">Use the <a data-idx="7" href="/x">Prompt Caching Dashboard</a> to monitor cache hit rates and usage over time.</p>
+    <p data-idx="8">x <a data-idx="9">链接</a> y</p>
   </div>
 </body></html>`;
   const { cleaned, styled, cleanup } = await runClean(snapshot, 'k8-run');
   try {
-    assert.ok(/<p data-u2m-id="2">\{\{17_chars\}\}<\/p>/.test(cleaned), '17 字 run 应折叠');
+    assert.ok(/<p data-idx="2">\{\{17_chars\}\}<\/p>/.test(cleaned), '17 字 run 应折叠');
     assert.ok(cleaned.includes(zh16), '16 字 run 保留原文');
-    assert.ok(/<p data-u2m-id="4">\{\{13_words\}\}<\/p>/.test(cleaned), '13 词 run 折叠');
+    assert.ok(/<p data-idx="4">\{\{13_words\}\}<\/p>/.test(cleaned), '13 词 run 折叠');
     assert.ok(cleaned.includes(en12), '12 词 run 保留原文');
-    const mixed = cleaned.match(/<p data-u2m-id="6">([\s\S]*?)<\/p>/)[1];
+    const mixed = cleaned.match(/<p data-idx="6">([\s\S]*?)<\/p>/)[1];
     assert.ok(/^\{\{14_words;1_a\}\}$/.test(mixed), `混合 run 整段折叠为 {{n;1_a}}: ${mixed}`);
-    const short = cleaned.match(/<p data-u2m-id="8">([\s\S]*?)<\/p>/)[1];
+    const short = cleaned.match(/<p data-idx="8">([\s\S]*?)<\/p>/)[1];
     assert.ok(short.includes('x <a') && short.includes('> y'), `短 run 保留原文与行内间空白: ${JSON.stringify(short)}`);
     assert.ok(styled.includes('Prompt Caching Dashboard') && styled.includes('href="/x"'), '带样式版不受影响');
   } finally { cleanup(); }
@@ -749,16 +749,16 @@ test('K8: 含 img 的 run 不折叠——图片 id 与 alt 保持可引用', asy
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
-  <div data-u2m-id="1">
-    <p data-u2m-id="2">${long}<img data-u2m-id="3" src="x.png" alt="配图"></p>
-    <p data-u2m-id="4">正文对照段落。</p>
+  <div data-idx="1">
+    <p data-idx="2">${long}<img data-idx="3" src="x.png" alt="配图"></p>
+    <p data-idx="4">正文对照段落。</p>
   </div>
 </body></html>`;
   const { cleaned, cleanup } = await runClean(snapshot, 'k8-img');
   try {
-    const seg = cleaned.match(/<p data-u2m-id="2">([\s\S]*?)<\/p>/)[1];
+    const seg = cleaned.match(/<p data-idx="2">([\s\S]*?)<\/p>/)[1];
     assert.ok(seg.includes(long), '含 img 的 run 保留原文');
-    assert.ok(seg.includes('<img data-u2m-id="3" alt="配图">') || /<img data-u2m-id="3"[^>]*alt="配图"[^>]*>/.test(seg), 'img 元素与 alt 保留');
+    assert.ok(seg.includes('<img data-idx="3" alt="配图">') || /<img data-idx="3"[^>]*alt="配图"[^>]*>/.test(seg), 'img 元素与 alt 保留');
   } finally { cleanup(); }
 });
 
@@ -766,14 +766,14 @@ test('K8: 行内元素嵌行内集外标签（含 svg）切断 run、保守保�
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
-  <div data-u2m-id="1">
-    <button data-u2m-id="2"><span data-u2m-id="3"><svg data-u2m-id="4"></svg></span> <span data-u2m-id="5">Copy Page</span></button>
+  <div data-idx="1">
+    <button data-idx="2"><span data-idx="3"><svg data-idx="4"></svg></span> <span data-idx="5">Copy Page</span></button>
   </div>
 </body></html>`;
   const { cleaned, cleanup } = await runClean(snapshot, 'k8-break');
   try {
-    const seg = cleaned.match(/<button data-u2m-id="2">([\s\S]*?)<\/button>/)[1];
-    assert.ok(seg.includes('<svg data-u2m-id="4"></svg>'), 'icon span 内的 svg 保留');
+    const seg = cleaned.match(/<button data-idx="2">([\s\S]*?)<\/button>/)[1];
+    assert.ok(seg.includes('<svg data-idx="4"></svg>'), 'icon span 内的 svg 保留');
     assert.ok(seg.includes('Copy Page'), '短文本保留原文');
     assert.ok(!/\{\{\d+_/.test(seg), `病态结构不折叠: ${seg}`);
   } finally { cleanup(); }
@@ -939,7 +939,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 1. 第 3 行「读取 …DOM 结构（元素层级、标签类型、class 名称）和长文本占位符（`{{LONG_TEXT_k|...}}`）分布」改为：
 
 ```markdown
-这是**一篇文章页面**， 读取 `<url-working-path>/2_clean_snapshot.html` 的 DOM 结构（元素层级、标签类型、语义 class）与**文本规模 token** 分布，找到以下四类关键元素与列表流噪音的 `data-u2m-id` (ID)：
+这是**一篇文章页面**， 读取 `<url-working-path>/2_clean_snapshot.html` 的 DOM 结构（元素层级、标签类型、语义 class）与**文本规模 token** 分布，找到以下四类关键元素与列表流噪音的 `data-idx` (ID)：
 ```
 
 2. 第 9 行 `预格式块 <pre>（步骤 2 清洗后内容为 code... 占位）` 改为 `预格式块 <pre>（内容折叠为 {{pre>code>N_chars}} 占位）`。
@@ -947,7 +947,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 3. 约束第 3 条（data-u2m-hidden）替换为：
 
 ```markdown
-  3. **`hidden` 属性元素 + `{{n_chars;n_a/n_div/...}}` 内容 token**：折叠的隐藏子树（模态/抽屉/移动端导航等）。根元素的 `data-u2m-id` 可正常引用——原文完整保留在带样式版，纳入 listFlowIds 即可还原全文（FAQ 折叠答案、tab 变体面板是典型可纳入场景）；token 值是真实文本规模与标签构成（计数降序），可据此判断是否值得纳入
+  3. **`hidden` 属性元素 + `{{n_chars;n_a/n_div/...}}` 内容 token**：折叠的隐藏子树（模态/抽屉/移动端导航等）。根元素的 `data-idx` 可正常引用——原文完整保留在带样式版，纳入 listFlowIds 即可还原全文（FAQ 折叠答案、tab 变体面板是典型可纳入场景）；token 值是真实文本规模与标签构成（计数降序），可据此判断是否值得纳入
 ```
 
 4. 约束第 4 条（code...）替换，并追加第 5/6 条：
@@ -958,7 +958,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
   6. 链接与图片元素**不带 URL**（href/src 已清空，链接文本与 alt 保留）；超阈值的连续行内文本段（含链接混排）整段折叠为 `{{n_chars;n_a/...}}` token——文本规模与构成是判读流价值的线索，短文本（≤16 汉字 / ≤12 词）保留原文
 ```
 
-5. 结构示例同步：`<pre data-u2m-id="23">code...</pre>` → `<pre data-u2m-id="23" data-language="tsx">{{pre>code>412_chars}}</pre>`；`<div data-u2m-hidden="120_chars" data-u2m-id="26">…</div>` → `<div hidden data-u2m-id="26">{{120_chars;3_p}}</div>`（注释一并改）；手风琴块 `<button data-u2m-id="43">{{LONG_TEXT_1|80_chars}}</button>` → `<button data-u2m-id="43">{{80_chars}}</button>`，其后的 `<div data-u2m-hidden="200_chars" data-u2m-id="44"><p data-u2m-id="45">折叠的正文段落...</p></div>` → `<div hidden data-u2m-id="44">{{200_chars;1_p}}</div>`（id 45 随折叠消失，注释里对 45 的引用同步删除）。
+5. 结构示例同步：`<pre data-idx="23">code...</pre>` → `<pre data-idx="23" data-language="tsx">{{pre>code>412_chars}}</pre>`；`<div data-u2m-hidden="120_chars" data-idx="26">…</div>` → `<div hidden data-idx="26">{{120_chars;3_p}}</div>`（注释一并改）；手风琴块 `<button data-idx="43">{{LONG_TEXT_1|80_chars}}</button>` → `<button data-idx="43">{{80_chars}}</button>`，其后的 `<div data-u2m-hidden="200_chars" data-idx="44"><p data-idx="45">折叠的正文段落...</p></div>` → `<div hidden data-idx="44">{{200_chars;1_p}}</div>`（id 45 随折叠消失，注释里对 45 的引用同步删除）。
 
 - [ ] **Step 2: 更新 `README.md`**
 
@@ -981,7 +981,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 替换为：
 
 ```markdown
-→ 步骤 2 `clean_snapshot.mjs` 结构清洗（单页两趟、零样式计算：趟 1 styled = 结构删除 + 长文本占位 + SVG 瘦身，产物与历史逐字节一致；趟 2 clean = 结构删除 + K1-K9 机械规则——class 语义过滤、属性白名单（class/id/data-u2m-id/data-language/hidden/type/role/alt，href/src/aria 全删）、SVG 清空、astro 解包、hidden 裸属性折叠 `{{n;构成}}`、table/pre 折叠 `{{table>n}}`/`{{pre>code>n}}`、行内 run token 化（阈值 16 汉字/12 词）、空白压缩；**清洗版是终端视图**——唯一消费者是步骤 3、不含 LONG_TEXT 占位、一切还原走带样式版，见 docs/superpowers/specs/2026-08-27-clean-snapshot-simplify-design.md；产物 `2_clean_snapshot.html`/`2_clean_style_snapshot.html`/`2_long_text.json`）
+→ 步骤 2 `clean_snapshot.mjs` 结构清洗（单页两趟、零样式计算：趟 1 styled = 结构删除 + 长文本占位 + SVG 瘦身，产物与历史逐字节一致；趟 2 clean = 结构删除 + K1-K9 机械规则——class 语义过滤、属性白名单（class/id/data-idx/data-language/hidden/type/role/alt，href/src/aria 全删）、SVG 清空、astro 解包、hidden 裸属性折叠 `{{n;构成}}`、table/pre 折叠 `{{table>n}}`/`{{pre>code>n}}`、行内 run token 化（阈值 16 汉字/12 词）、空白压缩；**清洗版是终端视图**——唯一消费者是步骤 3、不含 LONG_TEXT 占位、一切还原走带样式版，见 docs/superpowers/specs/2026-08-27-clean-snapshot-simplify-design.md；产物 `2_clean_snapshot.html`/`2_clean_style_snapshot.html`/`2_long_text.json`）
 ```
 
 - [ ] **Step 4: 跑全量测试确认文档未破坏任何引用**

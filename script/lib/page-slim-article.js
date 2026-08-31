@@ -4,7 +4,7 @@
  * 剔除之后、序列化之前对文章视图执行六条结构规则（spec：
  * docs/superpowers/specs/2026-08-29-step6-article-slimming-design.md §5，
  * 固定执行顺序——前面的规则改变后面规则看到的输入）：
- *  ① data-* 清理：保留 {data-u2m-id, data-language}（后者是步骤 7 判
+ *  ① data-* 清理：保留 {data-idx, data-language}（后者是步骤 7 判
  *     代码语言的机械信号），其余 data-*（组件库脚手架/交互状态）全删。
  *     白名单而非黑名单——陌上站点的 data-* 安全默认删除
  *  ② MathML→LaTeX：annotation 有 LaTeX 源才替换（KaTeX 双胞胎结构整体
@@ -14,7 +14,7 @@
  *  ④ 有文本 button 降级（解包上提子节点，包装铬的 style 弃置）
  *  ⑤ 非白名单协议 href 剥除（scheme ∉ http/https/mailto/tel 的 <a>
  *     解包——参考页 codex:// 营销链接单个 ~1KB prompt 曾漏进 9_markdown）
- *  ⑥ 空壳 span 拆包（属性只剩 data-u2m-id，迭代到不动点——pre 内语法
+ *  ⑥ 空壳 span 拆包（属性只剩 data-idx，迭代到不动点——pre 内语法
  *     高亮 token span 的样式已被步骤 5 清空，结构在、信息不在）
  * 保护集 protectedIds = titleIds ∪ descriptionIds ∪ standaloneIds
  * （listFlowIds 不入——容器本身不迁移）：删除/解包类（③④⑤⑥）跳过
@@ -30,7 +30,7 @@ function __u2mSlimArticle(protectedIds) {
   var protectedSet = {};
   for (var i = 0; i < (protectedIds || []).length; i++) protectedSet[protectedIds[i]] = true;
   function isProtected(el) {
-    var id = el.getAttribute && el.getAttribute('data-u2m-id');
+    var id = el.getAttribute && el.getAttribute('data-idx');
     return !!(id && protectedSet[id]);
   }
   function unwrap(el) {
@@ -41,7 +41,7 @@ function __u2mSlimArticle(protectedIds) {
   }
 
   // ① data-* 清理：白名单之外的 data-* 全删
-  var KEEP_DATA = { 'data-u2m-id': 1, 'data-language': 1 };
+  var KEEP_DATA = { 'data-idx': 1, 'data-language': 1 };
   var all = document.querySelectorAll('body *');
   for (var i = 0; i < all.length; i++) {
     var el = all[i];
@@ -140,7 +140,7 @@ function __u2mSlimArticle(protectedIds) {
     }
   }
 
-  // ⑥ 空壳 span 拆包：属性只剩 data-u2m-id 的 span 解包。span 限定——
+  // ⑥ 空壳 span 拆包：属性只剩 data-idx 的 span 解包。span 限定——
   // div 等块级可能承载 trans2img 模块边界，不碰。嵌套 token span 需
   // 迭代到不动点，防御性上限 10 轮（一轮内 parent 先解包、hoisted 的
   // 子 span 仍在静态列表内同轮处理，通常一轮收敛）
@@ -152,7 +152,7 @@ function __u2mSlimArticle(protectedIds) {
       if (!el.isConnected || isProtected(el)) continue;
       var bare = true;
       for (var j = 0; j < el.attributes.length; j++) {
-        if (el.attributes[j].name !== 'data-u2m-id') { bare = false; break; }
+        if (el.attributes[j].name !== 'data-idx') { bare = false; break; }
       }
       if (!bare) continue;
       unwrap(el);

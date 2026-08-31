@@ -3,7 +3,7 @@
  * 4_styled_extract.html」页面（完整 <style> + class + @property——浏览器
  * 真实渲染上下文），接收 page-collect-fn-values.js 收集的声明对，逐对取
  * getComputedStyle 计算值，返回 map：
- *   { "<data-u2m-id>": { "<prop>": "<计算值>", … }, … }
+ *   { "<data-idx>": { "<prop>": "<计算值>", … }, … }
  * 计算值是浏览器把 var()/color-mix()/calc() 全部解析后的真实值：
  * @property 注册的 --tw-border-style → solid；两级 var→color-mix → 具体
  * color(srgb …)/rgb(…) 色值；calc() → 具体 px。元素缺失（两版 DOM 不一
@@ -11,10 +11,10 @@
  */
 function __u2mResolveComputed(pairs) {
   var byId = {};
-  var all = document.querySelectorAll('[data-u2m-id]');
+  var all = document.querySelectorAll('[data-idx]');
   var elById = {};
   for (var i = 0; i < all.length; i++) {
-    elById[all[i].getAttribute('data-u2m-id')] = all[i];
+    elById[all[i].getAttribute('data-idx')] = all[i];
   }
   for (var k = 0; k < pairs.length; k++) {
     var el = elById[pairs[k].id];

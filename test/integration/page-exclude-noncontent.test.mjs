@@ -28,10 +28,10 @@ test('page-exclude-noncontent.js: 函数可被 evaluate 格式调用', () => {
 //   #4 非内容包装（→藏），内含 #5 delete（→藏）
 //   #6 delete 但同时是 keep #7 的祖先（保优先→保），#7 keep（→保）
 const MATRIX_HTML = `<!DOCTYPE html><html><body>
-<div data-u2m-id="1" id="title">标题 <span data-u2m-id="2" id="inner">内文</span> <span data-u2m-id="8" id="del-inside">子树噪音</span></div>
-<div data-u2m-id="3" id="sidebar">侧栏 <span id="penetrator" style="visibility: visible">穿透</span></div>
-<div data-u2m-id="4" id="outer">包装 <span data-u2m-id="5" id="del-noise">噪音</span></div>
-<div data-u2m-id="6" id="del-ancestor">容器 <span data-u2m-id="7" id="kept-child">正文</span></div>
+<div data-idx="1" id="title">标题 <span data-idx="2" id="inner">内文</span> <span data-idx="8" id="del-inside">子树噪音</span></div>
+<div data-idx="3" id="sidebar">侧栏 <span id="penetrator" style="visibility: visible">穿透</span></div>
+<div data-idx="4" id="outer">包装 <span data-idx="5" id="del-noise">噪音</span></div>
+<div data-idx="6" id="del-ancestor">容器 <span data-idx="7" id="kept-child">正文</span></div>
 </body></html>`;
 
 test('__u2mExcludeNonContent: 保护规则矩阵（keep/祖先/子孙/delete/保优先/穿透）', async () => {

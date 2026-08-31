@@ -19,9 +19,9 @@
  *      渲染可见窗口，无法全文转化），直接终止、不写快照
  *   4. 快照阶段（lib/snapshot-capture.mjs）—— 注入 page-init.js +
  *      page-prepare.js：同源 iframe 合并、外部 CSS 内联、剥尽 JS、<base>、
- *      资源 src 绝对化、标记 data-u2m-id，序列化全保真快照
+ *      资源 src 绝对化、标记 data-idx，序列化全保真快照
  *
- * data-u2m-id 标记规则: 覆盖 body 内所有元素（文档序连续编号），仅排除
+ * data-idx 标记规则: 覆盖 body 内所有元素（文档序连续编号），仅排除
  * 纯文本修饰/薄语义行内标签（strong/em/b/i/br/wbr/abbr/q/time/kbd 等）与
  * svg/math 的内部后代（根元素本身仍标记）。
  *

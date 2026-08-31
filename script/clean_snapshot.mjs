@@ -40,7 +40,7 @@
  *
  * 两趟分叉（page-clean-snapshot.js 内 mode 分支）：
  *   - styled 趟：保留 style 属性与 <style> 标签，SVG 瘦身为壳
- *     （仅留 id/class/data-u2m-id）；长文本占位（纯空白文本与 svg/style
+ *     （仅留 id/class/data-idx）；长文本占位（纯空白文本与 svg/style
  *     子树文本不占位）——中文（含汉字）字符数 > 16 → {{LONG_TEXT_k|n_chars}}，
  *     英文（不含汉字）单词数 > 12 → {{LONG_TEXT_k|n_words}}；属性白名单
  *     （22 静态属性 = clean K2 八属性 + style/href/src/width/height + 内容

@@ -62,10 +62,10 @@ test('R2: class 噪声过滤——工具/哈希 token 剥除，语义 token 保�
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
-  <div data-u2m-id="1">
-    <section data-u2m-id="2" class="article flex px-4 astro-3ef6ksr2 h-[30rem] text-xs hover:bg-x md:flex">正文内容</section>
-    <div data-u2m-id="3" class="page-header btn-primary expn-content shiki">语义类元素</div>
-    <div data-u2m-id="4" class="flex px-4 rounded">全是噪声</div>
+  <div data-idx="1">
+    <section data-idx="2" class="article flex px-4 astro-3ef6ksr2 h-[30rem] text-xs hover:bg-x md:flex">正文内容</section>
+    <div data-idx="3" class="page-header btn-primary expn-content shiki">语义类元素</div>
+    <div data-idx="4" class="flex px-4 rounded">全是噪声</div>
   </div>
 </body></html>`;
   const { cleaned, styled, cleanup } = await runClean(snapshot, 'r2-class');
@@ -73,11 +73,11 @@ test('R2: class 噪声过滤——工具/哈希 token 剥除，语义 token 保�
     const sec = cleaned.match(/<section[^>]*>/)[0];
     assert.ok(sec.includes('class="article"'), `语义 token article 应保留: ${sec}`);
     assert.ok(!/(flex|px-4|astro-|30rem|text-xs|hover:|md:)/.test(sec), `噪声 token 应剥除: ${sec}`);
-    const keep = cleaned.match(/<div data-u2m-id="3"[^>]*>/)[0];
+    const keep = cleaned.match(/<div data-idx="3"[^>]*>/)[0];
     for (const tok of ['page-header', 'btn-primary', 'expn-content', 'shiki']) {
       assert.ok(keep.includes(tok), `两词 kebab 语义 token ${tok} 应保留: ${keep}`);
     }
-    assert.ok(!/<div data-u2m-id="4"[^>]*class=/.test(cleaned), '全噪声 class 应连同属性删除');
+    assert.ok(!/<div data-idx="4"[^>]*class=/.test(cleaned), '全噪声 class 应连同属性删除');
     // 带样式版不受影响（硬约束）
     assert.ok(styled.includes('astro-3ef6ksr2') && styled.includes('h-[30rem]'), '带样式版保留原始 class');
   } finally { cleanup(); }
@@ -160,22 +160,22 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - [ ] **Step 1: 写失败测试**
 
 ```js
-test('R3: data-* 白名单——噪声 data 属性删除，data-u2m-id/data-language 保留', async () => {
+test('R3: data-* 白名单——噪声 data 属性删除，data-idx/data-language 保留', async () => {
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
-  <div data-u2m-id="1">
-    <div data-u2m-id="2" data-1p-ignore="true" data-copy-ignore="true" data-syntax-highlighter-id="_r104R_9dd_" tabindex="0" data-language="javascript" aria-label="x">正文</div>
+  <div data-idx="1">
+    <div data-idx="2" data-1p-ignore="true" data-copy-ignore="true" data-syntax-highlighter-id="_r104R_9dd_" tabindex="0" data-language="javascript" aria-label="x">正文</div>
   </div>
 </body></html>`;
   const { cleaned, styled, cleanup } = await runClean(snapshot, 'r3-data');
   try {
-    const div = cleaned.match(/<div data-u2m-id="2"[^>]*>/)[0];
+    const div = cleaned.match(/<div data-idx="2"[^>]*>/)[0];
     assert.ok(!div.includes('data-1p-ignore'), '噪声 data 属性应删除');
     assert.ok(!div.includes('data-copy-ignore'), '噪声 data 属性应删除');
     assert.ok(!div.includes('data-syntax-highlighter-id'), '噪声 data 属性应删除');
     assert.ok(div.includes('data-language="javascript"'), 'data-language 应保留');
-    assert.ok(div.includes('data-u2m-id="2"') && div.includes('aria-label'), 'data-u2m-id 与 aria 保留');
+    assert.ok(div.includes('data-idx="2"') && div.includes('aria-label'), 'data-idx 与 aria 保留');
     assert.ok(styled.includes('data-1p-ignore'), '带样式版不受影响');
   } finally { cleanup(); }
 });
@@ -191,9 +191,9 @@ Expected: 新用例 FAIL（data-1p-ignore 残留）。
 步骤 14（R2）之后插入：
 
 ```js
-  // 15. R3 data-* 白名单（仅清洗版）：清洗版只留 data-u2m-id / data-language /
+  // 15. R3 data-* 白名单（仅清洗版）：清洗版只留 data-idx / data-language /
   //     data-u2m-hidden（R6 折叠标记）；其余 data-* 全是埋点/框架噪声。
-  var DATA_KEEP = { 'data-u2m-id': 1, 'data-language': 1, 'data-u2m-hidden': 1 };
+  var DATA_KEEP = { 'data-idx': 1, 'data-language': 1, 'data-u2m-hidden': 1 };
   var allEls = document.querySelectorAll('*');
   for (var i = 0; i < allEls.length; i++) {
     var el2 = allEls[i];
@@ -237,18 +237,18 @@ test('R1: pre 内容替换为 code...——token span 全删，pre/code 壳与 i
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
-  <div data-u2m-id="1">
-    <pre data-u2m-id="2" class="shiki" tabindex="0"><code data-u2m-id="3" data-language="javascript"><span data-u2m-id="4" class="syntax-highlighter-line"><span data-u2m-id="5" class="shiki-token">import</span><span data-u2m-id="6" class="shiki-token"> OpenAI </span></span></code></pre>
-    <p data-u2m-id="7">行内 <code data-u2m-id="8">client.create()</code> 代码</p>
+  <div data-idx="1">
+    <pre data-idx="2" class="shiki" tabindex="0"><code data-idx="3" data-language="javascript"><span data-idx="4" class="syntax-highlighter-line"><span data-idx="5" class="shiki-token">import</span><span data-idx="6" class="shiki-token"> OpenAI </span></span></code></pre>
+    <p data-idx="7">行内 <code data-idx="8">client.create()</code> 代码</p>
   </div>
 </body></html>`;
   const { cleaned, styled, cleanup } = await runClean(snapshot, 'r1-pre');
   try {
-    assert.ok(/<pre[^>]*data-u2m-id="2"[^>]*>[\s\S]*?<code[^>]*data-u2m-id="3"[^>]*>code\.\.\.<\/code><\/pre>/.test(cleaned), `pre/code 壳应保留且内容为 code...: ${cleaned.match(/<pre[\s\S]*?<\/pre>/)?.[0]}`);
+    assert.ok(/<pre[^>]*data-idx="2"[^>]*>[\s\S]*?<code[^>]*data-idx="3"[^>]*>code\.\.\.<\/code><\/pre>/.test(cleaned), `pre/code 壳应保留且内容为 code...: ${cleaned.match(/<pre[\s\S]*?<\/pre>/)?.[0]}`);
     assert.ok(!cleaned.includes('shiki-token') || !/<span[^>]*class="shiki-token"/.test(cleaned), 'token span 应删除');
-    assert.ok(!cleaned.includes('data-u2m-id="4"') && !cleaned.includes('data-u2m-id="5"'), 'pre 内部 id 随内容删除');
+    assert.ok(!cleaned.includes('data-idx="4"') && !cleaned.includes('data-idx="5"'), 'pre 内部 id 随内容删除');
     assert.ok(cleaned.includes('data-language="javascript"'), 'data-language 保留');
-    assert.ok(cleaned.includes('<code data-u2m-id="8">client.create()</code>'), '行内 code 不动');
+    assert.ok(cleaned.includes('<code data-idx="8">client.create()</code>'), '行内 code 不动');
     assert.ok(styled.includes('shiki-token') && styled.includes('import'), '带样式版完整保留代码');
   } finally { cleanup(); }
 });
@@ -310,27 +310,27 @@ test('R4+R5: astro 包装解包；安全位置空白删除、行内间空白保�
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
-  <div data-u2m-id="1">
-    <astro-island data-u2m-id="2" component-url="/x.js"><p data-u2m-id="3">岛内容</p></astro-island>
-    <astro-slot data-u2m-id="4"><span data-u2m-id="5">槽内容</span></astro-slot>
-    <div data-u2m-id="6">
-      <p data-u2m-id="7">a</p>
-      <p data-u2m-id="8">b</p>
+  <div data-idx="1">
+    <astro-island data-idx="2" component-url="/x.js"><p data-idx="3">岛内容</p></astro-island>
+    <astro-slot data-idx="4"><span data-idx="5">槽内容</span></astro-slot>
+    <div data-idx="6">
+      <p data-idx="7">a</p>
+      <p data-idx="8">b</p>
     </div>
-    <p data-u2m-id="9">x <a data-u2m-id="10" href="/y">链接</a> z</p>
+    <p data-idx="9">x <a data-idx="10" href="/y">链接</a> z</p>
   </div>
 </body></html>`;
   const { cleaned, styled, cleanup } = await runClean(snapshot, 'r4r5');
   try {
     assert.ok(!/<astro-island[\s>]/.test(cleaned) && !/<astro-slot[\s>]/.test(cleaned), 'astro 包装应解包');
-    assert.ok(!cleaned.includes('data-u2m-id="2"') && !cleaned.includes('data-u2m-id="4"'), '包装自身 id 随包装弃置');
-    assert.ok(cleaned.includes('data-u2m-id="3"') && cleaned.includes('岛内容'), '子元素上提保留');
-    assert.ok(cleaned.includes('data-u2m-id="5"') && cleaned.includes('槽内容'), 'slot 子元素上提保留');
+    assert.ok(!cleaned.includes('data-idx="2"') && !cleaned.includes('data-idx="4"'), '包装自身 id 随包装弃置');
+    assert.ok(cleaned.includes('data-idx="3"') && cleaned.includes('岛内容'), '子元素上提保留');
+    assert.ok(cleaned.includes('data-idx="5"') && cleaned.includes('槽内容'), 'slot 子元素上提保留');
     // 块级元素之间的换行缩进删除
-    const block = cleaned.match(/<div data-u2m-id="6">([\s\S]*?)<\/div>/)[1];
+    const block = cleaned.match(/<div data-idx="6">([\s\S]*?)<\/div>/)[1];
     assert.ok(!/\n\s/.test(block), `块级间空白应删除: ${JSON.stringify(block)}`);
     // 行内相邻文本/元素之间的空白保留
-    const inline = cleaned.match(/<p data-u2m-id="9">([\s\S]*?)<\/p>/)[1];
+    const inline = cleaned.match(/<p data-idx="9">([\s\S]*?)<\/p>/)[1];
     assert.ok(inline.includes('x <a') && inline.includes('> z'), `行内间空白应保留: ${JSON.stringify(inline)}`);
     assert.ok(styled.includes('<astro-island'), '带样式版不受影响');
   } finally { cleanup(); }
@@ -345,7 +345,7 @@ Run: `node --test test/unit/clean-snapshot.test.mjs` → 新用例 FAIL。
 
 ```js
   // 17. R4 astro 包装解包（仅清洗版）：astro-island/astro-slot 是框架脚手架标签，
-  //     子元素原样上提，包装自身属性（含其 data-u2m-id）弃置——清洗版不可见即
+  //     子元素原样上提，包装自身属性（含其 data-idx）弃置——清洗版不可见即
   //     不可引用，语义与 R6 折叠一致。带样式版保留（步骤 6 取子树不受影响）。
   var wraps = document.querySelectorAll('astro-island, astro-slot');
   for (var i = wraps.length - 1; i >= 0; i--) {
@@ -400,7 +400,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: Task 1 的 `runClean`。
-- Produces: 共享脚本 `__u2mDetectHidden()`（无参，在 juiced DOM 上 evaluate）→ `{ items: [{id, chars, fixed}], totalChars, hiddenChars }`；`items[].id` 为 data-u2m-id 字符串（无 id 的隐藏根不产出）、`chars` 为 `textContent.trim().length`、`fixed` 为布尔。
+- Produces: 共享脚本 `__u2mDetectHidden()`（无参，在 juiced DOM 上 evaluate）→ `{ items: [{id, chars, fixed}], totalChars, hiddenChars }`；`items[].id` 为 data-idx 字符串（无 id 的隐藏根不产出）、`chars` 为 `textContent.trim().length`、`fixed` 为布尔。
 - Produces: `__u2mCleanSnapshot(cfg)` 的 `cfg.hidden`（默认 `[]`）消费上述 `items`。
 
 - [ ] **Step 1: 写失败测试**
@@ -421,27 +421,27 @@ test('R6: juice 隐藏折叠——fixed 模态与流内 expander 折成标记，
 <style>.modal{display:none;position:fixed}.expn{display:none}.keepvar{display:var(--x)}</style>
 </head>
 <body>
-  <div data-u2m-id="1">
-    <div data-u2m-id="2" class="modal"><p data-u2m-id="3">模态内容模态内容</p></div>
-    <div data-u2m-id="4" class="expn"><p data-u2m-id="5">${hiddenLong}</p></div>
-    <div data-u2m-id="6" class="keepvar">按可见处理</div>
-    <p data-u2m-id="7">正文段落</p>
+  <div data-idx="1">
+    <div data-idx="2" class="modal"><p data-idx="3">模态内容模态内容</p></div>
+    <div data-idx="4" class="expn"><p data-idx="5">${hiddenLong}</p></div>
+    <div data-idx="6" class="keepvar">按可见处理</div>
+    <p data-idx="7">正文段落</p>
   </div>
 </body></html>`;
   const { out, cleaned, styled, cleanup } = await runClean(snapshot, 'r6-hidden');
   try {
     // 折叠标记：fixed 带 ,fixed 后缀，流内不带
-    const modal = cleaned.match(/<div data-u2m-id="2"[^>]*>/)[0];
+    const modal = cleaned.match(/<div data-idx="2"[^>]*>/)[0];
     assert.ok(/data-u2m-hidden="\d+_chars,fixed"/.test(modal), `模态应折成 fixed 标记: ${modal}`);
-    const expn = cleaned.match(/<div data-u2m-id="4"[^>]*>/)[0];
+    const expn = cleaned.match(/<div data-idx="4"[^>]*>/)[0];
     assert.ok(/data-u2m-hidden="\d+_chars"/.test(expn) && !/fixed/.test(expn), `expander 应折成无 fixed 标记: ${expn}`);
     // 子树内容与内部 id 从清洗版消失
-    assert.ok(!cleaned.includes('模态内容') && !cleaned.includes('data-u2m-id="3"') && !cleaned.includes('data-u2m-id="5"'), '折叠子树内容应消失');
+    assert.ok(!cleaned.includes('模态内容') && !cleaned.includes('data-idx="3"') && !cleaned.includes('data-idx="5"'), '折叠子树内容应消失');
     // var() 不可解析 → 按可见处理
-    assert.ok(cleaned.includes('按可见处理') && cleaned.includes('data-u2m-id="6"'), 'var() 值按可见保留');
+    assert.ok(cleaned.includes('按可见处理') && cleaned.includes('data-idx="6"'), 'var() 值按可见保留');
     assert.ok(cleaned.includes('正文段落'), '可见正文保留');
     // 带样式版完整保真
-    assert.ok(styled.includes('模态内容') && styled.includes('data-u2m-id="3"'), '带样式版模态内容完整');
+    assert.ok(styled.includes('模态内容') && styled.includes('data-idx="3"'), '带样式版模态内容完整');
     assert.ok(styled.includes('{{LONG_TEXT_'), '带样式版含折叠区长文本占位符');
     // 占位符语义分叉：清洗版折叠区占位符消失，但 2_long_text.json 完整
     assert.ok(!cleaned.includes('{{LONG_TEXT_'), '清洗版不应含折叠区长文本占位符');
@@ -472,7 +472,7 @@ Expected: 第一个用例 FAIL（文件不存在）。
  *   - 读值只认字面声明：var() 等不可解析值按可见处理（失败方向安全——
  *     任何不完备都把元素推向保留，正文零误删）。
  * 返回 { items: [{id, chars, fixed}], totalChars, hiddenChars }：
- *   items[].id     data-u2m-id（无 id 的隐藏根不可定位，不产出）
+ *   items[].id     data-idx（无 id 的隐藏根不可定位，不产出）
  *   items[].chars  textContent.trim().length（真实全文规模，供 R6 标记）
  *   fixed          根声明 position:fixed|absolute（UI 脚手架提示）
  *   totalChars/hiddenChars  非空白字符数（护栏用；body 全文 / 顶层隐藏子树合计）
@@ -503,7 +503,7 @@ function __u2mDetectHidden() {
     var hidden = displayNone || visHidden;
     if (hidden && !ctx.hidden) {
       hiddenChars += nonWsChars(el);
-      var id = el.getAttribute('data-u2m-id');
+      var id = el.getAttribute('data-idx');
       if (id !== null) {
         items.push({
           id: id,
@@ -530,13 +530,13 @@ function __u2mDetectHidden() {
 
 ```js
   // 19. R6 隐藏子树折叠（仅清洗版）：cfg.hidden = 检测管线的 items。统一折叠、
-  //     不删除——根元素保留 data-u2m-id（步骤 3 仍可引用，步骤 6 从带样式版取
+  //     不删除——根元素保留 data-idx（步骤 3 仍可引用，步骤 6 从带样式版取
   //     全文）；折叠发生在共享占位之后，占位符只从清洗版消失、恢复清单完整。
   //     应用容忍目标已被前序清洗删除（nav 内隐藏块等）——跳过。
   var collapse = Array.isArray(cfg.hidden) ? cfg.hidden : [];
   for (var i = 0; i < collapse.length; i++) {
     var ent = collapse[i];
-    var target = document.querySelector('[data-u2m-id="' + ent.id + '"]');
+    var target = document.querySelector('[data-idx="' + ent.id + '"]');
     if (!target || !document.body.contains(target)) continue;
     while (target.firstChild) target.removeChild(target.firstChild);
     target.setAttribute('data-u2m-hidden', ent.chars + '_chars' + (ent.fixed ? ',fixed' : ''));
@@ -623,10 +623,10 @@ test('护栏: 折叠后可见文本 <5% 且总量充足 → 放弃折叠并告�
 <style>.gate{display:none}.vis{visibility:hidden}.reshow{visibility:visible}</style>
 </head>
 <body>
-  <div data-u2m-id="1">
-    <div data-u2m-id="2" class="gate"><p data-u2m-id="3">${gated}</p></div>
-    <p data-u2m-id="4">${visLong}</p>
-    <div data-u2m-id="5" class="vis">可见性隐藏祖先<span data-u2m-id="6" class="reshow">翻案后代</span></div>
+  <div data-idx="1">
+    <div data-idx="2" class="gate"><p data-idx="3">${gated}</p></div>
+    <p data-idx="4">${visLong}</p>
+    <div data-idx="5" class="vis">可见性隐藏祖先<span data-idx="6" class="reshow">翻案后代</span></div>
   </div>
 </body></html>`;
   const { cleaned, stderr, cleanup } = await runClean(snapshot, 'r6-guard');
@@ -644,15 +644,15 @@ test('R6 语义: visibility:hidden 顶层折叠、visible 后代翻案仅入带�
 <style>.vis{visibility:hidden}</style>
 </head>
 <body>
-  <div data-u2m-id="1">
-    <div data-u2m-id="5" class="vis">可见性隐藏祖先<span data-u2m-id="6" style="visibility:visible">翻案后代</span></div>
-    <p data-u2m-id="7">正文正文正文正文正文正文正文正文正文正文正文正文</p>
+  <div data-idx="1">
+    <div data-idx="5" class="vis">可见性隐藏祖先<span data-idx="6" style="visibility:visible">翻案后代</span></div>
+    <p data-idx="7">正文正文正文正文正文正文正文正文正文正文正文正文</p>
   </div>
 </body></html>`;
   const { cleaned, styled, cleanup } = await runClean(snapshot, 'r6-vis');
   try {
     // .vis 顶层折叠：标记存在、文本消失（翻案后代随根折叠——spec 已记边界）
-    const root = cleaned.match(/<div data-u2m-id="5"[^>]*>/)[0];
+    const root = cleaned.match(/<div data-idx="5"[^>]*>/)[0];
     assert.ok(/data-u2m-hidden="\d+_chars"/.test(root), `visibility 顶层应折叠: ${root}`);
     assert.ok(!cleaned.includes('可见性隐藏祖先'), '折叠根文本应消失');
     // 带样式版完整
@@ -711,7 +711,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 在步骤 3「读取 2_clean_snapshot.html」的识别线索列表（「仅根据 … DOM 结构（元素层级、标签类型、class 名称）和长文本占位符…分布」一条）之后补两条：
 
 ```markdown
-- `data-u2m-hidden="N_chars"`（或 `N_chars,fixed`）标记：折叠的隐藏子树（模态/抽屉/折叠展开区/响应式隐藏）。根元素的 `data-u2m-id` 可正常引用——原文完整保留在带样式版，纳入 listFlowIds 即可还原全文；值是该子树的真实文本规模，可据此判断是否值得纳入
+- `data-u2m-hidden="N_chars"`（或 `N_chars,fixed`）标记：折叠的隐藏子树（模态/抽屉/折叠展开区/响应式隐藏）。根元素的 `data-idx` 可正常引用——原文完整保留在带样式版，纳入 listFlowIds 即可还原全文；值是该子树的真实文本规模，可据此判断是否值得纳入
 - `<pre>` 内的 `code...`：代码块内容占位。完整代码在后续步骤保真，识别时把 pre 当作一个结构单元即可
 ```
 

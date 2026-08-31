@@ -15,14 +15,14 @@ export async function snapshotCapture(page, opts = {}) {
 
   const pagePrepare = await readSharedScript('page-prepare.js');
 
-  // 注入并执行 page-prepare（iframe 合并 + CSS 内联 + 剥 JS + data-u2m-id）
+  // 注入并执行 page-prepare（iframe 合并 + CSS 内联 + 剥 JS + data-idx）
   await page.evaluate(`(${pagePrepare})()`);
 
   // 取全保真快照
   const snapshot = await page.evaluate(() => document.documentElement.outerHTML);
 
-  // 统计 data-u2m-id 数量
-  const elements = (snapshot.match(/data-u2m-id="\d+"/g) || []).length;
+  // 统计 data-idx 数量
+  const elements = (snapshot.match(/data-idx="\d+"/g) || []).length;
 
   // 写盘
   await fs.mkdir(outDir, { recursive: true });

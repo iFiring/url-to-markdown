@@ -278,7 +278,7 @@ Expected: FAIL（文件不存在）
 ```js
 /**
  * 步骤 2 页面内清洗函数。在浏览器 evaluate 中执行。
- * 保留 DOM 结构 + data-u2m-id + class，剥尽样式、SVG 内容、长文本占位。
+ * 保留 DOM 结构 + data-idx + class，剥尽样式、SVG 内容、长文本占位。
  */
 function __u2mCleanSnapshot(cfg) {
   cfg = cfg || {};
@@ -364,7 +364,7 @@ git commit -m "feat: add page-clean-snapshot.js for step 2 structural cleaning
 
 Cleaning rules: strip style attrs/tags/links, remove <base>,
 empty SVGs, replace long text (>16 chars) with {{LONG_TEXT_k|N_CHARS}} placeholders.
-Preserves data-u2m-id and class attributes."
+Preserves data-idx and class attributes."
 ```
 
 ---
@@ -624,14 +624,14 @@ export async function snapshotCapture(page, opts = {}) {
 
   const pagePrepare = await readSharedScript('page-prepare.js');
 
-  // 注入并执行 page-prepare（iframe 合并 + CSS 内联 + 剥 JS + data-u2m-id）
+  // 注入并执行 page-prepare（iframe 合并 + CSS 内联 + 剥 JS + data-idx）
   await page.evaluate(`(${pagePrepare})()`);
 
   // 取全保真快照
   const snapshot = await page.evaluate(() => document.documentElement.outerHTML);
 
-  // 统计 data-u2m-id 数量
-  const elements = (snapshot.match(/data-u2m-id="\d+"/g) || []).length;
+  // 统计 data-idx 数量
+  const elements = (snapshot.match(/data-idx="\d+"/g) || []).length;
 
   // 写盘
   await fs.mkdir(stepsDir, { recursive: true });
@@ -870,7 +870,7 @@ test('snapshot.mjs: 静态文章页 → ok + 1_snapshot.html', async () => {
 
   // 验证快照内容
   const html = fs.readFileSync(out.snapshot, 'utf8');
-  assert.ok(html.includes('data-u2m-id'), '应含 data-u2m-id');
+  assert.ok(html.includes('data-idx'), '应含 data-idx');
   assert.ok(!html.includes('<script'), '不应含 script 标签');
 });
 
@@ -1195,7 +1195,7 @@ function __u2mChunk(cfg) {
 
   // 处理标题块
   titleIds.forEach(function (uid) {
-    var el = document.querySelector('[data-u2m-id="' + uid + '"]');
+    var el = document.querySelector('[data-idx="' + uid + '"]');
     if (!el) return;
     id++;
     chunks.push({
@@ -1209,7 +1209,7 @@ function __u2mChunk(cfg) {
 
   // 处理说明块
   descriptionIds.forEach(function (uid) {
-    var el = document.querySelector('[data-u2m-id="' + uid + '"]');
+    var el = document.querySelector('[data-idx="' + uid + '"]');
     if (!el) return;
     id++;
     chunks.push({
@@ -1223,7 +1223,7 @@ function __u2mChunk(cfg) {
 
   // 处理列表流
   listFlowIds.forEach(function (uid) {
-    var parent = document.querySelector('[data-u2m-id="' + uid + '"]');
+    var parent = document.querySelector('[data-idx="' + uid + '"]');
     if (!parent) return;
     var children = parent.children;
     for (var i = 0; i < children.length; i++) {
@@ -1235,7 +1235,7 @@ function __u2mChunk(cfg) {
         chunks.push({
           id: id,
           type: 'phrasing',
-          dataU2mId: parseInt(child.getAttribute('data-u2m-id') || '0', 10),
+          dataU2mId: parseInt(child.getAttribute('data-idx') || '0', 10),
           html: child.outerHTML,
           needsLLM: false,
         });
@@ -1246,7 +1246,7 @@ function __u2mChunk(cfg) {
         chunks.push({
           id: id,
           type: 'multiLayer',
-          dataU2mId: parseInt(child.getAttribute('data-u2m-id') || '0', 10),
+          dataU2mId: parseInt(child.getAttribute('data-idx') || '0', 10),
           html: child.outerHTML,
           styledHtml: clone.outerHTML,
           needsLLM: true,
@@ -1256,7 +1256,7 @@ function __u2mChunk(cfg) {
         chunks.push({
           id: id,
           type: 'flow',
-          dataU2mId: parseInt(child.getAttribute('data-u2m-id') || '0', 10),
+          dataU2mId: parseInt(child.getAttribute('data-idx') || '0', 10),
           html: child.outerHTML,
           needsLLM: false,
         });
@@ -1495,13 +1495,13 @@ into phrasing/flow/multiLayer chunks with computed styles."
 
 你的任务：仅根据 DOM 结构（元素层级、标签类型、嵌套深度）和 `{{LONG_TEXT_k|N_CHARS}}` 占位符分布，找到：
 
-1. **标题分块**的 `data-u2m-id`（文章主标题）
-2. **说明分块**的 `data-u2m-id`（描述、作者、日期等元数据）
-3. **列表流**的父组件 `data-u2m-id`（文章主体区域，可能多个）
+1. **标题分块**的 `data-idx`（文章主标题）
+2. **说明分块**的 `data-idx`（描述、作者、日期等元数据）
+3. **列表流**的父组件 `data-idx`（文章主体区域，可能多个）
 
 约束：
 - 不读语义内容（文本已被占位）
-- `listFlowIds` 是列表流最外层父元素的 data-u2m-id
+- `listFlowIds` 是列表流最外层父元素的 data-idx
 - 不选 `<body>` 或 `<html>`
 
 将结果写入 `steps/3_key_ids.json`：

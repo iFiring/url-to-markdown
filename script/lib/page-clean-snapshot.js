@@ -2,7 +2,7 @@
  * 步骤 2 页面内清洗函数。在浏览器 evaluate 中执行；clean_snapshot.mjs 对
  * 同一快照跑两趟，cfg.mode ∈ 'styled'（缺省）| 'clean' 分叉：
  *   styled 趟 —— 共享结构清洗 + 长文本占位 + SVG 瘦身为壳（仅留
- *                id/class/data-u2m-id）+ 属性白名单（22 静态属性 +
+ *                id/class/data-idx）+ 属性白名单（22 静态属性 +
  *                <style> 选择器引用的动态属性集，<style> 豁免）
  *                → 带样式版 + 恢复清单（供步骤 4 裁剪与后续占位还原）
  *   clean 趟   —— 共享结构清洗 + SVG 清空/样式剥除 + 瘦身规则 → 清洗版
@@ -149,7 +149,7 @@ function __u2mCleanSnapshot(cfg) {
 
   // astro 包装解包（K4，两趟共享）：astro- 前缀是 Astro 框架保留的脚手架
   //    命名空间（astro-island/astro-slot/astro-static-slot 及未来变体），按前缀
-  //    匹配而非枚举；子元素原样上提，包装自身属性（含其 data-u2m-id 与巨量
+  //    匹配而非枚举；子元素原样上提，包装自身属性（含其 data-idx 与巨量
   //    序列化 props）弃置。两趟共享的意义：步骤 3 引用集来自清洗版（从不引用
   //    包装 id），带样式版同步解包使两版 id 集对齐，脚手架不再流进步骤 4-7
   //    （曾实证 6_article.html 残留 59 个 astro 标签、27KB props 噪音）。
@@ -290,7 +290,7 @@ function __u2mCleanSnapshot(cfg) {
   if (mode !== 'clean') {
     // （长文本占位已上移至两趟共享段——见上方步骤 9，两版编号逐一对应）
 
-    // 10. SVG 瘦身（styled 趟）：只留 svg 标签及其 id/class/data-u2m-id，
+    // 10. SVG 瘦身（styled 趟）：只留 svg 标签及其 id/class/data-idx，
     //     删除其余属性与全部子元素——完整 SVG 体积庞大，带样式版只需结构身份
     var svgs = document.querySelectorAll('svg');
     for (var i = 0; i < svgs.length; i++) {
@@ -299,7 +299,7 @@ function __u2mCleanSnapshot(cfg) {
         svg.removeChild(svg.firstChild);
       }
       stripAttrsExcept(svg, function (nm) {
-        return nm === 'id' || nm === 'class' || nm === 'data-u2m-id';
+        return nm === 'id' || nm === 'class' || nm === 'data-idx';
       });
     }
 
@@ -318,7 +318,7 @@ function __u2mCleanSnapshot(cfg) {
     //     其余（target/rel/tabindex/loading/未被引用的 data-* 等）删净。
     //     <style> 标签整体豁免——media 等属性是 juice 级联线索。置于 meta
     //     charset 注入之前，注入的 charset 属性天然存活。
-    var STYLED_ATTR_KEEP = { 'class': 1, 'id': 1, 'style': 1, 'data-u2m-id': 1, 'data-language': 1,
+    var STYLED_ATTR_KEEP = { 'class': 1, 'id': 1, 'style': 1, 'data-idx': 1, 'data-language': 1,
       'hidden': 1, 'type': 1, 'role': 1, 'alt': 1, 'href': 1, 'src': 1, 'width': 1, 'height': 1,
       'colspan': 1, 'rowspan': 1, 'start': 1, 'aria-label': 1, 'data-src': 1, 'srcset': 1,
       'datetime': 1, 'open': 1, 'lang': 1 };
@@ -357,7 +357,7 @@ function __u2mCleanSnapshot(cfg) {
   // （长文本占位已在两趟共享段执行——清洗版同样携带 {{LONG_TEXT_k|n_chars}}，
   //   编号与带样式版逐一对应；K8 行内 run token 化已废除）
 
-  // 11. SVG 清空子树（仅清洗版）：属性由 K2 白名单统一裁剪，data-u2m-id 等存活
+  // 11. SVG 清空子树（仅清洗版）：属性由 K2 白名单统一裁剪，data-idx 等存活
   var svgs = document.querySelectorAll('svg');
   for (var i = 0; i < svgs.length; i++) {
     while (svgs[i].firstChild) svgs[i].removeChild(svgs[i].firstChild);
@@ -443,15 +443,15 @@ function __u2mCleanSnapshot(cfg) {
   //     href/src/style/tabindex 等一律删除——a/img 的 URL 就此清空。aria-label
   //     例外保留（已在共享段截断为首末句，icon-only 控件/链接的可达名信号），
   //     其余 aria-* 一并删。
-  //     SVG 特殊处理：仅保留 data-u2m-id（id/class 等由 styled 趟保留，clean 趟删净）
-  var ATTR_KEEP = { 'class': 1, 'id': 1, 'data-u2m-id': 1, 'data-language': 1, 'hidden': 1, 'type': 1, 'role': 1, 'alt': 1, 'aria-label': 1 };
+  //     SVG 特殊处理：仅保留 data-idx（id/class 等由 styled 趟保留，clean 趟删净）
+  var ATTR_KEEP = { 'class': 1, 'id': 1, 'data-idx': 1, 'data-language': 1, 'hidden': 1, 'type': 1, 'role': 1, 'alt': 1, 'aria-label': 1 };
   var allEls = document.querySelectorAll('*');
   for (var i = 0; i < allEls.length; i++) {
     var el2 = allEls[i];
     var isSvg = el2.tagName && el2.tagName.toLowerCase() === 'svg';
     stripAttrsExcept(el2, function (nm) {
       var n = nm.toLowerCase();
-      return isSvg ? n === 'data-u2m-id' : ATTR_KEEP[n] === 1;
+      return isSvg ? n === 'data-idx' : ATTR_KEEP[n] === 1;
     });
   }
 
@@ -550,7 +550,7 @@ function __u2mCleanSnapshot(cfg) {
   for (var i = 0; i < wsNodes.length; i++) wsNodes[i].parentNode.removeChild(wsNodes[i]);
 
   // K10. 空壳 span 拆包（仅清洗版）：K2 已剥 style/class 等，「只剩
-  //     data-u2m-id」一个属性的 span 是纯行内包装，对步骤 3（key id 识别）
+  //     data-idx」一个属性的 span 是纯行内包装，对步骤 3（key id 识别）
   //     无语义；解包把子节点并入父块——内容不丢、只粒度变粗，省 step 3
   //     输入字节（实测微信页 ~133KB clean 省 ~30KB）。与步骤 6 规则⑥同款
   //     拆包机制，但彼处带保护集（titleIds 等 key 元素不拆）、此处 step 2
@@ -570,7 +570,7 @@ function __u2mCleanSnapshot(cfg) {
       if (!sp.isConnected) continue;
       var bare = true;
       for (var j = 0; j < sp.attributes.length; j++) {
-        if (sp.attributes[j].name !== 'data-u2m-id') { bare = false; break; }
+        if (sp.attributes[j].name !== 'data-idx') { bare = false; break; }
       }
       if (!bare) continue;
       var spPar = sp.parentNode;

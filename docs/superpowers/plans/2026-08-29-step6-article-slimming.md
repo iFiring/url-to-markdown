@@ -47,21 +47,21 @@
 // 被 juice 内联的产物）。
 const ZERO_VOID_EXTRACT = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>零值</title><style>body{transition:opacity .2s}</style></head><body>
-<div style="border: 0px solid" data-u2m-id="1">零边框</div>
-<div style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none" data-u2m-id="2">medium加none</div>
-<div style="border: 1px solid red" data-u2m-id="3">实边框</div>
-<div style="border: solid" data-u2m-id="4">style实值width缺省</div>
-<div style="border-width: 5px" data-u2m-id="5">width有值style缺省</div>
-<div style="border-radius: 0px; background-color: rgb(249, 249, 249)" data-u2m-id="6">零圆角实背景</div>
-<div style="border-radius: 8px" data-u2m-id="7">实圆角</div>
-<div style="box-shadow: none" data-u2m-id="8">阴影none</div>
-<div style="background-color: transparent" data-u2m-id="9">透明背景</div>
-<div style="background-color: rgba(0, 0, 0, 0)" data-u2m-id="10">alpha零背景</div>
-<div style="overflow: visible" data-u2m-id="11">溢出可见</div>
-<div style="overflow: auto" data-u2m-id="12">滚动裁剪</div>
-<div style="flex: 0 0 auto" data-u2m-id="13">flex信号</div>
-<div style="outline: 1px solid blue" data-u2m-id="14">实outline</div>
-<div style="outline-width: 0px; outline-style: solid" data-u2m-id="15">零宽outline</div>
+<div style="border: 0px solid" data-idx="1">零边框</div>
+<div style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none" data-idx="2">medium加none</div>
+<div style="border: 1px solid red" data-idx="3">实边框</div>
+<div style="border: solid" data-idx="4">style实值width缺省</div>
+<div style="border-width: 5px" data-idx="5">width有值style缺省</div>
+<div style="border-radius: 0px; background-color: rgb(249, 249, 249)" data-idx="6">零圆角实背景</div>
+<div style="border-radius: 8px" data-idx="7">实圆角</div>
+<div style="box-shadow: none" data-idx="8">阴影none</div>
+<div style="background-color: transparent" data-idx="9">透明背景</div>
+<div style="background-color: rgba(0, 0, 0, 0)" data-idx="10">alpha零背景</div>
+<div style="overflow: visible" data-idx="11">溢出可见</div>
+<div style="overflow: auto" data-idx="12">滚动裁剪</div>
+<div style="flex: 0 0 auto" data-idx="13">flex信号</div>
+<div style="outline: 1px solid blue" data-idx="14">实outline</div>
+<div style="outline-width: 0px; outline-style: solid" data-idx="15">零宽outline</div>
 </body></html>`;
 
 test('compute_styles.mjs: 零值声明过滤——等于全元素初始值的声明删除、实信号保留', async () => {
@@ -75,7 +75,7 @@ test('compute_styles.mjs: 零值声明过滤——等于全元素初始值的声
   assert.equal(out.status, 'ok');
 
   const juiced = fs.readFileSync(out.juiceStyles, 'utf8');
-  const tagOf = (id) => juiced.match(new RegExp(`<[^>]*data-u2m-id="${id}"[^>]*>`))?.[0] || '';
+  const tagOf = (id) => juiced.match(new RegExp(`<[^>]*data-idx="${id}"[^>]*>`))?.[0] || '';
 
   // 只剩零值声明的元素：style 属性整体消失
   for (const id of [1, 2, 5, 8, 9, 10, 11, 15]) {
@@ -241,13 +241,13 @@ test('page-slim-article.js: 函数可被 evaluate 格式调用', () => {
 文件末尾加功能用例：
 
 ```js
-// 瘦身规则① data-*：保留白名单 {data-u2m-id, data-language}（后者是
+// 瘦身规则① data-*：保留白名单 {data-idx, data-language}（后者是
 // 步骤 7 判代码围栏语言的机械信号），其余 data-*（组件库脚手架/交互
 // 状态）全删——白名单而非黑名单，陌上站点的 data-* 安全默认删除
 const DATASTAR_JUICED = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>瘦身</title></head><body><h1 data-u2m-id="1">标题</h1><div data-u2m-id="4"><p data-variant="lead" data-u2m-id="5">段落<span data-color="accent" data-u2m-id="6">行内</span></p><code data-language="python" data-wrap-long-lines="false" data-u2m-id="7">print(1)</code></div></body></html>`;
+<html lang="zh-CN"><head><title>瘦身</title></head><body><h1 data-idx="1">标题</h1><div data-idx="4"><p data-variant="lead" data-idx="5">段落<span data-color="accent" data-idx="6">行内</span></p><code data-language="python" data-wrap-long-lines="false" data-idx="7">print(1)</code></div></body></html>`;
 
-test('extract_article.mjs: 瘦身规则①——data-* 只留 data-u2m-id 与 data-language', async () => {
+test('extract_article.mjs: 瘦身规则①——data-* 只留 data-idx 与 data-language', async () => {
   const { tmpRoot, urlDir } = setupTmp('datastar', { titleIds: [1], descriptionIds: [], listFlowIds: [4] });
   fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), DATASTAR_JUICED);
   const script = path.resolve('script/extract_article.mjs');
@@ -265,7 +265,7 @@ test('extract_article.mjs: 瘦身规则①——data-* 只留 data-u2m-id 与 da
   assert.ok(!html.includes('data-wrap-long-lines'), 'data-wrap-long-lines 应删除');
   assert.ok(html.includes('data-language="python"'), 'data-language 应保留');
   for (const id of [1, 5, 6, 7]) {
-    assert.ok(html.includes(`data-u2m-id="${id}"`), `id ${id} 应保留`);
+    assert.ok(html.includes(`data-idx="${id}"`), `id ${id} 应保留`);
   }
   // emit 新增 slim 统计（加法式契约，单行 JSON 不变）
   assert.equal(out.slim.attrsDropped, 3, '应删除 3 个非白名单 data-* 属性');
@@ -292,7 +292,7 @@ Expected: 两个源级用例 FAIL（文件不存在）；功能用例 FAIL（`ou
  * 剔除之后、序列化之前对文章视图执行六条结构规则（spec：
  * docs/superpowers/specs/2026-08-29-step6-article-slimming-design.md §5，
  * 固定执行顺序——前面的规则改变后面规则看到的输入）：
- *  ① data-* 清理：保留 {data-u2m-id, data-language}（后者是步骤 7 判
+ *  ① data-* 清理：保留 {data-idx, data-language}（后者是步骤 7 判
  *     代码语言的机械信号），其余 data-*（组件库脚手架/交互状态）全删。
  *     白名单而非黑名单——陌上站点的 data-* 安全默认删除
  *  ② MathML→LaTeX：annotation 有 LaTeX 源才替换（KaTeX 双胞胎结构整体
@@ -302,7 +302,7 @@ Expected: 两个源级用例 FAIL（文件不存在）；功能用例 FAIL（`ou
  *  ④ 有文本 button 降级（解包上提子节点，包装铬的 style 弃置）
  *  ⑤ 非白名单协议 href 剥除（scheme ∉ http/https/mailto/tel 的 <a>
  *     解包——参考页 codex:// 营销链接单个 ~1KB prompt 曾漏进 9_markdown）
- *  ⑥ 空壳 span 拆包（属性只剩 data-u2m-id，迭代到不动点——pre 内语法
+ *  ⑥ 空壳 span 拆包（属性只剩 data-idx，迭代到不动点——pre 内语法
  *     高亮 token span 的样式已被步骤 5 清空，结构在、信息不在）
  * 保护集 protectedIds = titleIds ∪ descriptionIds ∪ standaloneIds
  * （listFlowIds 不入——容器本身不迁移）：删除/解包类（③④⑤⑥）跳过
@@ -318,7 +318,7 @@ function __u2mSlimArticle(protectedIds) {
   var protectedSet = {};
   for (var i = 0; i < (protectedIds || []).length; i++) protectedSet[protectedIds[i]] = true;
   function isProtected(el) {
-    var id = el.getAttribute && el.getAttribute('data-u2m-id');
+    var id = el.getAttribute && el.getAttribute('data-idx');
     return !!(id && protectedSet[id]);
   }
   function unwrap(el) {
@@ -329,7 +329,7 @@ function __u2mSlimArticle(protectedIds) {
   }
 
   // ① data-* 清理：白名单之外的 data-* 全删
-  var KEEP_DATA = { 'data-u2m-id': 1, 'data-language': 1 };
+  var KEEP_DATA = { 'data-idx': 1, 'data-language': 1 };
   var all = document.querySelectorAll('body *');
   for (var i = 0; i < all.length; i++) {
     var el = all[i];
@@ -444,7 +444,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 // 9_markdown 既有约定一致）。annotation 里的实体（&lt;）经 textContent
 // 解码、序列化时重新转义
 const MATH_JUICED = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>公式</title></head><body><h1 data-u2m-id="1">标题</h1><div data-u2m-id="4"><p data-u2m-id="5">设 <span data-u2m-id="60"><span data-u2m-id="61"><math data-u2m-id="62"><semantics><mrow><mi>M</mi></mrow><annotation encoding="application/x-tex">M</annotation></semantics></math></span><span data-u2m-id="63"><span data-u2m-id="64">M</span></span></span> 为最小长度，</p><p data-u2m-id="8">裸公式 <math data-u2m-id="70"><semantics><mrow><mi>L</mi></mrow><annotation encoding="application/x-tex">L &lt; M</annotation></semantics></math> 成立，</p><p data-u2m-id="9">无源公式 <math data-u2m-id="80"><mrow><mi>x</mi></mrow></math> 保留。</p></div></body></html>`;
+<html lang="zh-CN"><head><title>公式</title></head><body><h1 data-idx="1">标题</h1><div data-idx="4"><p data-idx="5">设 <span data-idx="60"><span data-idx="61"><math data-idx="62"><semantics><mrow><mi>M</mi></mrow><annotation encoding="application/x-tex">M</annotation></semantics></math></span><span data-idx="63"><span data-idx="64">M</span></span></span> 为最小长度，</p><p data-idx="8">裸公式 <math data-idx="70"><semantics><mrow><mi>L</mi></mrow><annotation encoding="application/x-tex">L &lt; M</annotation></semantics></math> 成立，</p><p data-idx="9">无源公式 <math data-idx="80"><mrow><mi>x</mi></mrow></math> 保留。</p></div></body></html>`;
 
 test('extract_article.mjs: 瘦身规则②——MathML 按三档替换为 $LaTeX$', async () => {
   const { tmpRoot, urlDir } = setupTmp('math', { titleIds: [1], descriptionIds: [], listFlowIds: [4] });
@@ -462,11 +462,11 @@ test('extract_article.mjs: 瘦身规则②——MathML 按三档替换为 $LaTeX
   assert.ok(html.includes('设 $M$ 为最小长度'),
     `KaTeX 双胞胎应整体替换为 $M$: ${html.slice(html.indexOf('<body'))}`);
   for (const id of [60, 61, 62, 63, 64]) {
-    assert.ok(!html.includes(`data-u2m-id="${id}"`), `katex 包装 id ${id} 应随整体替换消失`);
+    assert.ok(!html.includes(`data-idx="${id}"`), `katex 包装 id ${id} 应随整体替换消失`);
   }
   assert.ok(html.includes('裸公式 $L &lt; M$ 成立'), '裸 math 应替换为 LaTeX 文本');
-  assert.ok(!html.includes('data-u2m-id="70"'), '裸 math 的 id 应消失');
-  assert.ok(html.includes('<math data-u2m-id="80"'), '无 annotation 的 math 应保留原树');
+  assert.ok(!html.includes('data-idx="70"'), '裸 math 的 id 应消失');
+  assert.ok(html.includes('<math data-idx="80"'), '无 annotation 的 math 应保留原树');
   assert.equal(out.slim.mathReplaced, 2, '应替换 2 处（双胞胎整体 + 裸 math）');
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
@@ -579,7 +579,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 // 与无文本 svg 整删（随 button 删除的内部 svg 不重复计数）；有文本
 // button（中文/字母数字）解包降级保留文本；保护集中的 button 不动
 const BUTTON_JUICED = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>按钮</title></head><body><h1 data-u2m-id="1">标题</h1><div data-u2m-id="4"><p data-u2m-id="5">正文</p><button data-u2m-id="20"><svg data-u2m-id="21"><path d="M0 0"/></svg></button><button data-u2m-id="22">⋮</button><svg data-u2m-id="28"><rect width="1"/></svg><button data-u2m-id="23">JavaScript</button><button data-u2m-id="24">查看答案</button></div></body></html>`;
+<html lang="zh-CN"><head><title>按钮</title></head><body><h1 data-idx="1">标题</h1><div data-idx="4"><p data-idx="5">正文</p><button data-idx="20"><svg data-idx="21"><path d="M0 0"/></svg></button><button data-idx="22">⋮</button><svg data-idx="28"><rect width="1"/></svg><button data-idx="23">JavaScript</button><button data-idx="24">查看答案</button></div></body></html>`;
 
 test('extract_article.mjs: 瘦身规则③④——纯符号 button/空 svg 删除、文本 button 解包、保护集跳过', async () => {
   const { tmpRoot, urlDir } = setupTmp('button', { titleIds: [1], descriptionIds: [23], listFlowIds: [4] });
@@ -595,11 +595,11 @@ test('extract_article.mjs: 瘦身规则③④——纯符号 button/空 svg 删�
 
   const html = fs.readFileSync(out.article, 'utf8');
   for (const id of [20, 21, 22, 28]) {
-    assert.ok(!html.includes(`data-u2m-id="${id}"`), `id ${id} 应删除`);
+    assert.ok(!html.includes(`data-idx="${id}"`), `id ${id} 应删除`);
   }
-  assert.ok(html.includes('data-u2m-id="23">JavaScript</button>'),
+  assert.ok(html.includes('data-idx="23">JavaScript</button>'),
     '保护集中的 button 应原样保留（不解包）');
-  assert.ok(!/<button[^>]*data-u2m-id="24"/.test(html), '有文本 button 应解包');
+  assert.ok(!/<button[^>]*data-idx="24"/.test(html), '有文本 button 应解包');
   assert.ok(html.includes('查看答案'), '解包后文本应保留');
   assert.equal(out.slim.buttonsRemoved, 2, '无文本/纯符号 button 删 2 个（20 图标钮 + 22 ⋮）');
   assert.equal(out.slim.svgsRemoved, 1, '独立空 svg 删 1 个（21 随 button 走不重复计数）');
@@ -681,7 +681,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 // javascript: 等应用协议——参考页 codex:// 单个 ~1KB URL-encoded prompt
 // 曾漏进 9_markdown.md）；http(s)/mailto 与无协议（相对/#锚点）保留
 const HREF_JUICED = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>链接</title></head><body><h1 data-u2m-id="1">标题</h1><div data-u2m-id="4"><p data-u2m-id="5"><a href="codex://threads/new?prompt=%E6%8F%90%E7%A4%BA" data-u2m-id="30">深问</a>、<a href="https://example.com/a" data-u2m-id="31">正常链</a>、<a href="mailto:x@example.com" data-u2m-id="32">邮件</a>、<a href="javascript:void(0)" data-u2m-id="33">假链</a>、<a href="#anchor" data-u2m-id="34">锚点</a>。</p></div></body></html>`;
+<html lang="zh-CN"><head><title>链接</title></head><body><h1 data-idx="1">标题</h1><div data-idx="4"><p data-idx="5"><a href="codex://threads/new?prompt=%E6%8F%90%E7%A4%BA" data-idx="30">深问</a>、<a href="https://example.com/a" data-idx="31">正常链</a>、<a href="mailto:x@example.com" data-idx="32">邮件</a>、<a href="javascript:void(0)" data-idx="33">假链</a>、<a href="#anchor" data-idx="34">锚点</a>。</p></div></body></html>`;
 
 test('extract_article.mjs: 瘦身规则⑤——非白名单协议 <a> 解包、合法链接保留', async () => {
   const { tmpRoot, urlDir } = setupTmp('href', { titleIds: [1], descriptionIds: [], listFlowIds: [4] });
@@ -765,10 +765,10 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 `test/unit/extract-article.test.mjs` 末尾加：
 
 ```js
-// 瘦身规则⑥：属性只剩 data-u2m-id 的 span 解包，嵌套 token span 迭代
+// 瘦身规则⑥：属性只剩 data-idx 的 span 解包，嵌套 token span 迭代
 // 塌缩到不动点；带 style 的 span 与保护集中的 span 保留
 const SPAN_JUICED = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>空壳</title></head><body><h1 data-u2m-id="1">标题</h1><div data-u2m-id="4"><pre data-u2m-id="30"><code data-language="python" data-u2m-id="31"><span data-u2m-id="32"><span data-u2m-id="33">print</span>(<span data-u2m-id="34">1</span>)</span></code></pre><p data-u2m-id="5">段落<span style="background-color: rgb(255, 255, 0)" data-u2m-id="35">高亮</span>与<span data-u2m-id="36">空壳</span></p></div></body></html>`;
+<html lang="zh-CN"><head><title>空壳</title></head><body><h1 data-idx="1">标题</h1><div data-idx="4"><pre data-idx="30"><code data-language="python" data-idx="31"><span data-idx="32"><span data-idx="33">print</span>(<span data-idx="34">1</span>)</span></code></pre><p data-idx="5">段落<span style="background-color: rgb(255, 255, 0)" data-idx="35">高亮</span>与<span data-idx="36">空壳</span></p></div></body></html>`;
 
 test('extract_article.mjs: 瘦身规则⑥——空壳 span 塌缩为纯文本、带样式与保护集 span 保留', async () => {
   const { tmpRoot, urlDir } = setupTmp('span', { titleIds: [1], descriptionIds: [36], listFlowIds: [4] });
@@ -783,10 +783,10 @@ test('extract_article.mjs: 瘦身规则⑥——空壳 span 塌缩为纯文本�
   assert.equal(out.status, 'ok');
 
   const html = fs.readFileSync(out.article, 'utf8');
-  assert.ok(html.includes('<pre data-u2m-id="30"><code data-language="python" data-u2m-id="31">print(1)</code></pre>'),
+  assert.ok(html.includes('<pre data-idx="30"><code data-language="python" data-idx="31">print(1)</code></pre>'),
     `嵌套空壳 span 应塌缩为纯文本: ${html.slice(html.indexOf('<body'))}`);
   assert.ok(html.includes('background-color: rgb(255, 255, 0)'), '带 style 的 span 应保留');
-  assert.ok(html.includes('data-u2m-id="36"'), '保护集中的空壳 span 应保留');
+  assert.ok(html.includes('data-idx="36"'), '保护集中的空壳 span 应保留');
   assert.equal(out.slim.spansUnwrapped, 3, '应解包 3 层（32/33/34）');
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
@@ -802,7 +802,7 @@ Expected: 新用例 FAIL（`print(1)` 纯文本形态不存在，spansUnwrapped 
 `script/lib/page-slim-article.js`：规则⑤代码块之后、`return {` 之前插入：
 
 ```js
-  // ⑥ 空壳 span 拆包：属性只剩 data-u2m-id 的 span 解包。span 限定——
+  // ⑥ 空壳 span 拆包：属性只剩 data-idx 的 span 解包。span 限定——
   // div 等块级可能承载 trans2img 模块边界，不碰。嵌套 token span 需
   // 迭代到不动点，防御性上限 10 轮（一轮内 parent 先解包、hoisted 的
   // 子 span 仍在静态列表内同轮处理，通常一轮收敛）
@@ -814,7 +814,7 @@ Expected: 新用例 FAIL（`print(1)` 纯文本形态不存在，spansUnwrapped 
       if (!el.isConnected || isProtected(el)) continue;
       var bare = true;
       for (var j = 0; j < el.attributes.length; j++) {
-        if (el.attributes[j].name !== 'data-u2m-id') { bare = false; break; }
+        if (el.attributes[j].name !== 'data-idx') { bare = false; break; }
       }
       if (!bare) continue;
       unwrap(el);
@@ -966,7 +966,7 @@ URL：https://developers.openai.com/api/docs/guides/prompt-caching（复用既�
 2. 步骤 6 的 `（不限深度；与 key id——含 standaloneIds——重叠或未命中报 error，emit 增 removedNoiseCount）` 之后插入：
 
 ```
-；随后同页 setContent 内存往返跑瘦身 pass——共享 page-slim-article.js 六条结构规则（① data-* 只留 data-u2m-id/data-language ② MathML→LaTeX——page-latex.js 的 __u2mLatexText 同作用域注入，KaTeX 双胞胎结构整体替换、无 annotation 保留原树 ③ 无文本/纯符号 button 与无文本 svg 整删 ④ 有文本 button 解包降级 ⑤ scheme ∉ http/https/mailto/tel 的 `<a>` 解包 ⑥ 属性只剩 data-u2m-id 的 span 迭代拆包到不动点；保护集 = titleIds∪descriptionIds∪standaloneIds——删除/解包类跳过保护元素、替换类不设防；emit 增 slim 计数对象）
+；随后同页 setContent 内存往返跑瘦身 pass——共享 page-slim-article.js 六条结构规则（① data-* 只留 data-idx/data-language ② MathML→LaTeX——page-latex.js 的 __u2mLatexText 同作用域注入，KaTeX 双胞胎结构整体替换、无 annotation 保留原树 ③ 无文本/纯符号 button 与无文本 svg 整删 ④ 有文本 button 解包降级 ⑤ scheme ∉ http/https/mailto/tel 的 `<a>` 解包 ⑥ 属性只剩 data-idx 的 span 迭代拆包到不动点；保护集 = titleIds∪descriptionIds∪standaloneIds——删除/解包类跳过保护元素、替换类不设防；emit 增 slim 计数对象）
 ```
 
 `README.md`：`### 关键机制` 列表（隐藏声明剥离条目之后）加两条：

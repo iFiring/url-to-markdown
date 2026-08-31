@@ -2,7 +2,7 @@
  * 步骤 5 页面内清场函数。在浏览器 evaluate 中执行，签名
  * __u2mFinalizeInline(computedMap)——computedMap 来自
  * page-collect-fn-values.js + page-resolve-computed.js 的函数值真实化管线
- * （{ "<data-u2m-id>": { "<prop>": "<计算值>" } }），可为空对象。
+ * （{ "<data-idx>": { "<prop>": "<计算值>" } }），可为空对象。
  * 终态约束：样式仅存于内联 style 属性，只留明显结构化的样式，且零函数
  * 间接引用（var()/color-mix()/calc() 一律不出现在终态值里）。
  *  1. 白名单清理（逐元素遍历 CSSOM 声明，倒序删除防索引漂移）：
@@ -126,7 +126,7 @@ function __u2mFinalizeInline(computedMap) {
     // 唯一元素级例外：<img> 的宽高保留——步骤 7 LLM 判图片权重的
     // 语义信号（小图标 / 大图 / 图片组）；值为 inherit 的照样删
     var isImg = styled[i].tagName === 'IMG';
-    var u2mId = styled[i].getAttribute('data-u2m-id');
+    var idx = styled[i].getAttribute('data-idx');
     var dirty = false;
     for (var j = st.length - 1; j >= 0; j--) {
       var prop = st.item(j).toLowerCase();
@@ -140,7 +140,7 @@ function __u2mFinalizeInline(computedMap) {
       // 早位置时，尚未替换的 style longhand 读作空串、会被零值表连带误删
       // 同边的 width/color
       if (FUNC_RE.test(val) || val === '') {
-        var real = computedMap && computedMap[u2mId] && computedMap[u2mId][prop];
+        var real = computedMap && computedMap[idx] && computedMap[idx][prop];
         if (keepThis && real) st.setProperty(prop, real);
         else st.removeProperty(prop);
         dirty = true;

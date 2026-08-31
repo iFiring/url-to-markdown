@@ -51,31 +51,31 @@ test('screenshot_trans.mjs: 无参数时输出 usage_error', async () => {
 // 离线走快照兜底
 const SNAPSHOT = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>测试</title><base data-u2m-base="1" href="http://127.0.0.1:9/dead"></head><body>
-<h1 data-u2m-id="1">标题</h1>
-<p data-u2m-id="2">段落一文本内容</p>
-<div data-u2m-id="9" style="padding: 24px">
-<div data-u2m-id="10" style="background-color: rgb(240, 240, 240); border: 1px solid rgb(200, 200, 200); padding: 16px">
-<div data-u2m-id="11" style="background-color: rgb(255, 255, 255); padding: 8px">
-<span data-u2m-id="12">重要内容</span>
+<h1 data-idx="1">标题</h1>
+<p data-idx="2">段落一文本内容</p>
+<div data-idx="9" style="padding: 24px">
+<div data-idx="10" style="background-color: rgb(240, 240, 240); border: 1px solid rgb(200, 200, 200); padding: 16px">
+<div data-idx="11" style="background-color: rgb(255, 255, 255); padding: 8px">
+<span data-idx="12">重要内容</span>
 </div>
 </div>
 </div>
-<p data-u2m-id="20">段落二文本内容</p>
+<p data-idx="20">段落二文本内容</p>
 </body></html>`;
 
 // 内层宽于外层：30（width:300 含 padding）内嵌 31（width:900 溢出）→
 // 宽度优先于最外层，择优选 31
 const SNAPSHOT_INNER_WIDER = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>测试</title><base data-u2m-base="1" href="http://127.0.0.1:9/dead"></head><body>
-<div data-u2m-id="30" style="width: 300px; padding: 8px">
-<div data-u2m-id="31" style="width: 900px; background-color: rgb(240, 240, 240)">加宽内容文本</div>
+<div data-idx="30" style="width: 300px; padding: 8px">
+<div data-idx="31" style="width: 900px; background-color: rgb(240, 240, 240)">加宽内容文本</div>
 </div>
 </body></html>`;
 
 // 同宽同高：40/41 均占满 body 内容宽、高度一致 → 平局选最外层 40
 const SNAPSHOT_TIE = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>测试</title><base data-u2m-base="1" href="http://127.0.0.1:9/dead"></head><body>
-<div data-u2m-id="40"><div data-u2m-id="41" style="background-color: rgb(240, 240, 240)">同宽文本</div></div>
+<div data-idx="40"><div data-idx="41" style="background-color: rgb(240, 240, 240)">同宽文本</div></div>
 </body></html>`;
 
 // 新契约：value 自带行外语法；trans2img 为单传祖先链 ID 数组
@@ -204,12 +204,12 @@ test('screenshot_trans.mjs: 宽高全同的平局选最外层', async () => {
 const SNAPSHOT_ACCORDION = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>折叠模块</title><base data-u2m-base="1" href="http://127.0.0.1:9/dead">
 <style>.acc .body { display: none; }</style></head><body>
-<h1 data-u2m-id="1">标题</h1>
-<div class="acc" data-u2m-id="50">
-<button data-u2m-id="53">展开</button>
-<div class="body" data-u2m-id="51"><div data-u2m-id="52" style="background-color: rgb(30, 30, 30); color: rgb(255, 255, 255); padding: 16px"><p>折叠模块段落一。</p><p>折叠模块段落二。</p></div></div>
+<h1 data-idx="1">标题</h1>
+<div class="acc" data-idx="50">
+<button data-idx="53">展开</button>
+<div class="body" data-idx="51"><div data-idx="52" style="background-color: rgb(30, 30, 30); color: rgb(255, 255, 255); padding: 16px"><p>折叠模块段落一。</p><p>折叠模块段落二。</p></div></div>
 </div>
-<p data-u2m-id="60">结尾段落。</p>
+<p data-idx="60">结尾段落。</p>
 </body></html>`;
 
 // max-height:0 裁剪形态：71 盒高为 0，72（模块）盒正常但像素被祖先裁掉——
@@ -217,9 +217,9 @@ const SNAPSHOT_ACCORDION = `<!DOCTYPE html>
 const SNAPSHOT_MAXHEIGHT = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>裁剪模块</title><base data-u2m-base="1" href="http://127.0.0.1:9/dead">
 <style>.mh { max-height: 0; overflow: hidden; }</style></head><body>
-<h1 data-u2m-id="1">标题</h1>
-<div class="mh" data-u2m-id="71"><div data-u2m-id="72" style="background-color: rgb(30, 30, 30); color: rgb(255, 255, 255); padding: 16px"><p>被裁剪的模块内容。</p></div></div>
-<p data-u2m-id="60">结尾段落。</p>
+<h1 data-idx="1">标题</h1>
+<div class="mh" data-idx="71"><div data-idx="72" style="background-color: rgb(30, 30, 30); color: rgb(255, 255, 255); padding: 16px"><p>被裁剪的模块内容。</p></div></div>
+<p data-idx="60">结尾段落。</p>
 </body></html>`;
 
 test('screenshot_trans.mjs: display:none 折叠模块强制展开后出图，不再挂死 error', async () => {
@@ -296,12 +296,12 @@ test('screenshot_trans.mjs: max-height:0 裁剪模块强制展开后出真实内
 const SNAPSHOT_CONTENTS = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>透明包装</title><base data-u2m-base="1" href="http://127.0.0.1:9/dead">
 <style>.expn .body { display: none; }</style></head><body>
-<h1 data-u2m-id="1">标题</h1>
-<div class="expn" data-u2m-id="80">
-<button data-u2m-id="81">展开</button>
-<div class="body" data-u2m-id="82"><div style="display: contents" data-u2m-id="83"><div data-u2m-id="84" style="background-color: rgb(30, 30, 30); color: rgb(255, 255, 255); padding: 16px"><p>透明包装内的模块内容。</p></div></div></div>
+<h1 data-idx="1">标题</h1>
+<div class="expn" data-idx="80">
+<button data-idx="81">展开</button>
+<div class="body" data-idx="82"><div style="display: contents" data-idx="83"><div data-idx="84" style="background-color: rgb(30, 30, 30); color: rgb(255, 255, 255); padding: 16px"><p>透明包装内的模块内容。</p></div></div></div>
 </div>
-<p data-u2m-id="60">结尾段落。</p>
+<p data-idx="60">结尾段落。</p>
 </body></html>`;
 
 test('screenshot_trans.mjs: display:contents 透明包装跳过不报错，视觉由链上内层承载', async () => {
@@ -366,22 +366,22 @@ const SNAPSHOT_WIDE = `<!DOCTYPE html>
   body { overflow-x: hidden; margin: 0; }
   .wrap { overflow-x: auto; max-width: 640px; }
 </style></head><body>
-<h1 data-u2m-id="1">超宽模块测试</h1>
-<p data-u2m-id="2">正文段落。</p>
-<div data-u2m-id="97" style="position: absolute; top: 160px; right: 0; width: 120px; height: 400px; background: rgb(75, 0, 130); z-index: 100"></div>
+<h1 data-idx="1">超宽模块测试</h1>
+<p data-idx="2">正文段落。</p>
+<div data-idx="97" style="position: absolute; top: 160px; right: 0; width: 120px; height: 400px; background: rgb(75, 0, 130); z-index: 100"></div>
 <div style="position: fixed; top: 0; left: 0; width: 40px; height: 100%; background: rgb(255, 0, 255); z-index: 9999"></div>
 <div style="position: fixed; top: 0; right: 0; width: 40px; height: 100%; background: rgb(255, 0, 255); z-index: 9999"></div>
-<div class="wrap" data-u2m-id="91">
-<table data-u2m-id="92" style="width: 2800px; border-collapse: collapse; background: rgb(255, 255, 255)">
+<div class="wrap" data-idx="91">
+<table data-idx="92" style="width: 2800px; border-collapse: collapse; background: rgb(255, 255, 255)">
 <tr>${wideCells('rgb(200, 220, 240)')}</tr>
 <tr>${wideCells('rgb(225, 235, 250)')}</tr>
 <tr>${wideCells('rgb(200, 220, 240)')}</tr>
-<tr><td colspan="28" style="height: 40px; border: 1px solid rgb(120, 120, 120); background: rgb(200, 220, 240)"><div data-u2m-id="98" style="height: 40px; background: rgb(0, 255, 255)">广告位</div></td></tr>
-<tr><td colspan="28" style="height: 40px; border: 1px solid rgb(120, 120, 120); background: rgb(225, 235, 250)"><span data-u2m-id="95" style="position: absolute; top: 200px; left: 300px; width: 60px; height: 60px; background: rgb(255, 0, 0); z-index: 9999"></span></td></tr>
+<tr><td colspan="28" style="height: 40px; border: 1px solid rgb(120, 120, 120); background: rgb(200, 220, 240)"><div data-idx="98" style="height: 40px; background: rgb(0, 255, 255)">广告位</div></td></tr>
+<tr><td colspan="28" style="height: 40px; border: 1px solid rgb(120, 120, 120); background: rgb(225, 235, 250)"><span data-idx="95" style="position: absolute; top: 200px; left: 300px; width: 60px; height: 60px; background: rgb(255, 0, 0); z-index: 9999"></span></td></tr>
 </table>
 </div>
 <div style="position: relative; margin-top: -120px; height: 60px; background: rgb(255, 165, 0); z-index: 50"></div>
-<p data-u2m-id="60">结尾段落。</p>
+<p data-idx="60">结尾段落。</p>
 </body></html>`;
 
 test('screenshot_trans.mjs: 超宽表格横向 reveal 截全 + 遮挡者隐藏 + 亲族保留', async () => {

@@ -4,7 +4,7 @@
 
 **Goal:** 用"登录后一次性抓全保真快照 + LLM 列表流逐块方案"替换 `page-classify.js` 的硬编码启发式分类；同时移除 Python 运行时与双稿择优流程，管线收敛为 Node 单运行时，工作流产物拍平到 `working/<url-dir>/`。
 
-**Architecture:** 登录 + 充分滚动后，`capture_snapshot.mjs` 跑共享 `page-prepare.js`（合并 iframe / 内联外部 CSS / 剥 JS / 注 `<base>` / 资源 src 绝对化 / 打 `data-u2m-id`）→ 序列化全保真 `snapshot.html`，再跑共享 `page-derive.js`（长文本占位 / 信号样式内联）→ 派生 `classify/classify_input.html`。agent 读精简版写 `classify_plan.json`（列表流选择器 + 逐块 `action`，v2 schema）。`clear_trans_html.mjs` `setContent(snapshot.html)` 加载同一快照 → `applyClassifyPlan` 删列表流外兄弟 + 按 `action` 逐块分派（逐字复用既有 screenshot/passthrough_svg/svg_convert/latex 分支 + 新 `code_block`/`block_screenshot`）→ Readability/Turndown → `sketch.md` + `assets/manifest.json`（直接在 `<url-dir>/` 下）。消除"各步骤重开页 + id 匹配"与"双运行时镜像"两条脆弱不变量。
+**Architecture:** 登录 + 充分滚动后，`capture_snapshot.mjs` 跑共享 `page-prepare.js`（合并 iframe / 内联外部 CSS / 剥 JS / 注 `<base>` / 资源 src 绝对化 / 打 `data-idx`）→ 序列化全保真 `snapshot.html`，再跑共享 `page-derive.js`（长文本占位 / 信号样式内联）→ 派生 `classify/classify_input.html`。agent 读精简版写 `classify_plan.json`（列表流选择器 + 逐块 `action`，v2 schema）。`clear_trans_html.mjs` `setContent(snapshot.html)` 加载同一快照 → `applyClassifyPlan` 删列表流外兄弟 + 按 `action` 逐块分派（逐字复用既有 screenshot/passthrough_svg/svg_convert/latex 分支 + 新 `code_block`/`block_screenshot`）→ Readability/Turndown → `sketch.md` + `assets/manifest.json`（直接在 `<url-dir>/` 下）。消除"各步骤重开页 + id 匹配"与"双运行时镜像"两条脆弱不变量。
 
 **Tech Stack:** Node 20+ / `node --test`；Playwright 1.62（chromium）；@mozilla/readability + turndown + @joplin/turndown-plugin-gfm；既有 `script/lib/contract.mjs` 一行 JSON 契约。
 
@@ -19,7 +19,7 @@
 - **Playwright 1.62 evaluate 语义**：字符串表达式只有完整表达式形式可用 `page.evaluate(\`(${src})()\`)`；需元素实参走 `callOnElement` 适配器（先 eval `'(' + src + ')'` 再把元素句柄作实参调用）。
 - **浏览器先于 emit 关闭**：emit 内 `process.exit`，顺序反了留孤儿 chromium。
 - **工作目录**：`working/<url-dir>/`（拍平，无 workflow 子目录）；`U2M_WORKING_ROOT` 覆盖根（测试隔离用它）。`working/cookies/storage_state.json` 是唯一登录态，仅 `login_url.mjs` 写、其余只读（`openPage` 容忍其缺失）。
-- **`data-u2m-id` 不加嵌套守卫**：`__u2mPrepareBody` 对**每个**命中候选选择器的元素按文档序打 id（父与子都可有 id），plan 的 blocks 因此可嵌套引用；`applyClassifyPlan` 按 plan 序处理、对已脱离 DOM 的句柄跳过（spec §7.2"跳 detached"）。
+- **`data-idx` 不加嵌套守卫**：`__u2mPrepareBody` 对**每个**命中候选选择器的元素按文档序打 id（父与子都可有 id），plan 的 blocks 因此可嵌套引用；`applyClassifyPlan` 按 plan 序处理、对已脱离 DOM 的句柄跳过（spec §7.2"跳 detached"）。
 - **滚动/稳定参数一致**：`capture_snapshot.mjs` 内联的 `progressiveScroll` 参数（60 轮 / 150ms）必须与 `page-detect.js` 的 `scrollIters`/`scrollWait` 默认一致；`waitForDomStable`（stableMs=1000 / maxMs=15000 / poll 200ms）沿用原 `clear_trans_html.mjs` 的值。有单测守护（Task 3）。
 - **环境**：node ≥20、pnpm > yarn > npm。无 linter。测试以子进程启动真实 CLI、对接随机端口夹具服务器（`test/helpers/fixture-server.mjs` 不发 CORS 头——跨源请求天然失败，可用于兜底测试）。
 
@@ -28,7 +28,7 @@
 ## File Structure
 
 **新建：**
-- `script/lib/page-prepare.js` — `__u2mPrepareBody(cfg)`：合并 iframe / 内联外部 CSS / 剥 JS·noscript·template·on* / 剥复制按钮 / 注 `<base>` / 资源 src 绝对化 / 打 `data-u2m-id`。吸收 `page-merge.js` 逻辑。
+- `script/lib/page-prepare.js` — `__u2mPrepareBody(cfg)`：合并 iframe / 内联外部 CSS / 剥 JS·noscript·template·on* / 剥复制按钮 / 注 `<base>` / 资源 src 绝对化 / 打 `data-idx`。吸收 `page-merge.js` 逻辑。
 - `script/lib/page-derive.js` — `__u2mDeriveClassifyInput(cfg)`：长文本→`{{T<k}}` / 剥 `<style>`·`<link>`·`<noscript>`·`<template>` / 白名单信号样式内联 / 返回 `document.body.outerHTML`。
 - `script/capture_snapshot.mjs` — Node CLI：开页→滚动稳定→跑 prepare→取 snapshot→跑 derive→写产物→emit 一行 JSON（ok/too_large/error）。
 - `script/lib/fewshot/` — 手写少样本对 `<name>.html` + `<name>.json`（v2 schema），7 对。
@@ -562,7 +562,7 @@ git commit -m "refactor: 产物目录拍平到 <url-dir>（ensureUrlDirs + rende
 
 **Interfaces:**
 - Consumes: `script/lib/contract.mjs`（`emit`/`emitError`/`usage`/`log`）、`script/lib/env.mjs`（`storageStatePath`/`workingRoot`/`urlToDirName`）、`script/lib/browser.mjs`（`openPage`）、`script/lib/placeholder.mjs`（`readSharedScript`）。
-- Produces: `working/<url-dir>/snapshot.html` 与 `working/<url-dir>/classify/classify_input.html`；emit `{status:"ok", snapshot, classifyInput, elements, tokenEstimate, warnings}` / `{status:"too_large", tokenEstimate, elements, reason}`（exit 0，不写 classify_input）/ `{status:"error", reason}`（exit 1）。**`data-u2m-id` 规则：每个命中候选选择器的元素都打 id（父与子都可有 id，无嵌套守卫；文档序递增）**。Task 5 的 `applyClassifyPlan` 消费这些 id。
+- Produces: `working/<url-dir>/snapshot.html` 与 `working/<url-dir>/classify/classify_input.html`；emit `{status:"ok", snapshot, classifyInput, elements, tokenEstimate, warnings}` / `{status:"too_large", tokenEstimate, elements, reason}`（exit 0，不写 classify_input）/ `{status:"error", reason}`（exit 1）。**`data-idx` 规则：每个命中候选选择器的元素都打 id（父与子都可有 id，无嵌套守卫；文档序递增）**。Task 5 的 `applyClassifyPlan` 消费这些 id。
 
 - [ ] **Step 1: 写夹具 `test/fixtures/classify-article.html` 与 `test/fixtures/style.css`**
 
@@ -651,8 +651,8 @@ test('capture: ok 路径写两份产物 + emit 恰一行 JSON', async () => {
   assert.match(ci, /\{\{T\d+\}\}/);                                             // 长文本占位
   assert.match(ci, /data-lang="python"/);                                       // 代码靠结构识别（文本同样占位）
   assert.doesNotMatch(ci, /<style[\s>]/);                                       // style 已剥
-  const snapIds = new Set([...snap.matchAll(/data-u2m-id="(\d+)"/g)].map(m => m[1]));
-  const ciIds = new Set([...ci.matchAll(/data-u2m-id="(\d+)"/g)].map(m => m[1]));
+  const snapIds = new Set([...snap.matchAll(/data-idx="(\d+)"/g)].map(m => m[1]));
+  const ciIds = new Set([...ci.matchAll(/data-idx="(\d+)"/g)].map(m => m[1]));
   assert.ok(ciIds.size > 0);
   for (const id of ciIds) assert.ok(snapIds.has(id), `id ${id} 在 classify 但不在 snapshot`);
 });
@@ -662,12 +662,12 @@ test('capture: 嵌套候选都有 id（无 closest 守卫）', async () => {
   await cap(url);
   const snap = await fs.readFile(path.join(dirOf(url), 'snapshot.html'), 'utf8');
   // main 与其内部 article 都有 id（父子同级候选，逐一可寻址）
-  assert.match(snap, /<main[^>]*data-u2m-id="\d+"/);
-  assert.match(snap, /<article[^>]*data-u2m-id="\d+"/);
-  assert.match(snap, /<pre[^>]*data-u2m-id="\d+"/);
+  assert.match(snap, /<main[^>]*data-idx="\d+"/);
+  assert.match(snap, /<article[^>]*data-idx="\d+"/);
+  assert.match(snap, /<pre[^>]*data-idx="\d+"/);
   // 叶子文本元素不打 id
-  assert.doesNotMatch(snap, /<p[^>]*data-u2m-id=/);
-  assert.doesNotMatch(snap, /<h1[^>]*data-u2m-id=/);
+  assert.doesNotMatch(snap, /<p[^>]*data-idx=/);
+  assert.doesNotMatch(snap, /<h1[^>]*data-idx=/);
 });
 
 test('capture: too_large（--token-budget 1）→ exit 0，不写 classify_input，snapshot 仍在', async () => {
@@ -788,12 +788,12 @@ function __u2mPrepareBody(cfg) {
     try { if (el.src) el.setAttribute('src', el.src); } catch (e) { /* 忽略 */ }
   });
 
-  // 7. 打 data-u2m-id：每个命中候选的元素按文档序递增（父与子都打、无嵌套守卫；叶子文本元素不在候选内）
+  // 7. 打 data-idx：每个命中候选的元素按文档序递增（父与子都打、无嵌套守卫；叶子文本元素不在候选内）
   let n = 0;
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
   let el = walker.nextNode();
   while (el) {
-    if (el.matches(ID_SELECTORS)) el.setAttribute('data-u2m-id', String(++n));
+    if (el.matches(ID_SELECTORS)) el.setAttribute('data-idx', String(++n));
     el = walker.nextNode();
   }
   return true;
@@ -933,7 +933,7 @@ async function main() {
     const snapshot = await s.page.evaluate(() => document.documentElement.outerHTML);
     const classifyInput = await s.page.evaluate(`(${pageDerive})(${JSON.stringify({ placeholderMinChars })})`);
 
-    const idCount = (snapshot.match(/data-u2m-id="\d+"/g) || []).length;
+    const idCount = (snapshot.match(/data-idx="\d+"/g) || []).length;
     const tokenEstimate = Math.round(classifyInput.length / 4);
     const warnings = [];
     const keptLinks = (snapshot.match(/<link[^>]*rel=["']stylesheet["']/g) || []).length;
@@ -1034,7 +1034,7 @@ test('fewshot: 每对 .html/.json 合 v2 schema 且 blocks id ⊆ 输入 id 集'
     assert.equal(plan.version, 2, `${name}: version`);
     assert.ok(['whole', 'region'].includes(plan.mode), `${name}: mode`);
     assert.ok(typeof plan.listFlowSelector === 'string' && plan.listFlowSelector.trim(), `${name}: listFlowSelector`);
-    const htmlIds = new Set([...html.matchAll(/data-u2m-id="(\d+)"/g)].map((m) => m[1]));
+    const htmlIds = new Set([...html.matchAll(/data-idx="(\d+)"/g)].map((m) => m[1]));
     assert.ok(plan.blocks.length, `${name}: blocks 非空`);
     for (const b of plan.blocks) {
       assert.ok(Number.isInteger(b.id), `${name}: id int`);
@@ -1064,7 +1064,7 @@ Expected: FAIL（目录不存在）。
 
 `script/lib/fewshot/nested-text-wrapper.html`：
 ```html
-<main><article data-u2m-id="2"><div data-u2m-id="3"><div data-u2m-id="4"><p>{{T1}}</p></div></div></article></main>
+<main><article data-idx="2"><div data-idx="3"><div data-idx="4"><p>{{T1}}</p></div></div></article></main>
 ```
 `nested-text-wrapper.json`：
 ```json
@@ -1073,9 +1073,9 @@ Expected: FAIL（目录不存在）。
 
 `sidebar-ads-nav.html`：
 ```html
-<nav class="sidebar" data-u2m-id="1">{{T1}}</nav>
-<main><article data-u2m-id="2"><p>{{T2}}</p></article></main>
-<footer data-u2m-id="3">{{T3}}</footer>
+<nav class="sidebar" data-idx="1">{{T1}}</nav>
+<main><article data-idx="2"><p>{{T2}}</p></article></main>
+<footer data-idx="3">{{T3}}</footer>
 ```
 `sidebar-ads-nav.json`（侧栏/页脚在列表流外，由 clear_trans 删兄弟，不进 blocks）：
 ```json
@@ -1084,7 +1084,7 @@ Expected: FAIL（目录不存在）。
 
 `title-in-listflow.html`：
 ```html
-<main><article data-u2m-id="1"><h1>标题</h1><p>{{T1}}</p></article></main>
+<main><article data-idx="1"><h1>标题</h1><p>{{T1}}</p></article></main>
 ```
 `title-in-listflow.json`：
 ```json
@@ -1093,7 +1093,7 @@ Expected: FAIL（目录不存在）。
 
 `chart-card-grid.html`：
 ```html
-<main><article data-u2m-id="1"><div class="chart" data-u2m-id="2" style="width:600px;height:400px"><canvas></canvas></div><div class="chart" data-u2m-id="3" style="width:600px;height:400px"><canvas></canvas></div></article></main>
+<main><article data-idx="1"><div class="chart" data-idx="2" style="width:600px;height:400px"><canvas></canvas></div><div class="chart" data-idx="3" style="width:600px;height:400px"><canvas></canvas></div></article></main>
 ```
 `chart-card-grid.json`：
 ```json
@@ -1102,7 +1102,7 @@ Expected: FAIL（目录不存在）。
 
 `canvas-video.html`：
 ```html
-<main><article data-u2m-id="1"><canvas data-u2m-id="2" width="300" height="200"></canvas><video data-u2m-id="3" src="/v.mp4" width="300" height="150"></video></article></main>
+<main><article data-idx="1"><canvas data-idx="2" width="300" height="200"></canvas><video data-idx="3" src="/v.mp4" width="300" height="150"></video></article></main>
 ```
 `canvas-video.json`：
 ```json
@@ -1111,7 +1111,7 @@ Expected: FAIL（目录不存在）。
 
 `big-svg-and-latex.html`：
 ```html
-<main><article data-u2m-id="1"><svg data-u2m-id="2" width="400" height="300"><rect width="400" height="300"></rect></svg><span class="katex" data-u2m-id="3"><span class="katex-mathml"><annotation encoding="application/x-tex">E=mc^2</annotation></span></span></article></main>
+<main><article data-idx="1"><svg data-idx="2" width="400" height="300"><rect width="400" height="300"></rect></svg><span class="katex" data-idx="3"><span class="katex-mathml"><annotation encoding="application/x-tex">E=mc^2</annotation></span></span></article></main>
 ```
 `big-svg-and-latex.json`：
 ```json
@@ -1120,7 +1120,7 @@ Expected: FAIL（目录不存在）。
 
 `code-block.html`：
 ```html
-<main><article data-u2m-id="1"><pre class="hljs" data-lang="python" data-u2m-id="2"><code>{{T1}}</code></pre></article></main>
+<main><article data-idx="1"><pre class="hljs" data-lang="python" data-idx="2"><code>{{T1}}</code></pre></article></main>
 ```
 `code-block.json`：
 ```json
@@ -1152,7 +1152,7 @@ git commit -m "feat(fewshot): v2 schema 少样本对（7 对）+ 契约测试"
 - Test: `test/unit/code-lang.test.mjs`
 
 **Interfaces:**
-- Consumes: Task 3 的 `snapshot.html`（含 `data-u2m-id`）；Task 4 的 v2 schema。`placeholder.mjs` 既有 `makeCtx`/`processMermaid`/`processImages`/`writeManifest`/`callOnElement`/`replaceWithHtml`/`replaceWithText` 不变。
+- Consumes: Task 3 的 `snapshot.html`（含 `data-idx`）；Task 4 的 v2 schema。`placeholder.mjs` 既有 `makeCtx`/`processMermaid`/`processImages`/`writeManifest`/`callOnElement`/`replaceWithHtml`/`replaceWithText` 不变。
 - Produces: `applyClassifyPlan(frame, ctx, plan) => Promise<number>`（逐块按 action 分派、写 `ctx.entries`）；`validateClassifyPlan(plan)`（非法即 throw，消息供 stderr）；`guessCodeLang(text) => string`（本地语言启发式，可为 `''`）。`clear_trans_html.mjs` 读 `working/<url-dir>/snapshot.html` + `working/<url-dir>/classify/classify_plan.json`，产 `<url-dir>/sketch.md` + `<url-dir>/assets/manifest.json`。
 
 - [ ] **Step 1: 写 `test/unit/code-lang.test.mjs`（失败测试）**
@@ -1263,9 +1263,9 @@ function writePlan(page, plan) {
   fs.mkdirSync(path.join(dirOf(page), 'classify'), { recursive: true });
   fs.writeFileSync(path.join(dirOf(page), 'classify/classify_plan.json'), JSON.stringify(plan), 'utf8');
 }
-/** keep-only plan：快照里全部 data-u2m-id 一律 keep（纯文本页的通用过法） */
+/** keep-only plan：快照里全部 data-idx 一律 keep（纯文本页的通用过法） */
 function keepAllPlan(page, listFlowSelector) {
-  const ids = [...snapOf(page).matchAll(/data-u2m-id="(\d+)"/g)].map((m) => Number(m[1]));
+  const ids = [...snapOf(page).matchAll(/data-idx="(\d+)"/g)].map((m) => Number(m[1]));
   return { version: 2, mode: 'whole', listFlowSelector, blocks: ids.map((id) => ({ id, action: 'keep' })) };
 }
 const idByMark = (page, markRe) => {
@@ -1337,13 +1337,13 @@ test('nav-noise: 导航/广告/页脚被剔除', async () => {
 
 test('complex-elements: plan 驱动全分派端到端', async () => {
   await capture('complex-elements.html');
-  const mainId  = idByMark('complex-elements.html', /<main[^>]*data-u2m-id="(\d+)"/);
-  const canvasId = idByMark('complex-elements.html', /<canvas[^>]*data-u2m-id="(\d+)"/);
-  const videoId  = idByMark('complex-elements.html', /<video[^>]*data-u2m-id="(\d+)"/);
-  const svgId    = idByMark('complex-elements.html', /<svg id="big"[^>]*data-u2m-id="(\d+)"/);
-  const chartId  = idByMark('complex-elements.html', /<div class="chart"[^>]*data-u2m-id="(\d+)"/);
-  const vizId    = idByMark('complex-elements.html', /<div id="viz"[^>]*data-u2m-id="(\d+)"/);
-  const katexId  = idByMark('complex-elements.html', /<span class="katex"[^>]*data-u2m-id="(\d+)"/);
+  const mainId  = idByMark('complex-elements.html', /<main[^>]*data-idx="(\d+)"/);
+  const canvasId = idByMark('complex-elements.html', /<canvas[^>]*data-idx="(\d+)"/);
+  const videoId  = idByMark('complex-elements.html', /<video[^>]*data-idx="(\d+)"/);
+  const svgId    = idByMark('complex-elements.html', /<svg id="big"[^>]*data-idx="(\d+)"/);
+  const chartId  = idByMark('complex-elements.html', /<div class="chart"[^>]*data-idx="(\d+)"/);
+  const vizId    = idByMark('complex-elements.html', /<div id="viz"[^>]*data-idx="(\d+)"/);
+  const katexId  = idByMark('complex-elements.html', /<span class="katex"[^>]*data-idx="(\d+)"/);
   writePlan('complex-elements.html', { version: 2, mode: 'whole', listFlowSelector: 'main', blocks: [
     { id: mainId, action: 'keep' },
     { id: canvasId, action: 'screenshot' },
@@ -1403,8 +1403,8 @@ test('csp-article: 严格 CSP 页面（bypassCSP）→ ok + 正文保留', async
 
 test('classify-article: code_block 分支 → 语言围栏，不进 manifest', async () => {
   await capture('classify-article.html');
-  const articleId = idByMark('classify-article.html', /<article[^>]*data-u2m-id="(\d+)"/);
-  const preId = idByMark('classify-article.html', /<pre[^>]*data-u2m-id="(\d+)"/);
+  const articleId = idByMark('classify-article.html', /<article[^>]*data-idx="(\d+)"/);
+  const preId = idByMark('classify-article.html', /<pre[^>]*data-idx="(\d+)"/);
   writePlan('classify-article.html', { version: 2, mode: 'whole', listFlowSelector: 'main > article', blocks: [
     { id: articleId, action: 'keep' },
     { id: preId, action: 'code_block' },
@@ -1477,10 +1477,10 @@ test('applyClassifyPlan: delete/code_block/block_screenshot 分支（setContent 
   const s = await openPage('about:blank', { viewport: { width: 1280, height: 800 } });
   try {
     await s.page.setContent(`<!doctype html><html><body>
-      <main data-u2m-id="1">
-        <div class="ad" data-u2m-id="2">AD_BLOCK</div>
-        <pre data-lang="python" data-u2m-id="3"><code>def hi(): pass</code></pre>
-        <div class="chart" data-u2m-id="4" style="width:200px;height:100px"><canvas></canvas></div>
+      <main data-idx="1">
+        <div class="ad" data-idx="2">AD_BLOCK</div>
+        <pre data-lang="python" data-idx="3"><code>def hi(): pass</code></pre>
+        <div class="chart" data-idx="4" style="width:200px;height:100px"><canvas></canvas></div>
       </main></body></html>`, { waitUntil: 'domcontentloaded' });
     const ctx = makeCtx(dirs, { context: s.context, log: () => {} });
     const n = await applyClassifyPlan(s.page.mainFrame(), ctx, {
@@ -1547,7 +1547,7 @@ export async function applyClassifyPlan(frame, ctx, plan) {
   const latex = await readSharedScript('page-latex.js');
   let processed = 0;
   for (const b of plan.blocks) {
-    const h = await frame.$(`[data-u2m-id="${b.id}"]`);
+    const h = await frame.$(`[data-idx="${b.id}"]`);
     if (!h) { ctx.warnings.push(`plan id 未命中（快照中不存在或已被外层删除）: ${b.id}`); continue; }
     try {
       if (b.action === 'keep') {
@@ -1569,7 +1569,7 @@ export async function applyClassifyPlan(frame, ctx, plan) {
         await replaceWithHtml(frame, h, `<pre data-u2m-code><code class="language-${lang}">${escapeHtml(text)}</code></pre>`);
         // 代码是文本而非复杂资源：不进 manifest、不经步骤 3
       } else if (b.action === 'block_screenshot') {
-        const target = await frame.$(`[data-u2m-id="${b.blockOf ?? b.id}"]`);
+        const target = await frame.$(`[data-idx="${b.blockOf ?? b.id}"]`);
         if (!target) { ctx.warnings.push(`blockOf 未命中: ${b.blockOf ?? b.id}`); continue; }
         const id = `COMPLEX_DIV_${++ctx.counters.complex}`;
         const rel = `assets/complex/${id}.png`;
@@ -1628,7 +1628,7 @@ export async function applyClassifyPlan(frame, ctx, plan) {
       processed++;
     } catch (e) {
       ctx.warnings.push(`action ${b.action}(id=${b.id}) 失败: ${e.message}`);
-      try { await h.evaluate((el) => el.removeAttribute('data-u2m-id')); } catch { /* 已脱离 DOM */ }
+      try { await h.evaluate((el) => el.removeAttribute('data-idx')); } catch { /* 已脱离 DOM */ }
     }
   }
   return processed;
@@ -1779,7 +1779,7 @@ git commit -m "feat(clear): applyClassifyPlan + setContent(snapshot) 改造，�
 node <skill-root>/script/capture_snapshot.mjs <url> [--token-budget 80000] [--placeholder-min-chars 40]
 ```
 
-复用步骤 1 写好的登录态，充分滚动后抓取全保真 `snapshot.html`（DOM + 内联 CSS + 元素 inline style，剥尽 JS，含 `data-u2m-id` 与 `<base>`），并派生 `classify/classify_input.html`（长文本占位 + 信号样式，供步骤 1.8 阅读）。
+复用步骤 1 写好的登录态，充分滚动后抓取全保真 `snapshot.html`（DOM + 内联 CSS + 元素 inline style，剥尽 JS，含 `data-idx` 与 `<base>`），并派生 `classify/classify_input.html`（长文本占位 + 信号样式，供步骤 1.8 阅读）。
 
 | stdout status | 动作 |
 |---|---|
@@ -1802,7 +1802,7 @@ node <skill-root>/script/capture_snapshot.mjs <url> [--token-budget 80000] [--pl
 ```
 
 - `action` 取值：`keep | delete | code_block | screenshot | passthrough_svg | svg_convert | latex | block_screenshot`；`block_screenshot` 可带 `blockOf`（整块截图的容器 id，默认 = `id`）。
-- `blocks[*].id` 是 `classify_input.html` 里的 `data-u2m-id`，只列列表流内需要处置的块。
+- `blocks[*].id` 是 `classify_input.html` 里的 `data-idx`，只列列表流内需要处置的块。
 - mermaid 容器（带 `data-u2m-mermaid-src`）已托管，**不进 plan**。
 
 **约束**：
@@ -1842,7 +1842,7 @@ node <skill-root>/script/clear_trans_html.mjs <url>
 4a. "**架构**"节"**管线顺序（spec 规定）**"条改为：
 
 ```markdown
-**管线顺序（spec 规定）**：打开页面（initScripts 注入 page-init.js——IO 劫持 + mermaid 源码快照）→ 渐进滚动 → DOM 稳定等待 → 序列化全保真快照（capture_snapshot：同源 iframe 合并 + 外部 CSS 内联 + 剥 JS + <base> + 资源 src 绝对化 + data-u2m-id；再派生 classify_input）→ [agent] LLM 分类写 classify_plan.json → setContent(快照) → mermaid 源码直出 → applyClassifyPlan 逐块分派 → 图片下载 → 页面清理 → Readability（页面内 addScriptTag）→ Markdown 转换 → sketch.md + manifest.json。
+**管线顺序（spec 规定）**：打开页面（initScripts 注入 page-init.js——IO 劫持 + mermaid 源码快照）→ 渐进滚动 → DOM 稳定等待 → 序列化全保真快照（capture_snapshot：同源 iframe 合并 + 外部 CSS 内联 + 剥 JS + <base> + 资源 src 绝对化 + data-idx；再派生 classify_input）→ [agent] LLM 分类写 classify_plan.json → setContent(快照) → mermaid 源码直出 → applyClassifyPlan 逐块分派 → 图片下载 → 页面清理 → Readability（页面内 addScriptTag）→ Markdown 转换 → sketch.md + manifest.json。
 ```
 
 4b. "**分派类型与 manifest。**"条改为：
@@ -1873,7 +1873,7 @@ node <skill-root>/script/clear_trans_html.mjs <url>
 ```markdown
 ### `capture_snapshot.mjs`
 
-复用登录态打开 URL，充分滚动并等待 DOM 稳定后，一次性抓取全保真自包含快照 `snapshot.html`（内联外部 CSS、剥尽 JS、注入 `<base>`、打 `data-u2m-id`），并派生精简版 `classify/classify_input.html`（长文本占位 + 信号样式）供 LLM 分类。后续所有步骤只在这份快照上工作，不再重开原 URL。
+复用登录态打开 URL，充分滚动并等待 DOM 稳定后，一次性抓取全保真自包含快照 `snapshot.html`（内联外部 CSS、剥尽 JS、注入 `<base>`、打 `data-idx`），并派生精简版 `classify/classify_input.html`（长文本占位 + 信号样式）供 LLM 分类。后续所有步骤只在这份快照上工作，不再重开原 URL。
 ```
 
 5b. `clear_trans_html.mjs` 小节首段改为："加载 `snapshot.html` 快照与 `classify_plan.json`，清理 DOM 元素，转化成 Markdown。"；"处理懒加载/虚拟 DOM"两条改为"由 `capture_snapshot.mjs` 在抓取阶段完成（渐进滚动 + DOM 稳定）"。

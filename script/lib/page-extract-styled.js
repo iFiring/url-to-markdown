@@ -21,7 +21,7 @@ function __u2mExtractStyled(keyIds) {
   var missing = [];
   var keyEls = [];
   for (var i = 0; i < ids.length; i++) {
-    var found = document.querySelector('[data-u2m-id="' + ids[i] + '"]');
+    var found = document.querySelector('[data-idx="' + ids[i] + '"]');
     if (found) keyEls.push(found);
     else missing.push(ids[i]);
   }

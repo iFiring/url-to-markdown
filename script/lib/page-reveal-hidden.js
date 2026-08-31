@@ -6,7 +6,7 @@
  * 隐藏：display:none（自身或祖先）盒为 null、max-height:0 盒高为 0，
  * el.screenshot() 自动等可见会挂到超时；更隐蔽的是被塌缩祖先裁剪的模块
  * ——自身盒正常但像素被裁空，不展开就截是空白图。
- * 对给定 data-u2m-id 的元素**无条件**自元素向 body 逐级扫一遍，**只覆写
+ * 对给定 data-idx 的元素**无条件**自元素向 body 逐级扫一遍，**只覆写
  * 正在隐藏的属性**（行内 !important）——不能以元素自身盒作前置守卫：被
  * 塌缩祖先裁剪/visibility 隐藏的模块盒正常但像素全空，守卫会放行出空白图。
  * 四段（执行顺序）：
@@ -58,7 +58,7 @@
  * 视觉由链上其余 id 承载。
  */
 function __u2mRevealHidden(id) {
-  var el = document.querySelector('[data-u2m-id="' + id + '"]');
+  var el = document.querySelector('[data-idx="' + id + '"]');
   if (!el) return { found: false, touched: 0, wideTouched: 0, occluders: 0, box: null, boxless: false };
 
   function boxOf(e) {

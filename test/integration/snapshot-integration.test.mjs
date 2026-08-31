@@ -35,7 +35,7 @@ test('snapshot.mjs: 静态文章页 → ok + 1_snapshot.html', async () => {
 
   // 验证快照内容
   const html = fs.readFileSync(out.snapshot, 'utf8');
-  assert.ok(html.includes('data-u2m-id'), '应含 data-u2m-id');
+  assert.ok(html.includes('data-idx'), '应含 data-idx');
   assert.ok(!html.includes('<script'), '不应含 script 标签');
 });
 
@@ -109,22 +109,22 @@ test('snapshot.mjs: 标记 body 全部元素（排除纯文本修饰标签与 sv
 
   // 开标签计数（(?=[\s>/]) 防止 <b 误匹配 <br>/<body>、<i 误匹配 <img> 等）
   const total = (tag) => (html.match(new RegExp(`<${tag}(?=[\\s>/])`, 'g')) || []).length;
-  const withId = (tag) => (html.match(new RegExp(`<${tag}(?=[\\s>/])(?=[^>]*data-u2m-id)[^>]*>`, 'g')) || []).length;
+  const withId = (tag) => (html.match(new RegExp(`<${tag}(?=[\\s>/])(?=[^>]*data-idx)[^>]*>`, 'g')) || []).length;
 
   // 块级与有结构意义的行内元素（span/a/code/img）：全部标记
   for (const tag of ['main', 'div', 'p', 'h1', 'span', 'a', 'code', 'img', 'svg', 'math']) {
     assert.ok(total(tag) > 0, `夹具应含 <${tag}>`);
-    assert.equal(withId(tag), total(tag), `<${tag}> 应全部带 data-u2m-id`);
+    assert.equal(withId(tag), total(tag), `<${tag}> 应全部带 data-idx`);
   }
   // 纯文本修饰与薄语义行内标签：不标记
   for (const tag of ['strong', 'em', 'b', 'i', 'u', 's', 'mark', 'sub', 'sup', 'br', 'wbr', 'abbr', 'q', 'time', 'kbd', 'samp', 'cite']) {
     assert.ok(total(tag) > 0, `夹具应含 <${tag}>`);
-    assert.equal(withId(tag), 0, `<${tag}> 不应带 data-u2m-id`);
+    assert.equal(withId(tag), 0, `<${tag}> 不应带 data-idx`);
   }
   // svg/math 内部后代不标记（根元素在上面已验证标记）
   for (const tag of ['g', 'rect', 'circle', 'path', 'mrow', 'mi', 'mo', 'mn']) {
     assert.ok(total(tag) > 0, `夹具应含 <${tag}>`);
-    assert.equal(withId(tag), 0, `<${tag}>（svg/math 内部）不应带 data-u2m-id`);
+    assert.equal(withId(tag), 0, `<${tag}>（svg/math 内部）不应带 data-idx`);
   }
 });
 

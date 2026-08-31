@@ -92,7 +92,7 @@ emit({status:'ok', ...})
 - 元素 inline style 属性
 - **剔除所有 Style 的字体属性**（font-family, font-size, font-weight, font-style, line-height, letter-spacing, text-decoration 等）
 - 剥尽 JS（无 `<script>`、无 `on*` 属性）
-- 含 `data-u2m-id`（对 div/section/article/p/ul/ol/li/h1-h6/table/blockquote/pre/figure/canvas/svg/video/iframe/.katex 等候选元素打递增 ID）
+- 含 `data-idx`（对 div/section/article/p/ul/ol/li/h1-h6/table/blockquote/pre/figure/canvas/svg/video/iframe/.katex 等候选元素打递增 ID）
 - 含 `<base href>` 指向原页面 URL
 
 ### 执行流程
@@ -128,7 +128,7 @@ login → 已登录/登录完成
 
 ### 保留的属性
 
-- `data-u2m-id`（唯一标识）
+- `data-idx`（唯一标识）
 - `class`（语义辅助）
 
 ### 产物
@@ -149,14 +149,14 @@ LLM（由 SKILL.md 指导）
 
 仅根据 DOM 结构（元素层级、标签类型、嵌套深度）和 `{{LONG_TEXT_k|N_CHARS}}` 占位符分布，找到：
 
-1. **标题分块**的 `data-u2m-id`（文章主标题）
-2. **说明分块**的 `data-u2m-id`（描述、作者、日期等元数据）
-3. **列表流**的父组件 `data-u2m-id`（文章主体区域，可能多个）
+1. **标题分块**的 `data-idx`（文章主标题）
+2. **说明分块**的 `data-idx`（描述、作者、日期等元数据）
+3. **列表流**的父组件 `data-idx`（文章主体区域，可能多个）
 
 ### 约束
 
 - 不读语义内容（文本已被占位）
-- `listFlowIds` 是列表流**最外层父元素**的 data-u2m-id，该父元素内应包含多个重复子结构
+- `listFlowIds` 是列表流**最外层父元素**的 data-idx，该父元素内应包含多个重复子结构
 - 不选 `<body>` 或 `<html>`
 
 ### 产物
@@ -179,7 +179,7 @@ LLM（由 SKILL.md 指导）
 
 ### 分块算法
 
-1. **定位列表流**：通过 `listFlowIds` 找到列表流父元素（`[data-u2m-id=N]`）
+1. **定位列表流**：通过 `listFlowIds` 找到列表流父元素（`[data-idx=N]`）
 2. **遍历子树**：对列表流内的每个直接子元素，判断 Phrasing / Flow：
    - **Phrasing content**（HTML 标准行内元素）：`span, a, em, strong, code, img, br, sub, sup, small, b, i, u, mark, q, kbd, samp, var, wbr, abbr, cite, dfn, time, data` 等
    - **Flow content**（HTML 标准块级元素）：`div, section, article, p, ul, ol, li, dl, h1-h6, table, blockquote, pre, figure, hr, nav, aside, header, footer` 等
@@ -212,15 +212,15 @@ LLM（由 SKILL.md 指导）
       "id": 2,
       "type": "flow",
       "dataU2mId": 60,
-      "html": "<div data-u2m-id=\"60\"><h2>{{LONG_TEXT_4|120_CHARS}}</h2></div>",
+      "html": "<div data-idx=\"60\"><h2>{{LONG_TEXT_4|120_CHARS}}</h2></div>",
       "needsLLM": false
     },
     {
       "id": 3,
       "type": "multiLayer",
       "dataU2mId": 70,
-      "html": "<div data-u2m-id=\"70\">...</div>",
-      "styledHtml": "<div data-u2m-id=\"70\" style=\"display:flex;...\">...</div>",
+      "html": "<div data-idx=\"70\">...</div>",
+      "styledHtml": "<div data-idx=\"70\" style=\"display:flex;...\">...</div>",
       "needsLLM": true
     }
   ]
