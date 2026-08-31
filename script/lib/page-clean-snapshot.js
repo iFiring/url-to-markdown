@@ -256,6 +256,29 @@ function __u2mCleanSnapshot(cfg) {
     tn.textContent = '{{LONG_TEXT_' + k + '|' + n + '_' + unit + '}}';
   }
 
+  // 9b. aria-label 值截断（两趟共享）：保留首句+末句，中间省略为 …。
+  //     aria-label 是 icon-only 控件/链接的唯一可达名信号——clean 趟白名单
+  //     保留它、styled 趟亦保留，但某些站点把整段描述塞进 aria-label，全量
+  //     流到步骤 7 LLM 输入费 token。按完整句末标点切句：终止符 = 。！？；
+  //     与 .!?;（不含逗号/顿号这类句中停顿）；≥3 句才截断，≤2 句（含无终止
+  //     符的长单句）原样保留。共享段同位执行→两版截断值天然一致（孪生守卫
+  //     不受影响）；aria-label 是元数据、不流入最终 markdown，无需进恢复清单。
+  function truncateAriaLabel(val) {
+    if (!val) return val;
+    var SENT_RE = /[^。！？；.!?;]*[。！？；.!?;]+|[^。！？；.!?;]+$/g;
+    var parts = val.match(SENT_RE);
+    if (!parts) return val;
+    parts = parts.map(function (s) { return s.trim(); }).filter(function (s) { return s !== ''; });
+    if (parts.length < 3) return val;
+    return parts[0] + '…' + parts[parts.length - 1];
+  }
+  var ariaEls = document.querySelectorAll('[aria-label]');
+  for (var i = 0; i < ariaEls.length; i++) {
+    var al = ariaEls[i].getAttribute('aria-label');
+    var tl = truncateAriaLabel(al);
+    if (tl !== al) ariaEls[i].setAttribute('aria-label', tl);
+  }
+
   // ---- mode 分叉：styled 趟 SVG 瘦身 + 属性白名单后返回；clean 趟继续剥样式 ----
 
   if (mode !== 'clean') {
@@ -279,7 +302,7 @@ function __u2mCleanSnapshot(cfg) {
     //     图片 URL 源、步骤 8 下载源）/width/height（img 权重信号，与 style
     //     声明互补）；
     //     (b) 内容信号：colspan/rowspan（步骤 7 判复杂跨格表格→trans2img）、
-    //     start（ol 起始编号）、aria-label（icon-only 控件/链接的唯一可达名）、
+    //     start（ol 起始编号）、aria-label（icon-only 控件/链接的唯一可达名，值已在共享段截断为首末句）、
     //     data-src/srcset（懒加载图片 URL 通道——步骤 1 只规范 img[src]）、
     //     datetime（time 日期原文）、open（details 展开态）、lang（语言信号，
     //     步骤 6 照抄 <html lang>）；
@@ -411,9 +434,11 @@ function __u2mCleanSnapshot(cfg) {
   }
 
   // K2. 属性白名单（仅清洗版）：全文档只留 LLM 可理解的最小属性集；
-  //     href/src/aria-*/style/tabindex 等一律删除——a/img 的 URL 就此清空。
+  //     href/src/style/tabindex 等一律删除——a/img 的 URL 就此清空。aria-label
+  //     例外保留（已在共享段截断为首末句，icon-only 控件/链接的可达名信号），
+  //     其余 aria-* 一并删。
   //     SVG 特殊处理：仅保留 data-u2m-id（id/class 等由 styled 趟保留，clean 趟删净）
-  var ATTR_KEEP = { 'class': 1, 'id': 1, 'data-u2m-id': 1, 'data-language': 1, 'hidden': 1, 'type': 1, 'role': 1, 'alt': 1 };
+  var ATTR_KEEP = { 'class': 1, 'id': 1, 'data-u2m-id': 1, 'data-language': 1, 'hidden': 1, 'type': 1, 'role': 1, 'alt': 1, 'aria-label': 1 };
   var allEls = document.querySelectorAll('*');
   for (var i = 0; i < allEls.length; i++) {
     var el2 = allEls[i];

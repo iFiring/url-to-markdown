@@ -570,7 +570,7 @@ test('K1: class 语义过滤——工具/哈希/CSS-modules/变体剥除，语�
   } finally { cleanup(); }
 });
 
-test('K2: 属性白名单——八属性存活，href/src/aria/style 等删净，URL 一律清空', async () => {
+test('K2: 属性白名单——九属性存活（aria-label 截断保留），href/src/target/style 等删净，URL 一律清空', async () => {
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
@@ -583,7 +583,9 @@ test('K2: 属性白名单——八属性存活，href/src/aria/style 等删净�
   const { cleaned, styled, cleanup } = await runClean(snapshot, 'k2-attrs');
   try {
     const a = cleaned.match(/<a data-u2m-id="2"[^>]*>/)[0];
-    assert.ok(!/href|aria-label|target|data-1p/.test(a), `a 的 URL/aria/data 噪声应删净: ${a}`);
+    // aria-label 2026-08-31 起入 clean 白名单（截断保留）；"链接" 1 句原样存活
+    assert.ok(a.includes('aria-label="链接"'), `aria-label 应保留（"链接" 1 句原样）: ${a}`);
+    assert.ok(!/href|target|data-1p/.test(a), `a 的 href/target/data 噪声应删净: ${a}`);
     const img = cleaned.match(/<img data-u2m-id="3"[^>]*>/)[0];
     assert.ok(!/src|width|height/.test(img), `img 的 src/宽高应删净: ${img}`);
     assert.ok(img.includes('alt="示意图"'), 'img 的 alt 语义保留');
@@ -596,6 +598,49 @@ test('K2: 属性白名单——八属性存活，href/src/aria/style 等删净�
     // 2026-08-28 起 styled 趟有自己的属性白名单：href 留（URL 源）、data-1p-ignore 删
     assert.ok(styled.includes('href="https://example.com/x"'), '带样式版保留 href（URL 源）');
     assert.ok(!styled.includes('data-1p-ignore'), '带样式版 data-* 脚手架属性应删净');
+  } finally { cleanup(); }
+});
+
+test('K2b: aria-label 首末句截断——≥3 句保留首句+末句、中间 …；≤2 句原样；中英句末标点切句、逗号不切；两趟孪生一致', async () => {
+  // 2026-08-31：aria-label 值在共享段截断（clean 与 styled 同位执行）。
+  // 切句终止符 = 。！？；与 .!?;（不含逗号/顿号）；≥3 句才截断，≤2 句原样。
+  const longZh = '复制到剪贴板。然后粘贴到编辑器。最后保存文件。';
+  const longEn = 'First sentence. Second sentence here. Third sentence. Fourth one.';
+  const semis = '第一分句；第二分句；第三分句；';
+  const twoZh = '复制。粘贴。';
+  const commaZh = '第一句，补充说明。第二句，补充说明。第三句，补充说明。';
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-u2m-id="1">
+    <button data-u2m-id="2" aria-label="${longZh}">b1</button>
+    <a data-u2m-id="3" aria-label="${longEn}">b2</a>
+    <button data-u2m-id="4" aria-label="${semis}">b3</button>
+    <button data-u2m-id="5" aria-label="${twoZh}">b4</button>
+    <button data-u2m-id="6" aria-label="${commaZh}">b5</button>
+  </div>
+</body></html>`;
+  const { cleaned, styled, cleanup } = await runClean(snapshot, 'k2b-aria-trunc');
+  try {
+    const grab = (html) => html.match(/aria-label="[^"]*"/g);
+    // ≥3 句：首句 + … + 末句
+    const wantZh = '复制到剪贴板。…最后保存文件。';
+    assert.ok(cleaned.includes(`aria-label="${wantZh}"`), `clean 中文 ≥3 句应截断为首末句: ${grab(cleaned)}`);
+    assert.ok(styled.includes(`aria-label="${wantZh}"`), `styled 中文 ≥3 句应截断（孪生一致）: ${grab(styled)}`);
+    const wantEn = 'First sentence.…Fourth one.';
+    assert.ok(cleaned.includes(`aria-label="${wantEn}"`), `clean 英文 ≥3 句应截断: ${grab(cleaned)}`);
+    assert.ok(styled.includes(`aria-label="${wantEn}"`), `styled 英文 ≥3 句应截断（孪生一致）: ${grab(styled)}`);
+    // 分号也是句末终止符
+    const wantSemi = '第一分句；…第三分句；';
+    assert.ok(cleaned.includes(`aria-label="${wantSemi}"`), `clean 分号切句应截断: ${grab(cleaned)}`);
+    assert.ok(styled.includes(`aria-label="${wantSemi}"`), `styled 分号切句应截断: ${grab(styled)}`);
+    // ≤2 句：原样
+    assert.ok(cleaned.includes(`aria-label="${twoZh}"`), `clean 2 句原样保留: ${grab(cleaned)}`);
+    assert.ok(styled.includes(`aria-label="${twoZh}"`), `styled 2 句原样保留: ${grab(styled)}`);
+    // 逗号不切句：3 个句号 → 3 句，首末句内的逗号原样保留
+    const wantComma = '第一句，补充说明。…第三句，补充说明。';
+    assert.ok(cleaned.includes(`aria-label="${wantComma}"`), `clean 逗号不切句、首末句逗号保留: ${grab(cleaned)}`);
+    assert.ok(styled.includes(`aria-label="${wantComma}"`), `styled 逗号不切句、首末句逗号保留: ${grab(styled)}`);
   } finally { cleanup(); }
 });
 

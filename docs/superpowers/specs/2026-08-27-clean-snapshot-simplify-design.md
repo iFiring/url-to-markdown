@@ -74,10 +74,12 @@ class 值按空白切 token，逐 token 判定：样式强相关 token 删，其
 ### K2 属性白名单
 
 全文档只保留：`class`（K1 过滤后）、`id`、`data-u2m-id`、`data-language`、
-`hidden`、`type`、`role`、`alt`。**其余一律删除**——含 href/src/aria-*/style/
-width/height/tabindex 等。效果即「a/img 等外部链接元素的 URL 一律清空」：
-`<a href="https://…">text</a>` → `<a>text</a>`，`<img src="…">` →
-`<img data-u2m-id="7">`。
+`hidden`、`type`、`role`、`alt`、`aria-label`。**其余一律删除**——含
+href/src/aria-\*（aria-label 除外）/style/width/height/tabindex 等。效果即
+「a/img 等外部链接元素的 URL 一律清空」：`<a href="https://…">text</a>` →
+`<a>text</a>`，`<img src="…">` → `<img data-u2m-id="7">`。aria-label 是
+icon-only 控件/链接的唯一可达名信号，例外保留——值已在共享段截断为首末句
+（见共享段 9b，2026-08-31 五次修订），其余 aria-\* 一并删。
 
 ### K3 SVG 清空与媒体裸标签
 
@@ -258,3 +260,7 @@ U2M_DEBUG：删 juice 耗时行与护栏警告行；保留/新增一行汇总
   - **K5 token 改命名式**：`{{n;构成}}` → `{{HIDDEN_TAG|n_chars;构成}}`（如 `{{HIDDEN_TAG|200_chars;1_p}}`），与 TABLE_TAG/PRE_CODE_TAG 语法对齐；规模按**占位前原文**预计算（见下条）。
   - **折叠统计预计算上移**：K5 hidden 规模与 K7 pre 行数在占位**之前**于共享段量原文、挂 expando（`__u2mHiddenSize`/`__u2mPreLines`，仿表格形状预计算模式）——占位之后原文变成 `{{LONG_TEXT_k|N_unit}}` 语法串，届时再量会把语法当文本（规模虚高，如 23 字原文量成 26）或丢换行（行数塌缩为 1）。表格形状预计算不受占位影响（数 tr/td/colspan、不动文本），位置不变。
   测试：守卫两处反转（article-1 断言、ph 集合比对）；K8 四用例改写为「按文本节点占位 + 行内结构保留」语义；K5/K6K7-hidden 用例期望改 HIDDEN_TAG 精确值（兼证预计算——变异验证：去掉预计算得 26_chars/1_lines 即红）；新增 pre 行数预计算用例。`references/analyze_html_guide.md` 步骤 3 指引同步：恢复 `{{LONG_TEXT_k|n_chars}}` 读法（约束 6，行内结构保真说明），hidden 读法改 HIDDEN_TAG（约束 3），删 run token 读法，形态速览补 LONG_TEXT/HIDDEN_TAG 两例。
+- 2026-08-31（五次修订）：**aria-label 入 clean 白名单 + 值首末句截断**。动机：clean 趟 K2 原把 aria-\* 一并删——icon-only 控件/链接丢失唯一可达名信号；而 styled 趟虽保留 aria-label 全量，某些站点把整段描述塞进 aria-label，全量流到步骤 7 LLM 输入费 token。改动两项：
+  - **共享段 9b aria-label 值截断**（长文本占位后、mode 分叉前，两趟同位执行）：按完整句末标点切句，终止符 = `。！？；`与`.!?;`（**不含**逗号/顿号这类句中停顿）；≥3 句才截断为「首句 + `…` + 末句」，≤2 句（含无终止符的长单句）原样保留。共享段同位执行→两版截断值天然一致（孪生守卫不受影响）；aria-label 是元数据、不流入最终 markdown，不进 LONG_TEXT 恢复清单。
+  - **clean K2 白名单补 `aria-label`**（八属性 → 九属性）：clean 版从「整删」变「保留截断值」；styled 趟白名单本已含 aria-label，现保留截断值。其余 aria-\* 仍删。
+  测试：K2 用例断言由「aria-label 删净」反转为「aria-label 保留（短值原样）」；新增 K2b 用例覆盖中文 `。`/英文 `.`/分号 `；` 三类终止符的 ≥3 句截断、≤2 句原样、逗号不切句、两趟孪生一致。golden 未变（参考页 aria-label 均为短值，截断 no-op）。
