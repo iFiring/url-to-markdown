@@ -216,12 +216,18 @@ function __u2mCleanSnapshot(cfg) {
   //    父子元素之间凭空捏造"长文本"，误导步骤 3 的结构识别。
   //    svg/style 子树内的文本不占位——两趟随后都会删 SVG 内容（styled 瘦身
   //    壳 / clean 清空），若占位，占位符会随之消失而编号留在清单里；
-  //    <style> 文本在带样式版中原样保留，清洗版删除 <style> 标签
+  //    <style> 文本在带样式版中原样保留，清洗版删除 <style> 标签。
+  //    H1/H2/H3 整子树内的文本不占位（2026-08-31 修订）——标题是层级锚点，
+  //    占位成 {{LONG_TEXT_k|N}} 会让步骤 3 的 LLM 看不到真实标题文本、无从
+  //    判标题层级与 key id 取舍（与 <title> 不占位同款 rationale，title 因
+  //    treewalker 只走 body 而天然不占位，这里是把同款豁免扩到正文标题）。
+  //    整子树豁免——嵌套 span/a/code 等后代文本节点一并保留原文、子树结构
+  //    原样；H4/H5/H6 仍按阈值占位（字面取 H1/H2/H3，深层子标题不当结构锚点）。
   var MIN_CHARS = typeof cfg.minChars === 'number' ? cfg.minChars : 16;
   var MIN_WORDS = typeof cfg.minWords === 'number' ? cfg.minWords : 12;
   function skipPlaceholder(textNode) {
     var p = textNode.parentElement;
-    return !!(p && p.closest && p.closest('svg, style'));
+    return !!(p && p.closest && p.closest('svg, style, h1, h2, h3'));
   }
   var k = 0;
   var longTexts = {};

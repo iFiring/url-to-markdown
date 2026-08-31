@@ -56,7 +56,8 @@
 link/meta/base 删除；nav/footer/form 及 role 等价物删除；video/audio 删除；
 input/select/textarea/label/dialog 删除；button 与 [role=button] 保留；空元素
 级联删除（KEEP_EMPTY 白名单不变）；`<title>` 保留。带样式版另含 SVG 瘦身与
-LONG_TEXT 占位（阈值 16 汉字 / 12 词不变）。
+LONG_TEXT 占位（阈值 16 汉字 / 12 词不变；H1/H2/H3 整子树豁免——
+标题是层级锚点，占位会让步骤 3 看不到真实标题文本，2026-08-31 六次修订）。
 
 ## 5. 清洗版规则 K1-K9（按实施顺序）
 
@@ -264,3 +265,5 @@ U2M_DEBUG：删 juice 耗时行与护栏警告行；保留/新增一行汇总
   - **共享段 9b aria-label 值截断**（长文本占位后、mode 分叉前，两趟同位执行）：按完整句末标点切句，终止符 = `。！？；`与`.!?;`（**不含**逗号/顿号这类句中停顿）；≥3 句才截断为「首句 + `…` + 末句」，≤2 句（含无终止符的长单句）原样保留。共享段同位执行→两版截断值天然一致（孪生守卫不受影响）；aria-label 是元数据、不流入最终 markdown，不进 LONG_TEXT 恢复清单。
   - **clean K2 白名单补 `aria-label`**（八属性 → 九属性）：clean 版从「整删」变「保留截断值」；styled 趟白名单本已含 aria-label，现保留截断值。其余 aria-\* 仍删。
   测试：K2 用例断言由「aria-label 删净」反转为「aria-label 保留（短值原样）」；新增 K2b 用例覆盖中文 `。`/英文 `.`/分号 `；` 三类终止符的 ≥3 句截断、≤2 句原样、逗号不切句、两趟孪生一致。golden 未变（参考页 aria-label 均为短值，截断 no-op）。
+- 2026-08-31（六次修订）：**H1/H2/H3 整子树豁免占位**。动机：占位把超阈值的标题文本折成 `{{LONG_TEXT_k|N}}`，步骤 3 的 LLM 看到的是编号而非真实标题文本，无从判标题层级与 key id 取舍——这与 `<title>` 不占位同款 rationale（title 因占位 treewalker 只走 body 而天然不占位，这里是把同款豁免扩到正文标题）。改动：共享段步骤 9 `skipPlaceholder()` 的 `closest` 选择器由 `'svg, style'` 扩为 `'svg, style, h1, h2, h3'`——文本节点的最近祖先若是 H1/H2/H3 即跳过占位，**整子树**豁免（嵌套 span/a/code 等后代文本节点一并保留原文、子树结构原样）；H4/H5/H6 仍按阈值占位（字面取 H1/H2/H3，深层子标题不当结构锚点）。标题文本不进 `2_long_text.json`，两版（clean + styled）字面保留、直接流进步骤 3/7；还原链不变（标题文本本就无需还原）。共享段同位执行→两版豁免集合天然一致（孪生守卫不受影响）；编号在两版间仍逐一对应（跳过判定是结构的纯函数）。
+  测试：新增「H1/H2/H3 整子树豁免占位」用例——H2 嵌套 span/a 的长文本 + H3 直接长文本两版均原文保留、不进恢复清单；同夹具里 H4 长文本仍占位 `{{LONG_TEXT_k|n_chars}}`、普通长段落仍占位。golden `article-1.styled.html` 与 `article-1.longtext.json` 重生成（3 个 H3 标题翻为字面 + 后续键重编号，200 → 197 条）；`clean-simplify` golden 不变（其 H1 仅 6 字、本就不占位）。

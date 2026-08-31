@@ -935,6 +935,49 @@ test('<title> 不占位——长中文标题保留作步骤 3 识别线索', asy
   } finally { cleanup(); }
 });
 
+test('H1/H2/H3 整子树豁免占位——长标题原文保留作步骤 3 识别线索；H4 仍占位', async () => {
+  // 与 <title> 不占位同款 rationale：H1/H2/H3 是标题层级锚点，占位成
+  // {{LONG_TEXT_k|n_chars}} 会让步骤 3 的 LLM 看不到真实标题文本、无从判
+  // 标题层级与 key id 取舍。豁免整子树（嵌套 span/a 等后代文本节点一并豁免，
+  // 子树结构原样保留）；H4/H5/H6 仍按阈值占位（字面取 H1/H2/H3）。
+  const zhH2 = '汉'.repeat(17);     // 17 字 > 16 → 若不豁免会占位
+  const zhSubA = '链'.repeat(17);   // 嵌在 h2 内 a 里的 17 字 → 子树豁免
+  const zhH3 = '字'.repeat(18);     // 18 字
+  const zhH4 = '题'.repeat(19);     // 19 字 → H4 仍占位
+  const zhP = '段'.repeat(20);      // 20 字 → 普通段落照常占位
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-u2m-id="1">
+    <h2 data-u2m-id="2"><span data-u2m-id="3">${zhH2}</span> <a data-u2m-id="4" href="/x">${zhSubA}</a></h2>
+    <h3 data-u2m-id="5">${zhH3}</h3>
+    <h4 data-u2m-id="6">${zhH4}</h4>
+    <p data-u2m-id="7">${zhP}</p>
+  </div>
+</body></html>`;
+  const { cleaned, styled, out, cleanup } = await runClean(snapshot, 'h1-h3-exempt');
+  try {
+    // H2 整子树（含嵌套 span 与 a 的长文本）原文保留、不出现占位符
+    const h2 = cleaned.match(/<h2 data-u2m-id="2">([\s\S]*?)<\/h2>/)[1];
+    assert.ok(h2.includes(zhH2), `H2 内 span 长文本应原文保留（豁免）: ${h2}`);
+    assert.ok(h2.includes(zhSubA), `H2 内 a 长文本应原文保留（子树豁免）: ${h2}`);
+    assert.ok(!/\{\{LONG_TEXT/.test(h2), `H2 子树不应出现占位符: ${h2}`);
+    // H3 直接长文本原文保留
+    assert.ok(cleaned.includes(`<h3 data-u2m-id="5">${zhH3}</h3>`), 'H3 长文本原文保留（豁免）');
+    // H4 仍按阈值占位
+    assert.ok(/<h4 data-u2m-id="6">\{\{LONG_TEXT_\d+\|19_chars\}\}<\/h4>/.test(cleaned), `H4 长文本仍占位: ${cleaned.match(/<h4[^]*?<\/h4>/)}`);
+    // 普通长段落仍占位
+    assert.ok(/<p data-u2m-id="7">\{\{LONG_TEXT_\d+\|20_chars\}\}<\/p>/.test(cleaned), '普通长段落仍占位');
+    // 标题文本不进恢复清单；H4 与段落文本进清单
+    const longTexts = JSON.parse(fs.readFileSync(out.longText, 'utf8'));
+    const vals = Object.values(longTexts);
+    assert.ok(!vals.includes(zhH2) && !vals.includes(zhH3) && !vals.includes(zhSubA), 'H1/H2/H3 标题文本不应进恢复清单');
+    assert.ok(vals.includes(zhH4) && vals.includes(zhP), 'H4 与段落长文本应进恢复清单');
+    // 带样式版同样豁免
+    assert.ok(styled.includes(zhH2) && styled.includes(zhH3) && styled.includes(zhSubA), '带样式版标题原文保留');
+  } finally { cleanup(); }
+});
+
 test('S1: astro- 前缀解包提升至两趟——带样式版同样解包，LONG_TEXT 编号不受影响', async () => {
   // 2026-08-28 起 K4 从清洗版独占提升为两趟共享：带样式版是步骤 4-7 的输入源，
   // astro 脚手架（含巨量 props 属性）曾一路流进 6_article.html（LLM 输入）。
