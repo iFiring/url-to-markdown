@@ -59,7 +59,7 @@
 
 ### 「段落流」示例
 
-> **优先找 `titleId`(`<h1>`-`<h3>`)**，`descriptionIds` / `paragraphIds` 一定在它之后（`titleId` → `descriptionIds` → `paragraphIds` 整体顺序递增）
+> **优先找 `titleId`(`<h1>`-`<h3>`)**，`descriptionIds` 一定在它之后；`paragraphIds` 从区间起点起（见下「文档序区间」）
 
 #### 主段落流（P）
 
@@ -92,7 +92,7 @@
 ```html
 <!-- 主段落流 [K] + 标题/说明(计入 ≥ 2 规模) -->
 <article data-idx="K">
-  <!-- titleId/descriptionIds 在主段落流内时，优先使用他们段落块 ID；titleId/descriptionIds 可能会比 paragraphIds 小 -->
+  <!-- titleId/descriptionIds 在主段落流内时：首 `paragraphIds` 块 [A] < titleId/descriptionIds（嵌于首块子树）< 后续块；首块即区间起点 -->
   <!-- 段落块一定取流的直接子元素 [A]，而不是其内部 [A1, A2] -->
   <div data-idx="A">
     <h1 data-idx="A1">文章标题</h1>
@@ -191,11 +191,11 @@
 
 - 成流判据在文章主体范围内应用，页面级包装不因包含段落流而成流
 
-- **文档序区间（产物原则）**：文章主体在文档中是一段连续区间，顺序固定为 `titleId` → `descriptionIds` → `paragraphIds`——三者 ID 值整体非递减（`titleId` ≤ 所有 `descriptionIds` ≤ `paragraphIds` 最小值；流内标题/说明可同时是 `paragraphIds` 首段元素，此时首元素 ID 相等）。`titleId` 是文章主体起点；`descriptionIds` 紧随其后；`paragraphIds` 在最后。据此：
-  - **titleId 之前**出现的元素（封面、页眉、站点导航、hero 标题上方的 eyebrow / 装饰性 tagline）是**外部元素**，不进任何键——后续步骤自然裁掉（流外噪音无须标记）
+- **文档序区间（产物原则）**：文章主体在文档中是一段连续区间，顺序固定为 `titleId` → `descriptionIds` → `paragraphIds`——`titleId` ≤ 所有 `descriptionIds`。标题/说明可在流外（`descriptionIds` < `paragraphIds` 最小值，标题/说明在流前），或在流内首段（`paragraphIds` 最小值 ≤ `titleId`——标题/说明即首 `paragraphIds` 块、或按「取直接子元素」嵌于首块子树；首块即区间起点）。**区间起点 = min(`titleId`, `paragraphIds` 最小值)**。据此：
+  - **区间起点之前**、不在任何键中的元素（封面、页眉、站点导航、hero 标题上方的 eyebrow / 装饰性 tagline）是**外部元素**——后续步骤自然裁掉（流外噪音无须标记）
   - **落在 `paragraphIds` 区间内**（导语/正文之后）的「摘要 / 路线图 / 要点」类卡片，归 `paragraphIds` 作标量块，**不归 `descriptionIds`**——它已是正文内容，不是前置元数据
   - 该区间是文章主体的边界判据：区间之外的非文章结构（footer、相关推荐、评论、浮窗等）一律外部、不标
-  - **技巧**：优先找 `titleId`(`<h1>`-`<h3>`)，`descriptionIds` / `paragraphIds` 一定在它之后
+  - **技巧**：优先找 `titleId`(`<h1>`-`<h3>`)，`descriptionIds` 一定在它之后；`paragraphIds` 从区间起点起——流外时起点 = `titleId`，流内首段时起点 = 首 `paragraphIds` 块（≤ `titleId`）
 
 ## 结构说明（`2_clean_snapshot.html`）
 
