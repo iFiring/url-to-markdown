@@ -73,3 +73,25 @@ URL：https://developers.openai.com/api/docs/guides/prompt-caching（复用既�
 - mathReplaced=0 说明：该页 19 个 `<math>` 的 annotation 均无 `encoding="application/x-tex"`（非 KaTeX 双胞胎形态），规则②按"无 annotation 保留原树"正确放行；公式在骨架中由 annotation 文本手工转写，9_markdown 命中不受影响
 
 - 2026-08-29 追记：`__u2mLatexText` 分级信任扩展（未声明 encoding 的裸 annotation 也信；显式声明非 TeTeX 编码仍拒）后重跑步骤 6——`mathReplaced` 0→19、MathML 残留 0、`6_article.html` 110.5KB→96.7KB（累计 -59%）。工作目录中 7/8/9 产物仍为扩展前生成（公式内容一致——LLM 转录与机械替换等价），下次完整跑批自然对齐
+
+## 5. 步骤 7-9 端到端（修订后骨架契约回归，2026-09-02 新增）
+
+两页已有步骤 0-6 产物（`working/mmh1.top_article_prompt-cache.html/`、`working/developers.openai.com_api_docs_guides_prompt-caching/`），按修订后 `references/markdown_skeleton_guide.md` 重跑：步骤 7（子代理读 `6_article.html` 写 `7_skeleton.json`）→ `node script/screenshot_trans.mjs --url <URL>` → `node script/render_skeleton.mjs --url <URL>`，各步 stdout 单行 `ok`。
+
+mmh1 页检查点（中文博客，多层级视觉模块密集）：
+
+- 四处多层级模块（cache scope 层级图 / BAD-OK 对比 ×2 / 三面板账本）判 `trans2img`，链形如 `[133]`、`[343]`、`[467]`、`[599]`（链首即容器）
+- 两处带标题栏代码块（idx 234/536）判 `code`+`p` 而非 trans2img；`lang` 取自 `<code data-language>`（tsx/jsonc）
+- byline（idx 72 原文/作者/日期/阅读）收敛为单个 `p`；「01」-「07」圆形徽章不入标题文本
+- 图表内 LONG_TEXT（如 9/10/11）不被引用；9_markdown 无同段重复
+
+openai 页检查点（英文文档，展开器/嵌套图解/UI 控件密集）：
+
+- 嵌套图解（figure 3059/3363，位于展开器内）的 trans2img 链取局部（链首为展开器内容内的独占包裹层），不含展开器自身（3045/3351）——双向独占链新定义
+- 3 处 UI 控件残留（`role="group"` 选项卡 / `role="button"` 触发器，idx 2101/2233/3119）不产生条目；9_markdown 无 "JavaScriptPython"、"Earlier modelsGPT-5.6+" 拼接残留
+- 数学节 `$…$` / 块级公式照抄；裸 `pre` 自带边框背景仍判 `code`；代码左侧行号（`1<!-- -->2<!-- -->` 形态）删除
+- 两个真实表格（idx 1998/2761）走 `table`；div 网格图解走 `trans2img`
+
+两页共同：9_markdown 目检标题层级合理、无垃圾条目、trans2img 图片路径有效（`assets/trans/{id}.webp`）。
+
+记录：每页 skeleton 条目数 / trans2img 条目与 id 列表 / 发现的契约偏差。
