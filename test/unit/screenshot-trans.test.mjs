@@ -461,8 +461,8 @@ test('screenshot_trans.mjs: 3_key_ids.json 非四键契约时报 error（旧五�
   const cases = [
     // 旧五键文件：无 paragraphIds → 拒收并指回步骤 3
     { name: 'oldfive', keyIds: { titleIds: [1], descriptionIds: [], standaloneIds: [], listFlowIds: [2, 20], listFlowDeleteIds: [] }, match: 'paragraphIds' },
-    // titleId 与段落块重叠：四键互不相交
-    { name: 'overlap', keyIds: { titleId: 5, descriptionIds: [], paragraphIds: [5, 20], dumpIds: [] }, match: '重叠' },
+    // titleId 与 descriptionIds 重叠：仍互不相交（title/desc ∩ paragraphIds 已允许）
+    { name: 'overlap', keyIds: { titleId: 5, descriptionIds: [5], paragraphIds: [20], dumpIds: [] }, match: '重叠' },
     // paragraphIds 非法成员：块 ID 应为正整数
     { name: 'badmember', keyIds: { titleId: 1, descriptionIds: [], paragraphIds: [2, 'x'], dumpIds: [] }, match: '非法成员' },
   ];

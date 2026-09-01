@@ -201,7 +201,8 @@ test('extract_styled.mjs: paragraphIds 为空或含非法成员时报 error', as
 });
 
 test('extract_styled.mjs: 四键标记重叠时报 error', async () => {
-  const a = setupTmp('overlap1', { titleId: 3, descriptionIds: [6], paragraphIds: [6, 7], dumpIds: [] });
+  // titleId 与 descriptionIds 重叠：仍互不相交（title/desc ∩ paragraphIds 已允许，见 key-ids 单测）
+  const a = setupTmp('overlap1', { titleId: 3, descriptionIds: [3], paragraphIds: [6, 7], dumpIds: [] });
   const r1 = await runExtract(a.tmpRoot);
   assert.equal(r1.code, 1);
   const out1 = JSON.parse(r1.stdout);
