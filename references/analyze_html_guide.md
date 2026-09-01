@@ -33,7 +33,7 @@
 
   - **主段落流（顶层）**——文章正文的最外层内容序列容器（在「文章主体范围」内语义识别：承载正文主体、排除页眉/导航/页脚/封面等页面级包装；页面级包装不因包含段落流而成流）：
     - **不做标题头块排除**——文章主标题是 `titleId`、hero/元数据是 `descriptionIds`，都不进主段落流；主段落流从正文第一块起（导语/首节/首段）。主段落流中出现的非主级标题（如扁平分部 `<h2>`）是普通标量块，不特殊处理
-    - **不要求锚点块**——直接子块可全是平行的、无嵌套关系的子段落流，如 `[[1,[2]], [3,[4]]]`；只要 ≥ 2 个内容子块（段落块/子流；标题/说明块计入规模但不进 `paragraphIds`、噪音不计）即成流。剔除标题/说明/噪音后只剩一个内容子块者是**透明包装层**，向内取（见「一流一维」）
+    - **不要求锚点块**——直接子块可全是平行的、无嵌套关系的子段落流，如 `[[1,[2]], [3,[4]]]`；只要 ≥ 2 个内容子块（段落块/子流；**标题/说明块计入规模**但不进 `paragraphIds`、噪音不计）即成流。剔除标题/说明/噪音后只剩一个内容子块者是**透明包装层**，向内取（见「一流一维」）
     - 块按文档序排列；子段落流占一个数组槽、其容器 ID 不进 JSON
 
   - **子段落流（嵌套）**——主段落流或更上层子流内、嵌套的内容序列：
@@ -57,44 +57,126 @@
   - **必须确定不属于文章内容**，不确定不能带上；噪音元素内部可能会有 `<ul>`（导航/目录/推荐）/`<p>`/`<h>` 等段落元素——**语义门独立于成流判据**，导航/目录结构上完全符合成流条件，语义上仍是噪音
   - dumpIds 应该优先取流内最高的父元素/祖先元素，而不是一堆子孙元素
 
-### 示例
+### 「段落流」示例
 
-子段落流三形态（A/B/C）+ 主段落流平行子流（M），均走同一条判据：
+> **优先找 `titleId`(`<h1>`-`<h3>`)**，`descriptionIds` / `paragraphIds` 一定在它之后（`titleId` → `descriptionIds` → `paragraphIds` 整体顺序递增）
+
+#### 主段落流（P）
+
+```html
+
+<div data-idx="A">
+  <h1 data-idx="A1">文章标题</h1>
+</div>
+
+<div data-idx="B">
+  <p data-idx="B1">文章说明</p>
+</div>
+
+<!-- 主段落流 [P] + 锚点块 [P1, P2] + 子段落流 [P3] -->
+<article data-idx="P">
+  <h2 data-idx="P1">…</h2>
+  <p data-idx="P2">…</p>
+  <section data-idx="P3">
+    <header data-idx="P4"><h2 data-idx="x">…</h2></header>
+    <div data-idx="P5"><pre data-idx="x">…</pre></div>
+    <p data-idx="P6">…</p>
+  </section>
+</article>
+<!-- 标题块：A1 ；说明块：[B1] -->
+<!-- 主段落流：[P1, P2, [P4, P5, …]]（P/P3 只是容器，自身不进 JSON）-->
+```
+
+#### 主段落流（K）包含标题/说明
+
+```html
+<!-- 主段落流 [K] + 标题/说明(计入 ≥ 2 规模) -->
+<article data-idx="K">
+  <div data-idx="A">
+    <h1 data-idx="A1">文章标题</h1>
+    <p data-idx="A2">文章说明</p>
+  </div>
+  <section data-idx="M1">
+    <div data-idx="M2"><h2 data-idx="x">…</h2></div>
+    <div data-idx="M3"><p data-idx="x"></p></div>
+    <div data-idx="M4"><ol data-idx="x">…</ol></div>
+  </section>
+  <section data-idx="M5">
+    <header data-idx="M6"><h2 data-idx="x">…</h2></header>
+    <div data-idx="M7"><pre data-idx="x"></pre></div>
+    <div data-idx="M8"><p data-idx="x">…</p></div>
+  </section>
+</article>
+<!-- 标题块：A1 ；说明块：[A2] -->
+<!-- 主段落流：[[M2, M3, M4, …], [M6, M7, M8, …]]（K/M1/M5 只是容器，自身不进 JSON）-->
+```
+
+#### 主段落流（M）包含平行子流（M1 + M7(M5)）
+
+```html
+
+<div data-idx="A">
+  <h1 data-idx="A1">文章标题</h1>
+</div>
+
+<div data-idx="B">
+  <p data-idx="B1">文章说明</p>
+</div>
+
+<!-- 主段落流平行子流：直接子块全是子流、无锚点 → 主段落流不要求锚点，仍成流 -->
+<article data-idx="M">
+  <section data-idx="M1">
+    <div data-idx="M2"><h2 data-idx="x">…</h2></div>
+    <div data-idx="M3"><p data-idx="x">…</p></div>
+    <div data-idx="M4"><ol data-idx="x">…</ol></div>
+  </section>
+  <!-- M5 是带标题的流（规则 2：标题头 M6 + 单子流 M7），与 M1（规则 1：≥2 锚点子流）形态不同；M7 透明，其子流 [M8, M9, …] 并入 M5 数组 -->
+  <section data-idx="M5">
+    <div data-idx="M6"><h2 data-idx="x">…</h2></div>
+    <div data-idx="M7">
+      <div data-idx="M8"><p data-idx="x">…</p></div>
+      <div data-idx="M9"><pre data-idx="x">…</pre></div>
+      <div data-idx="M10"><table data-idx="x">…</table></div>
+    </div>
+  </section>
+</article>
+<!-- 标题块：A1 ；说明块：[B1]-->
+<!-- 主段落流：[[M2, M3, M4, …], [M6, [M8, M9, …]]]（M/M1/M5 只是容器，自身不进 JSON）-->
+```
+
+#### 子段落流三形态（A/B/C）
 
 ```html
 <!-- 形态 A：裸标题 + 扁平正文（无 body 包装）——首个 h2 是标题头块、居首位标量；正文 ≥2 锚点 → 成流 -->
 <div data-idx="A">
   <h2 data-idx="A1">章节标题</h2>
-  <p data-idx="A2">{{LONG_TEXT_k|n_chars}}</p>
-  <p data-idx="A3">{{LONG_TEXT_k|n_chars}}</p>
+  <p data-idx="A2">…</p>
+  <p data-idx="A3">…</p>
 </div>
 <!-- 在上层流中：[A1, A2, A3] -->
+```
 
-<!-- 形态 B：header + body 子流（原「章节模式」，现不再特殊）-->
-<!-- [B1] 标题头块标量；[B3] 是子流 → 占数组槽；B/B3 自身不进 JSON -->
+```html
+<!-- 形态 B：div + body 子流-->
+<!-- [B1] 标题头块标量；[B3] 是子流 → 占数组槽；B/B3 本身只是容器，自身不进 JSON -->
 <section data-idx="B">
-  <header data-idx="B1"><span>01</span><h2 data-idx="B2">章节标题</h2></header>
+  <div data-idx="B1"><span>01</span><h2 data-idx="B2">章节标题</h2></div>
   <div data-idx="B3" class="section__body">
-    <p data-idx="B4">{{LONG_TEXT_k|n_chars}}</p>
-    <p data-idx="B5">{{LONG_TEXT_k|n_chars}}</p>
+    <p data-idx="B4">…</p>
+    <p data-idx="B5">…</p>
     <div data-idx="B6" class="diagram">…多级 div 可视模块，整块不拆…</div>
   </div>
 </section>
 <!-- 在上层流中：[B1, [B4, B5, B6]] -->
+```
 
-<!-- 形态 C：标题头块 + 单个非流块 → 不成流，整棵是上层流的一个块 -->
+```html
+<!-- 形态 C：标题头块 + 单个「非流块/说明块」 → 不成流，整棵是上层流的一个块 -->
 <section data-idx="C">
   <header data-idx="C1"><span>02</span><h2 data-idx="C2">章节标题</h2></header>
-  <p data-idx="C3">{{LONG_TEXT_k|n_chars}}</p>
+  <p data-idx="C3">…</p>
 </section>
 <!-- 在上层流中：标量 C（C1/C2/C3 都不进 JSON，整棵一个块）-->
-
-<!-- 主段落流平行子流：直接子块全是子流、无锚点 → 主段落流不要求锚点，仍成流 -->
-<article data-idx="M">
-  <section data-idx="M1"><header data-idx="M2"><h2 data-idx="M3">…</h2></header><div data-idx="M4">…</div></section>
-  <section data-idx="M5"><header data-idx="M6"><h2 data-idx="M7">…</h2></header><div data-idx="M8">…</div></section>
-</article>
-<!-- 主段落流：[[M2, [M4…]], [M6, [M8…]]]（M/M1/M5 自身不进 JSON）-->
 ```
 
 ## 原则/约束
@@ -107,10 +189,11 @@
 
 - 成流判据在文章主体范围内应用，页面级包装不因包含段落流而成流
 
-- **文档序区间（产物原则）**：文章主体在文档中是一段连续区间，顺序固定为 `titleId` → `descriptionIds` → `paragraphIds`——三者的 ID 值整体递增（`titleId` < 所有 `descriptionIds` < `paragraphIds` 最小值）。`titleId` 是文章主体起点；`descriptionIds` 紧随其后；`paragraphIds` 在最后。据此：
+- **文档序区间（产物原则）**：文章主体在文档中是一段连续区间，顺序固定为 `titleId` → `descriptionIds` → `paragraphIds`——三者的 ID 值整体递增。`titleId` 是文章主体起点；`descriptionIds` 紧随其后；`paragraphIds` 在最后。据此：
   - **titleId 之前**出现的元素（封面、页眉、站点导航、hero 标题上方的 eyebrow / 装饰性 tagline）是**外部元素**，不进任何键——后续步骤自然裁掉（流外噪音无须标记）
   - **落在 `paragraphIds` 区间内**（导语/正文之后）的「摘要 / 路线图 / 要点」类卡片，归 `paragraphIds` 作标量块，**不归 `descriptionIds`**——它已是正文内容，不是前置元数据
-  - 该区间是文章主体的边界判据：区间之外的非文章结构（footer、相关推荐、评论、Docs agent 浮窗等）一律外部、不标
+  - 该区间是文章主体的边界判据：区间之外的非文章结构（footer、相关推荐、评论、浮窗等）一律外部、不标
+  - **技巧**：优先找 `titleId`(`<h1>`-`<h3>`)，`descriptionIds` / `paragraphIds` 一定在它之后
 
 ## 结构说明（`2_clean_snapshot.html`）
 
@@ -122,9 +205,9 @@
 
 - `{{TABLE_TAG|y_rows|x_cols}}`：表格整体占位，y = 行数（`<tr>` 数），x = 列数（各行 colspan 之和的最大值，即网格列数）。行列规模是判读表格的信号——大表（如 `30_rows` 级）大概率是核心数据载体；完整表格在后续步骤从带样式版保真
 
-- `{{HIDDEN_TAG|n_chars;n_a/n_div/...}}` 为带 `hidden` 属性的元素，折叠了子树（模态/抽屉/移动端导航/FAQ/手风琴等）；token 是真实文本规模与标签构成（计数降序），标明其后是整块折叠正文
+- `{{HIDDEN_TAG|n_chars;n_a/n_div/…}}` 为带 `hidden` 属性的元素，折叠了子树（模态/抽屉/移动端导航/FAQ/手风琴等）；token 是真实文本规模与标签构成（计数降序），标明其后是整块折叠正文
 
-### 示例：
+### 示例（`2_clean_snapshot.html`）：
 
 ```html
 <html>
@@ -132,12 +215,12 @@
   <div data-idx="1" class="xxx">
 
     <!-- 全局唯一标题 titleId<2> -->
-    <h1 data-idx="2"><span>Title...</span></h1>
+    <h1 data-idx="2"><span>Title…</span></h1>
   </div>
 
   <!-- [3]/[4] 为独立的文章说明，纳入 descriptionIds；因为是独立的，选 [3] 和选 [4] 没有本质区别 -->
   <div data-idx="3">
-    <p data-idx="4"><span>This is an article about ...</span></p>
+    <p data-idx="4"><span>This is an article about …</span></p>
   </div>
   <!-- 最外层段落流容器 [6] 的祖先元素 [5]，不能算在 paragraphIds 内（多包一层 "[]" 没有意义） -->
   <div data-idx="5" class="xxx">
@@ -152,12 +235,12 @@
       </div>
 
       <!-- 噪音元素 [9] 在段落流之内 → 标 dumpIds -->
-      <div data-idx="9" class="ad">Ad...</div>
+      <div data-idx="9" class="ad">Ad…</div>
 
       <!-- 段落块通常不是固定的元素，而是多种元素的复杂组合 -->
       <!-- [10] 直接子块只有 2 个（<3）不成流——整个作为 [6] 的一个块，取 [10] 而不是 [11, 12] -->
       <div data-idx="10">
-        <h2 data-idx="11">...</h2>
+        <h2 data-idx="11">…</h2>
         <pre data-idx="12">{{PRE_CODE_TAG|x_lines}}</pre>
       </div>
 
@@ -191,10 +274,10 @@
                 <table data-idx="26">{{TABLE_TAG|8_rows|4_cols}}</table>
               </div>
             </figure>
-            <p data-idx="27"><span>...</span></p>
+            <p data-idx="27"><span>…</span></p>
             <dl data-idx="28">
-              <dt data-idx="29">...</dt>
-              <dd data-idx="30">...</dd>
+              <dt data-idx="29">…</dt>
+              <dd data-idx="30">…</dd>
             </dl>
           </div>
         </section>
@@ -205,7 +288,7 @@
             <span data-idx="33">02</span>
             <h2 data-idx="34">章节标题</h2>
           </header>
-          <p data-idx="35"><span>...</span></p>
+          <p data-idx="35"><span>…</span></p>
         </section>
 
         <!-- 被 hidden 折叠的隐藏元素，在段落流中要算作一个段落块（也是 [14] 成流的锚点） -->
@@ -223,13 +306,14 @@
         </ul>
         <p data-idx="43">01 xxx</p>
       </nav>
+    </section>
   </div>
 
   <!-- 明确是噪音元素，但在段落流之外——无须标记，白名单外元素在后续步骤自然裁掉 -->
   <div data-idx="44" class="dialog">
-    <h2 data-idx="45">...</h2>
-    <p data-idx="46">...</p>
-    <section data-idx="47">...</section>
+    <h2 data-idx="45">…</h2>
+    <p data-idx="46">…</p>
+    <section data-idx="47">…</section>
     <div data-idx="48" class="button">confirm</div>
   </div>
 </body>
