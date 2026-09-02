@@ -4,16 +4,16 @@
  * 同一 1_snapshot.html 先后渲染两次，cfg.mode 分叉）：
  *   趟 1（styled）结构清洗 + astro 解包 + 长文本占位 + SVG 瘦身 + 属性白名单
  *     → 2_clean_style_snapshot.html（供步骤 4 裁剪）+ 2_long_text.json
- *   趟 2（clean）结构清洗 + 长文本占位 + K1-K7/K9 机械规则瘦身
+ *   趟 2（clean）结构清洗 + K1-K11 机械规则瘦身 + 长文本占位（K11 之后、无编号）
  *     → 2_clean_snapshot.html（结构视图）
  * 零样式计算：不做 juice 内联、不做 CSS 隐藏检测——CSS 隐藏子树按可见
  * 保留，清洗版的隐藏折叠只认 HTML 裸 hidden 属性（K5）。
  *
- * 长文本占位两趟共享（2026-08-31 修订，恢复 simplify 前"两版共享、编号逐
- * 一对应"）：两趟在共享段同位执行，清洗版携带与带样式版编号一致的
- * {{LONG_TEXT_k|n_chars}} 占位符；还原链不变——步骤 7 引用、步骤 8 回填仍
- * 只走带样式版路径。K8 行内 run token 化废除：run 整段折叠吞噬行内结构，
- * 按文本节点占位只折叠超阈值的单个文本节点、行内结构保真。
+ * 长文本占位分两趟各自执行（2026-09-03 修订，自共享段移出）：styled 趟在
+ * 分支开头带编号执行（{{LONG_TEXT_k|n_chars}}，恢复清单 2_long_text.json
+ * 由此产出）；clean 趟在 K11 之后无编号执行（{{LONG_TEXT|n_chars}}——唯一
+ * 消费者步骤 3 只看结构+体量信号）。还原链不变——步骤 7 引用、步骤 8 回填
+ * 仍只走带样式版路径。
  *
  * 共同结构清洗（两趟一致；实现在 lib/page-clean-snapshot.js，共享步骤 1-9）：
  *   【整体删除】与正文结构无关的噪声，连子树一起删：
@@ -55,12 +55,14 @@
  *     （行列/行数规模信号；CODE 行数来自 styled 趟 walkLines 收集、
  *     两版 k 对齐，成功代码块带样式版也折叠为同形占位符）、K9 空白压缩、
  *     K10 空壳 span 拆包、K11 纯视图文本折叠 {{VIEW_TEXT|n_chars/n_words}}
- *     （仅清洗版：极大纯 div/span 子树与 p>span 形态（p 根子树只许
- *     text/span、p 不入纯树）壳保留、内容整棵折为单占位符——含 LT 模块
- *     同样整棵折、LT 随折吞没（clean LT 集合 ⊆ styled，还原链走带样式版
- *     不受影响）；门槛——被折部分文本量 ≥8 汉字/≥6 词、结构量纯 div 树
- *     内部 div>6 或含 span 树合计>4（p 根同 span 档）；豁免 a/button/
- *     h1-h3 后代与 hidden/svg/MathML 阻断）
+ *     （仅清洗版：极大纯 div+行内 子树与 p>行内 形态（p 根子树只许文本与
+ *     行内元素、p 不入纯树）壳保留、内容整棵折为单占位符——含长文本模块
+ *     同样整棵折、原文随折吞没（K11 先于 LT 执行，clean 不为模块内长文本
+ *     生成占位符；clean LT 后缀 ⊆ styled，还原链走带样式版不受影响）；
+ *     门槛——被折部分文本量 ≥8 汉字/≥6 词、结构量纯 div 树内部 div>6 或
+ *     含行内树合计>4（p 根同行内档）；允许集 = a/strong/b/em/i/code/br/
+ *     MathML + K9 同族剔 img；豁免 a/button/h1-h3 后代与 hidden/svg/img
+ *     阻断）
  *
  * stdout 输出（有且仅有一行 JSON，日志一律走 stderr）:
  *   {"status":"ok","cleanedSnapshot":"...","styledSnapshot":"...",

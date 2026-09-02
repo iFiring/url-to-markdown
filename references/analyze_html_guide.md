@@ -210,7 +210,7 @@
 
 - 链接与图片元素**不带 URL**（href/src 已清空，链接文本与 alt 保留）
 
-- `{{LONG_TEXT_k|n_chars}}` / `{{LONG_TEXT_k|n_words}}` 为长文本占位符，超阈值（>16 汉字 / >12 词）的**单个文本节点**折叠为编号占位符，短文本（≤16 汉字 / ≤12 词）保留原文；占位符分布是判读线索——段落/标题/按钮的位置与体量看得到；`<title>` 原文保留（不占位）
+- `{{LONG_TEXT|n_chars}}` / `{{LONG_TEXT|n_words}}` 为长文本占位符（清洗版**无编号**——编号只存在于带样式版还原链，与判读无关），超阈值（>16 汉字 / >12 词）的**单个文本节点**折叠为占位符，短文本（≤16 汉字 / ≤12 词）保留原文；占位符分布是判读线索——段落/标题/按钮的位置与体量看得到；`<title>` 原文保留（不占位）
 
 - `{{CODE_k|x_lines}}` 为代码块内容占位，k = 文档序编号（1 起、跳过 `[hidden]` pre）、x = 代码行数（按占位前原文的行结构计）；`data-language` 在 pre 属性上。ok/failed 在清洗版同为占位符（clean 恒折叠），标 paragraphIds 的方式与表格占位符一致；成功代码块的原文已由步骤 2 预计算存 `2_code.json`、步骤 8 还原
 
@@ -218,7 +218,7 @@
 
 - `{{HIDDEN_TAG|n_chars;n_a/n_div/…}}` 为带 `hidden` 属性的元素，折叠了子树；token 是真实文本规模与标签构成（计数降序），标明其后是整块折叠内容。hidden 元素按内容语义判身份：文章正文（FAQ/附录/展开收起）→ 段落块（也是锚点）；页面功能（模态/抽屉/移动端导航）→ 流内标 `dumpIds`、流外不标
 
-- `{{VIEW_TEXT|n_chars}}` / `{{VIEW_TEXT|n_words}}` 为**纯视图文本占位符**：可视模块（图解/图表/对比卡片/公式渲染等）内部「只含 div/span + 文本」的极大子树、或「只含 text/span」的 p 根折叠、**壳元素保留**——标签、class、data-idx、aria-label 原样。模块内即使含 `{{LONG_TEXT_k}}` 也**整棵折叠、LT 随折吞没**（`n` 是整模块文本体量信号，含被吞 LT）。判读要点：① **壳的 class/aria-label 标识模块身份**（如 `ra-raw`、`katex-html`）、`n` 是模块文本体量信号；② 标 paragraphIds 时以**壳的 `data-idx` 整块标记**（可视模块整棵标记、内部不拆），占位符不是段落文本、不要标记壳内已被折叠的后代 id。文本量不足（<8 汉字/6 词）、结构单薄（纯 div 树 ≤6 内部 div、含 span 树 ≤4 元素）的子树**保留原样**；链接/按钮/标题（h1-h3）内的文本结构、含行内公式的段落（MathML 阻断——它是后续步骤的 LaTeX 源）也不折叠
+- `{{VIEW_TEXT|n_chars}}` / `{{VIEW_TEXT|n_words}}` 为**纯视图文本占位符**：可视模块（图解/图表/对比卡片/公式渲染等）内部「只含 div + 行内文本元素（span/a/strong/em/code/br/MathML 等）+ 文本」的极大子树、或「只含文本与行内元素」的 p 根折叠、**壳元素保留**——标签、class、data-idx、aria-label 原样。模块内即使含长文本也**整棵折叠、原文随折吞没**（`n` 是整模块文本体量信号）。判读要点：① **壳的 class/aria-label 标识模块身份**（如 `ra-raw`、`katex-html`）、`n` 是模块文本体量信号；② 标 paragraphIds 时以**壳的 `data-idx` 整块标记**（可视模块整棵标记、内部不拆），占位符不是段落文本、不要标记壳内已被折叠的后代 id。文本量不足（<8 汉字/6 词）、结构单薄（纯 div 树 ≤6 内部 div、含行内元素树 ≤4 元素）的子树**保留原样**；链接/按钮/标题（h1-h3）内的文本结构、含图片（img）的子树也不折叠
 
     折叠前后对照（折叠前形态仅示意，你在 `2_clean_snapshot.html` 里看到的是折叠后形态）：
 
@@ -239,17 +239,17 @@
     <div class="ra-raw" data-idx="90">{{VIEW_TEXT|24_chars}}</div>
     ```
 
-    同款折叠也出现在：图表轴刻度行（一组 `0`/`2.5k`/`5k` 刻度 div）、图解步骤（`Step 1`/箭头碎片）、KaTeX 视觉孪生（class 含 `katex-html` 的 span 树——公式渲染的 HTML 副本，其兄弟 MathML 才是语义本体）、**p>span 形态**——p 通常不嵌 p、只含 text 或 span，span 数 >4 的纯 span 段落（样式化词组/渲染碎片）整段折叠：
+    同款折叠也出现在：图表轴刻度行（一组 `0`/`2.5k`/`5k` 刻度 div）、图解步骤（`Step 1`/箭头碎片）、KaTeX 视觉孪生（class 含 `katex-html` 的 span 树——公式渲染的 HTML 副本，其兄弟 MathML 才是语义本体）、**p>行内 形态**——p 通常不嵌 p、只含 text 或行内元素，行内元素（span/a/code/strong/MathML 等）数 >4 的纯行内段落（样式化词组/链接密集/行内公式段）整段折叠：
 
     ```html
-    <!-- 折叠前：p 内是纯 span 词组（无 div/p/code/a 等其他标签） -->
+    <!-- 折叠前：p 内是纯行内内容（无 div/p/img 等块级标签；a/code/strong 等行内元素可混排） -->
     <p data-idx="2"><span class="k">alpha</span><span class="k">beta</span><span class="k">gamma</span><span class="k">delta</span><span class="k">epsilon zeta</span></p>
 
     <!-- 折叠后：p 壳保留 -->
     <p data-idx="2">{{VIEW_TEXT|6_words}}</p>
     ```
 
-    反例不折：纯文本段落、含 code/a/行内公式（MathML）的段落、span ≤4 的段落——正常正文段落流原样可见。占位符所在位置即模块原位，按普通可视模块参与成流/锚点判定（div 壳可作块、不能作锚点）
+    反例不折：纯文本段落、含 img 的段落、行内元素 ≤4 的段落——正常正文段落流原样可见。占位符所在位置即模块原位，按普通可视模块参与成流/锚点判定（div 壳可作块、不能作锚点）
 
 ### 示例（`2_clean_snapshot.html`）：
 
@@ -289,7 +289,7 @@
       </div>
 
       <!-- 例外：当行内元素是段落流的直接子元素时，应该当作独立段落块 -->
-      <span data-idx="13">{{LONG_TEXT_k|n_chars}}</span>
+      <span data-idx="13">{{LONG_TEXT|n_chars}}</span>
 
       <!-- 段落流下的独立章节模块，内部还有「子段落流」 -->
       <!-- [14] 首块 [15] 是标题头 → 排除计数、居该子流首位；R = [18]/[31]/[36] ≥2、

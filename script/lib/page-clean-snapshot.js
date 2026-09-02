@@ -7,13 +7,15 @@
  *                → 带样式版 + 恢复清单（供步骤 4 裁剪与后续占位还原）
  *   clean 趟   —— 共享结构清洗 + SVG 清空/样式剥除 + 瘦身规则 → 清洗版
  * 两趟共享同一套结构清洗（步骤 1-9：link/meta/base 删除、骨架删除、播放器
- * 删除、控件删除、空元素级联 + KEEP_EMPTY、astro- 前缀解包）与长文本占位
- * （2026-08-31 修订：占位在共享段末尾同位执行，两版 {{LONG_TEXT_k|n_chars}}
- * 编号逐一对应；折叠统计——K5 hidden 规模、K7 pre 行数——在占位前预计算挂
- * expando，量的始终是原文）。
+ * 删除、控件删除、空元素级联 + KEEP_EMPTY、astro- 前缀解包）与折叠统计预
+ * 计算（K5 hidden 规模、K7 pre 行数量原文挂 expando）。长文本占位自
+ * 2026-09-03 起移出共享段、两趟各自执行：styled 趟带编号 {{LONG_TEXT_k|n_chars}}
+ * （还原链消费），clean 趟在 K11 之后执行且无编号 {{LONG_TEXT|n_chars}}——
+ * 唯一消费者步骤 3 只看结构+体量信号。
  *
- * 清洗版含 LONG_TEXT 占位符（与带样式版编号一致；K11 纯视图折叠可吞模块内
- * LT——孪生守卫为 clean ⊆ styled，步骤 3 少看见模块内 LT，还原链不受影响）；
+ * 清洗版含无编号 LONG_TEXT 占位符（K11 纯视图折叠先于占位执行、可吞模块内
+ * 长文本——孪生守卫为 clean LT 后缀 ⊆ styled，步骤 3 少看见模块内 LT，
+ * 还原链不受影响）；
  * 还原链只走带样式版——步骤 7 骨架引用来自文章视图（styled 路径），步骤 8
  * 从 2_long_text.json 回填，清洗版占位不被任何后续步骤消费。
  *
@@ -178,14 +180,13 @@ function __u2mCleanSnapshot(cfg) {
     wrap.parentNode.removeChild(wrap);
   }
 
-  // ---- 折叠统计预计算 + 长文本占位（两趟共享）----
-  // 长文本占位上移至共享段（2026-08-31 修订，恢复 simplify 前"两版共享、
-  // 编号逐一对应"的形态）：两趟在同一 DOM 状态、同一位置执行，清洗版从此
-  // 携带与带样式版编号一致的 {{LONG_TEXT_k|n_chars}} 占位符；K8 行内 run
-  // 整段折叠废除——run 吞噬行内结构（a/code 混排看不出来），而按文本节点
-  // 占位只折叠超阈值的单个文本节点、行内结构保真。
+  // ---- 折叠统计预计算（两趟共享）+ 长文本占位函数定义 ----
+  // 长文本占位（2026-09-03 修订）移出共享段、两趟各自调用 foldLongText：
+  // styled 趟在分支开头执行（带编号，原文按编号收集 → 2_long_text.json）；
+  // clean 趟在 K11 之后执行（无编号——步骤 3 只看结构+体量；K11 先整棵折叠
+  // 纯视图模块，幸存文本节点再占位）。阈值/豁免/中英文标准两趟同源。
   // K5 hidden 规模与 K7 pre 行数量的是子树原文，必须在占位之前预计算挂
-  // expando：占位之后原文变成 {{LONG_TEXT_k|N_unit}} 语法串，届时再量会把
+  // expando：占位之后原文变成 {{LONG_TEXT…N_unit}} 语法串，届时再量会把
   // 语法当文本（规模虚高）、丢换行（行数塌缩为 1）。表格形状预计算不受
   // 占位影响（数 tr/td/colspan、不动文本），仍在 clean 趟 K2 之前。
 
@@ -220,10 +221,13 @@ function __u2mCleanSnapshot(cfg) {
     prePre[i].__u2mPreLines = countPreLines(prePre[i]);
   }
 
-  // 9. 长文本占位（两趟共享，编号逐一对应；中英文分标准）：含汉字（CJK）→
-  //    中文标准：字符数 > MIN_CHARS → {{LONG_TEXT_k|n_chars}}；不含汉字 →
-  //    英文标准：单词数 > MIN_WORDS → {{LONG_TEXT_k|n_words}}。原文按占位
-  //    编号收集进 longTexts，由 CLI 写 2_long_text.json 供后续恢复。
+  // 9. 长文本占位（foldLongText；中英文分标准）：含汉字（CJK）→ 中文标准
+  //    字符数 > MIN_CHARS；不含汉字 → 英文标准单词数 > MIN_WORDS。
+  //    numbered=true（styled 趟，分支开头调用）：占位 {{LONG_TEXT_k|n_unit}}、
+  //    原文按编号收集进 longTexts 由 CLI 写 2_long_text.json 供后续恢复；
+  //    numbered=false（clean 趟，K11 之后调用）：占位 {{LONG_TEXT|n_unit}}、
+  //    不收集——清洗版唯一消费者是步骤 3（结构+体量信号），编号无意义，
+  //    恢复清单只来自带样式版。
   //    纯空白文本节点（源码缩进/换行）不含语义内容，不占位——否则会在
   //    父子元素之间凭空捏造"长文本"，误导步骤 3 的结构识别。
   //    svg/style 子树内的文本不占位——两趟随后都会删 SVG 内容（styled 瘦身
@@ -241,37 +245,44 @@ function __u2mCleanSnapshot(cfg) {
     var p = textNode.parentElement;
     return !!(p && p.closest && p.closest('svg, style, h1, h2, h3'));
   }
-  var k = 0;
-  var longTexts = {};
-  var walker = document.createTreeWalker(
-    document.body,
-    NodeFilter.SHOW_TEXT,
-    null,
-    false
-  );
-  var textNodes = [];
-  var node;
-  while ((node = walker.nextNode())) {
-    textNodes.push(node);
-  }
-  for (var i = 0; i < textNodes.length; i++) {
-    var tn = textNodes[i];
-    if (skipPlaceholder(tn)) continue;
-    var text = tn.textContent;
-    if (text.trim() === '') continue;
-    var n, unit;
-    if (CJK_RE.test(text)) {
-      if (text.length <= MIN_CHARS) continue;
-      n = text.length;
-      unit = 'chars';
-    } else {
-      n = text.trim().split(/\s+/).length;
-      if (n <= MIN_WORDS) continue;
-      unit = 'words';
+  function foldLongText(numbered) {
+    var k = 0;
+    var longTexts = {};
+    var walker = document.createTreeWalker(
+      document.body,
+      NodeFilter.SHOW_TEXT,
+      null,
+      false
+    );
+    var textNodes = [];
+    var node;
+    while ((node = walker.nextNode())) {
+      textNodes.push(node);
     }
-    k++;
-    longTexts[String(k)] = text;
-    tn.textContent = '{{LONG_TEXT_' + k + '|' + n + '_' + unit + '}}';
+    for (var i = 0; i < textNodes.length; i++) {
+      var tn = textNodes[i];
+      if (skipPlaceholder(tn)) continue;
+      var text = tn.textContent;
+      if (text.trim() === '') continue;
+      var n, unit;
+      if (CJK_RE.test(text)) {
+        if (text.length <= MIN_CHARS) continue;
+        n = text.length;
+        unit = 'chars';
+      } else {
+        n = text.trim().split(/\s+/).length;
+        if (n <= MIN_WORDS) continue;
+        unit = 'words';
+      }
+      if (numbered) {
+        k++;
+        longTexts[String(k)] = text;
+        tn.textContent = '{{LONG_TEXT_' + k + '|' + n + '_' + unit + '}}';
+      } else {
+        tn.textContent = '{{LONG_TEXT|' + n + '_' + unit + '}}';
+      }
+    }
+    return { count: k, texts: longTexts };
   }
 
   // 9b. aria-label 值截断（两趟共享）：保留首句+末句，中间省略为 …。
@@ -300,7 +311,11 @@ function __u2mCleanSnapshot(cfg) {
   // ---- mode 分叉：styled 趟 SVG 瘦身 + 属性白名单后返回；clean 趟继续剥样式 ----
 
   if (mode !== 'clean') {
-    // （长文本占位已上移至两趟共享段——见上方步骤 9，两版编号逐一对应）
+    // 长文本占位（styled 趟，带编号）：在共享清洗后的同一文本状态执行（共享段
+    // 时代该步在 aria 截断前——aria 截断只动属性不动文本节点，DOM 文本状态
+    // 等价，产物逐字节不变）；恢复清单 longTexts 由此趟收集，表格/代码块
+    // 收集（分支末尾）看到的 {{LONG_TEXT_k}} 占位符形态不变
+    var ltStyled = foldLongText(true);
 
     // 10. SVG 瘦身（styled 趟）：只留 svg 标签及其 id/class/data-idx，
     //     删除其余属性与全部子元素——完整 SVG 体积庞大，带样式版只需结构身份
@@ -371,15 +386,15 @@ function __u2mCleanSnapshot(cfg) {
 
     return {
       html: '<!DOCTYPE html>\n' + document.documentElement.outerHTML,
-      longTextCount: k,
-      longTexts: longTexts,
+      longTextCount: ltStyled.count,
+      longTexts: ltStyled.texts,
       tables: tablesCollected,
       codes: codesCollected
     };
   }
 
-  // （长文本占位已在两趟共享段执行——清洗版同样携带 {{LONG_TEXT_k|n_chars}}，
-  //   编号与带样式版逐一对应；K8 行内 run token 化已废除）
+  // （长文本占位在 clean 趟由 K11 之后的 foldLongText(false) 执行——无编号
+  //   {{LONG_TEXT|n_unit}}，见文件头注与 K11 段末尾）
 
   // 11. SVG 清空子树（仅清洗版）：属性由 K2 白名单统一裁剪，data-idx 等存活
   var svgs = document.querySelectorAll('svg');
@@ -602,8 +617,9 @@ function __u2mCleanSnapshot(cfg) {
   //     仅 clean 趟执行：带样式版保留这些 span——其 style 携 font-weight/
   //     color 供步骤 5 finalize 保留与步骤 7 LLM 判粗体/颜色，不能拆。孪生
   //     id 集由此由「相等」放宽为 clean ⊆ styled（step 3 在子集挑、step 4
-  //     在超集查恒命中）；LONG_TEXT 占位符在共享段已赋值，拆包只挪位置不
-  //     改 k，占位符集合守卫不受影响。嵌套空壳 span 迭代到不动点（≤10 轮）。
+  //     在超集查恒命中）；clean 趟长文本占位在 K10 之后才执行（2026-09-03
+  //     后置），拆包挪的是原文文本节点；styled 趟不受影响（K10 仅 clean）。
+  //     嵌套空壳 span 迭代到不动点（≤10 轮）。
   //     span 限定——div 等块级可能承 trans2img 模块边界，不碰。
   for (var round = 0; round < 10; round++) {
     var bareSpans = document.querySelectorAll('span');
@@ -626,49 +642,63 @@ function __u2mCleanSnapshot(cfg) {
   }
 
   // K11. 纯视图文本折叠（仅清洗版，2026-09-02；2026-09-03 门槛修订 + 去 LT
-  //     限制 + p>span 形态）：极大「纯视图子树」——子树只含 div/span 元素 +
-  //     文本/注释节点，或 p 根的「仅 text/span」子树（图表轴刻度、图解步骤、
-  //     对比卡片、KaTeX 视觉孪生等可视模块的内部文本碎片）——整棵内容折叠为
-  //     单个 {{VIEW_TEXT|n_chars/n_words}} 占位符。对步骤 3 这些碎片是噪声
-  //     （可视模块整棵标记、内部不拆）。机制照 K5 HIDDEN_TAG：壳保留（标签 +
-  //     K2 白名单属性——data-idx 可引用、class/aria-label 标识模块身份），仅
-  //     清空子树换占位符；无编号、不进恢复清单——原文在带样式版（步骤 4-8
-  //     输入源完全不动，trans2img/还原链零影响），clean 版占位符不被任何后续
-  //     步骤消费。
+  //     限制 + p>span 形态 + 行内允许集扩展）：极大「纯视图子树」——子树只含
+  //     div + 行内文本类元素 + 文本/注释节点（div 根档），或 p 根的「仅行内
+  //     集」子树（图表轴刻度、图解步骤、对比卡片、KaTeX 视觉孪生等可视模块
+  //     的内部文本碎片）——整棵内容折叠为单个 {{VIEW_TEXT|n_chars/n_words}}
+  //     占位符。对步骤 3 这些碎片是噪声（可视模块整棵标记、内部不拆）。机制
+  //     照 K5 HIDDEN_TAG：壳保留（标签 + K2 白名单属性——data-idx 可引用、
+  //     class/aria-label 标识模块身份），仅清空子树换占位符；无编号、不进恢
+  //     复清单——原文在带样式版（步骤 4-8 输入源完全不动，trans2img/还原链
+  //     零影响），clean 版占位符不被任何后续步骤消费。
   //     极大性 = 父不纯 → 折叠永不吸收纯结构之外的兄弟/内容（div>p/table 等
   //     语义标签是天然边界）。
+  //     行内允许集（2026-09-03 四次修订）：a/strong/b/em/i/code/br/MathML +
+  //     同族 u/s/mark/small/sub/sup/abbr/cite/q/kbd/samp/time（与 K9
+  //     INLINE_TAGS 同族、剔 img——图片是"此处有图"内容信号，不入允许集仍
+  //     阻断）。math 整棵放行：MathML 内部（mi/mo/mn/semantics 等）不逐一检
+  //     查——公式渲染内容，LaTeX 还原链走带样式版（步骤 6 才是 math 消费
+  //     者），clean 版整块可折。扩展仅限行内元素——块级/语义标签（ul/table/
+  //     pre/h4-h6 等）不入允许集、天然阻断，步骤 3 的结构判读不受影响。
   //     折叠门槛（两道，2026-09-03——只折「结构脚手架明显 + 文本量达标」的
   //     子树，短小内容如 {{VIEW_TEXT|3_words}} 不再产生）：
   //     ① 文本量：被折部分 ≥8 汉字 / ≥6 词（viewTextSize 逐节点求和语义，
-  //       与占位符后缀同源；LT 占位符语法串按字面计量——它本就是被折内容）；
-  //     ② 结构量（按形态分档）：纯 div 树内部 div > 6；含 span 的树
-  //       div/span 合计 > 4（span 包裹内容如 katex 孪生更易达标）——结构门
+  //       与占位符后缀同源；K11 先于 LT 执行，量的就是原文）；
+  //     ② 结构量（按形态分档）：纯 div 树内部 div > 6；含行内元素的树
+  //       div/行内合计 > 4（span 包裹内容如 katex 孪生更易达标）——结构门
   //       槛同时保证折叠恒有字节收益（≥5 个内部元素的序列化远超占位符
   //       ~20B），不再需要独立的 innerHTML 阈值。
-  //     含 {{LONG_TEXT_k}} 的模块整棵折叠、LT 随折吞没（2026-09-03 三次修订：
-  //     保留式折叠留下的可见 LT 行使折叠量太少）——孪生守卫由「两版 LT 集合
-  //     相等」放宽为 clean ⊆ styled：步骤 3 少看见模块内 LT（可视模块整块标
-  //     记、内部本就不拆），还原链走带样式版不受影响。纯 LT 文本行（0 内部
-  //     元素）过不了结构门槛、天然不折。
-  //     p>span 形态（2026-09-03 新增）：p 通常不嵌 p、只含 text 或 span——p
-  //     作为折叠根独立一档，纯性 = 子树只含文本与 span（div/p/code/a 等任何
-  //     其他标签阻断），结构门槛沿用 span 档（span > 4）。p 不入 div/span 纯
-  //     树的允许集——否则正文段落流 <div><p>…</p><p>…</p></div> 会因 p 变纯
-  //     而整块折叠（正文段落是步骤 3 的判读对象）；p 含纯 span 树（如行内
-  //     katex）时由 p 根整棵折叠、内部 span 不再单独入选（折叠循环的
+  //     含长文本的模块整棵折叠、原文随折吞没（2026-09-03 四次修订：K11 先于
+  //     LT 执行——clean 版根本不为模块内长文本生成占位符；三次修订的「LT
+  //     随折吞没」是同效的旧实现）——孪生守卫为 clean LT 后缀 ⊆ styled：
+  //     步骤 3 少看见模块内 LT（可视模块整块标记、内部本就不拆），还原链走
+  //     带样式版不受影响。纯 LT 文本行（0 内部元素）过不了结构门槛、天然不折。
+  //     p>span 形态（2026-09-03 新增）：p 通常不嵌 p、只含 text 或行内元素
+  //     ——p 作为折叠根独立一档，纯性 = 子树只含文本与行内集（div/p/img 等
+  //     任何其他标签阻断），结构门槛沿用行内档（行内 > 4）。p 不入纯树的
+  //     允许集——否则正文段落流 <div><p>…</p><p>…</p></div> 会因 p 变纯而
+  //     整块折叠（正文段落是步骤 3 的判读对象）；p 含纯行内树（如行内
+  //     katex）时由 p 根整棵折叠、内部行内元素不再单独入选（折叠循环的
   //     isConnected 守卫挡掉随 p 折叠而脱离文档的候选，防双重计数）。
   //     豁免与阻断：a/button/h1-h3 后代不折（链接文本、控件可达名、标题锚点
   //     是步骤 3 的判读信号，H1-H3 豁免镜像长文本占位规则）；hidden 元素是
   //     阻断标签——K5 领地（FAQ 折叠答案等需步骤 3 标记还原），纯性判定不穿
-  //     透；svg/button 等非允许标签同为天然阻断（svg 是步骤 3 识别
+  //     透；svg/img 等非允许标签同为天然阻断（svg/img 是步骤 3 识别
   //     "此处有图"的信号）。
+  var INLINE_VIEW = { SPAN: 1, A: 1, STRONG: 1, B: 1, EM: 1, I: 1, CODE: 1, BR: 1,
+    U: 1, S: 1, MARK: 1, SMALL: 1, SUB: 1, SUP: 1, ABBR: 1, CITE: 1, Q: 1, KBD: 1,
+    SAMP: 1, TIME: 1 };
+  // 结构门槛计数选择器：div + 行内集全集 + math（math/br 各计 1——每个公式
+  // /换行都是序列化字节；与 INLINE_VIEW 同集另加 math）
+  var VIEW_COUNT_SEL = 'div, span, a, strong, b, em, i, code, br, u, s, mark, small, sub, sup, abbr, cite, q, kbd, samp, time, math';
   function pureView(node, spanOnly, isRoot) {
     if (node.nodeType === 3 || node.nodeType === 8) return true;
     if (node.nodeType !== 1) return false;
     if (node.hasAttribute && node.hasAttribute('hidden')) return false;
     var tag = node.tagName.toUpperCase();
-    if (spanOnly) { if (tag !== 'SPAN' && !isRoot) return false; }  // p 根：根放行、子树只许 span
-    else if (tag !== 'DIV' && tag !== 'SPAN') return false;         // p 不入纯树（正文保护）
+    if (tag === 'MATH') return true;                                // MathML 整棵放行（内部不逐一检查）
+    if (spanOnly) { if (INLINE_VIEW[tag] !== 1 && !isRoot) return false; }  // p 根：根放行、子树仅行内集
+    else if (tag !== 'DIV' && INLINE_VIEW[tag] !== 1) return false;        // p 不入纯树（正文保护）
     var kids = node.childNodes;
     for (var vi = 0; vi < kids.length; vi++) {
       if (!pureView(kids[vi], spanOnly, false)) return false;
@@ -707,7 +737,7 @@ function __u2mCleanSnapshot(cfg) {
     var vs = viewTextSize(vr);
     if (vs.n < (vs.unit === 'chars' ? 8 : 6)) continue;            // ① 文本量门槛
     var innerDivs = vr.querySelectorAll('div').length;             // ② 结构门槛（形态分档）
-    var innerAll = vr.querySelectorAll('div, span').length;
+    var innerAll = vr.querySelectorAll(VIEW_COUNT_SEL).length;     // 行内集全集计入（math/br 各 1）
     if (innerDivs === innerAll ? innerDivs <= 6 : innerAll <= 4) continue;
     vr.__u2mViewFold = { n: vs.n, unit: vs.unit };                 // 门槛用过的规模，折叠直接复用
     viewRoots.push(vr);
@@ -721,6 +751,13 @@ function __u2mCleanSnapshot(cfg) {
     ve.appendChild(document.createTextNode('{{VIEW_TEXT|' + fold.n + '_' + fold.unit + '}}'));
     viewTextCount++;
   }
+
+  // 9c. 长文本占位（clean 趟，无编号，K11 之后执行）：纯视图模块已整棵折叠
+  //     （viewTextSize 量的就是原文），幸存文本节点再按阈值占位——
+  //     {{LONG_TEXT|n_unit}}，步骤 3 只看结构+体量信号；恢复清单只来自
+  //     带样式版（styled 趟 foldLongText(true)），此趟不收集。K6/K7 已把
+  //     table/pre 全折（clean 无条件折叠），幸存者 = 段落/标题/列表等流文本
+  foldLongText(false);
 
   // （原步骤 19 R6 juice 隐藏折叠已废除：样式检测管线整体移除，隐藏折叠由
   //   上方 K5 以 hidden 裸属性零样式计算实现）

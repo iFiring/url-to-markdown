@@ -75,7 +75,7 @@ test('clean_snapshot.mjs: 对 article-1 快照执行清洗', async () => {
   const cleaned = fs.readFileSync(out.cleanedSnapshot, 'utf8');
   assert.ok(!cleaned.includes('style='), '不应含 style 属性');
   assert.ok(!cleaned.includes('<style'), '不应含 <style> 标签');
-  assert.ok(cleaned.includes('{{LONG_TEXT_'), '清洗版恢复长文本占位（两趟共享，与带样式版编号一致）');
+  assert.ok(cleaned.includes('{{LONG_TEXT|'), '清洗版恢复长文本占位（无编号——步骤 3 只看结构+体量）');
   assert.ok(/<svg data-idx="[0-9]+"><\/svg>/.test(cleaned) || !cleaned.includes('<svg'), 'SVG 壳保留 data-idx');
 
   // head 里的 meta/link（charset/viewport/preconnect/og:* 等）对步骤 3 的结构识别
@@ -532,11 +532,14 @@ test('clean_snapshot.mjs: 带样式快照保留样式，SVG 瘦身为壳，占�
   assert.ok(!/width=|height=/.test(svgOpen[0]), 'svg 壳不应保留 width/height 等其他属性');
   assert.ok(!styled.includes(svgLong) && !styled.includes('<text'), '带样式版不应残留 SVG 子元素与文本');
 
-  // 占位两趟共享（2026-08-31 修订）：清洗版恢复 LONG_TEXT 占位，编号与
-  // 带样式版逐一对应——占位步骤在共享段同位执行，还原链仍只走带样式版
-  const ph = (h) => (h.match(/\{\{LONG_TEXT_\d+\|\d+_[a-z]+\}\}/g) || []).sort();
-  assert.ok(ph(styled).length > 0, '带样式版 HTML 长文本应被占位');
-  assert.deepEqual(ph(cleaned), ph(styled), '清洗版占位符应与带样式版逐一对应');
+  // 占位形态分两版（2026-09-03 修订）：带样式版带编号 {{LONG_TEXT_k|n_unit}}
+  // （还原链消费），清洗版无编号 {{LONG_TEXT|n_unit}}——唯一消费者是步骤 3，
+  // 只看结构+体量信号；阈值/豁免两趟同源，规模后缀逐一对应
+  const phs = (h) => (h.match(/\{\{LONG_TEXT_\d+\|\d+_[a-z]+\}\}/g) || []).map((s) => s.replace(/^.*\|/, '')).sort();
+  const phc = (h) => (h.match(/\{\{LONG_TEXT\|\d+_[a-z]+\}\}/g) || []).map((s) => s.replace(/^.*\|/, '')).sort();
+  assert.ok(phs(styled).length > 0, '带样式版 HTML 长文本应被占位（带编号）');
+  assert.ok(!/\{\{LONG_TEXT_\d/.test(cleaned), '清洗版不得出现带编号 LT');
+  assert.deepEqual(phc(cleaned), phs(styled), '清洗版无编号占位与带样式版规模逐一对应');
   assert.ok(!styled.includes(htmlLong), '带样式版中 HTML 长文本同样应被占位');
 
   // 恢复清单条数 = 占位数（SVG 文本与 <style> CSS 均不参与，故仅 htmlLong 一条）
@@ -916,7 +919,7 @@ test('R4+R5: astro 包装解包；安全位置空白删除、行内间空白保�
   } finally { cleanup(); }
 });
 
-test('守卫: 长文本占位两趟共享——清洗版与带样式版占位集合逐一对应，步骤 2 不再 import juice', async () => {
+test('守卫: 长文本占位形态分两版——styled 带编号、clean 无编号且规模对应，步骤 2 不再 import juice', async () => {
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
@@ -924,10 +927,12 @@ test('守卫: 长文本占位两趟共享——清洗版与带样式版占位集
 </body></html>`;
   const { out, cleaned, styled, cleanup } = await runClean(snapshot, 'guard-terminal');
   try {
-    const ph = (h) => (h.match(/\{\{LONG_TEXT_\d+\|\d+_[a-z]+\}\}/g) || []).sort();
-    assert.equal(ph(styled).length, 1, '带样式版保留 LONG_TEXT 占位');
-    assert.deepEqual(ph(cleaned), ph(styled), '清洗版占位符与带样式版逐一对应（编号一致）');
-    assert.equal(out.longTextCount, 1, '恢复清单从共享占位产出');
+    const phs = (h) => (h.match(/\{\{LONG_TEXT_\d+\|\d+_[a-z]+\}\}/g) || []).sort();
+    const phc = (h) => (h.match(/\{\{LONG_TEXT\|\d+_[a-z]+\}\}/g) || []).sort();
+    assert.equal(phs(styled).length, 1, '带样式版保留带编号 LONG_TEXT 占位');
+    assert.equal(phc(cleaned).length, 1, '清洗版保留无编号占位');
+    assert.equal(phc(cleaned)[0].replace('{{LONG_TEXT|', ''), phs(styled)[0].replace(/^.*\|/, ''), '规模后缀两版一致');
+    assert.equal(out.longTextCount, 1, '恢复清单从 styled 趟占位产出');
     const src = fs.readFileSync(path.resolve(thisDir, '../../script/clean_snapshot.mjs'), 'utf8');
     assert.ok(!src.includes("from 'juice'"), '步骤 2 不再 import juice');
   } finally { cleanup(); }
@@ -952,9 +957,9 @@ test('长文本占位（两趟共享）——清洗版按文本节点折叠、�
 </body></html>`;
   const { cleaned, styled, cleanup } = await runClean(snapshot, 'k8-run');
   try {
-    assert.ok(/<p data-idx="2">\{\{LONG_TEXT_1\|17_chars\}\}<\/p>/.test(cleaned), '17 字文本节点清洗版同样占位');
+    assert.ok(/<p data-idx="2">\{\{LONG_TEXT\|17_chars\}\}<\/p>/.test(cleaned), '17 字文本节点清洗版同样占位（无编号）');
     assert.ok(cleaned.includes(zh16), '16 字文本保留原文');
-    assert.ok(/<p data-idx="4">\{\{LONG_TEXT_2\|13_words\}\}<\/p>/.test(cleaned), '13 词文本节点清洗版同样占位');
+    assert.ok(/<p data-idx="4">\{\{LONG_TEXT\|13_words\}\}<\/p>/.test(cleaned), '13 词文本节点清洗版同样占位（无编号）');
     assert.ok(cleaned.includes(en12), '12 词文本保留原文');
     // 行内混排段（合计 14 词 > 12 阈值）不再整段折叠：各文本节点均低于阈值、
     // 全部原文保留，<a> 结构保真——run 整段吞噬曾让步骤 3 看不到行内结构
@@ -980,7 +985,7 @@ test('长文本占位（两趟共享）——含 img 的段落：文本占位、
   const { cleaned, cleanup } = await runClean(snapshot, 'k8-img');
   try {
     const seg = cleaned.match(/<p data-idx="2">([\s\S]*?)<\/p>/)[1];
-    assert.ok(seg.includes('{{LONG_TEXT_1|27_chars}}'), `长文本节点应占位: ${seg}`);
+    assert.ok(seg.includes('{{LONG_TEXT|27_chars}}'), `长文本节点应占位（清洗版无编号）: ${seg}`);
     assert.ok(!seg.includes(long), '原文不应残留清洗版');
     assert.ok(seg.includes('<img data-idx="3" alt="配图">') || /<img data-idx="3"[^>]*alt="配图"[^>]*>/.test(seg), 'img 元素与 alt 保留');
   } finally { cleanup(); }
@@ -1047,9 +1052,9 @@ test('H1/H2/H3 整子树豁免占位——长标题原文保留作步骤 3 识�
     // H3 直接长文本原文保留
     assert.ok(cleaned.includes(`<h3 data-idx="5">${zhH3}</h3>`), 'H3 长文本原文保留（豁免）');
     // H4 仍按阈值占位
-    assert.ok(/<h4 data-idx="6">\{\{LONG_TEXT_\d+\|19_chars\}\}<\/h4>/.test(cleaned), `H4 长文本仍占位: ${cleaned.match(/<h4[^]*?<\/h4>/)}`);
+    assert.ok(/<h4 data-idx="6">\{\{LONG_TEXT\|19_chars\}\}<\/h4>/.test(cleaned), `H4 长文本仍占位（无编号）: ${cleaned.match(/<h4[^]*?<\/h4>/)}`);
     // 普通长段落仍占位
-    assert.ok(/<p data-idx="7">\{\{LONG_TEXT_\d+\|20_chars\}\}<\/p>/.test(cleaned), '普通长段落仍占位');
+    assert.ok(/<p data-idx="7">\{\{LONG_TEXT\|20_chars\}\}<\/p>/.test(cleaned), '普通长段落仍占位（无编号）');
     // 标题文本不进恢复清单；H4 与段落文本进清单
     const longTexts = JSON.parse(fs.readFileSync(out.longText, 'utf8'));
     const vals = Object.values(longTexts);
@@ -1089,15 +1094,15 @@ test('K10: 空壳 span 拆包（仅 clean）——仅 data-idx 的 span 解包�
     const p6 = cleaned.match(/<p data-idx="6">([\s\S]*?)<\/p>/)[1];
     assert.ok(p6.includes('嵌套裸 span') && !/<span/.test(p6), `嵌套裸 span 应迭代拆净: ${p6}`);
     assert.ok(!cleaned.includes('data-idx="7"') && !cleaned.includes('data-idx="8"'), '嵌套裸 span 的 id 都应消失');
-    // 裸 span 包占位符：拆包后占位符落到 <p>，占位符串不变
+    // 裸 span 包长文本：拆包后文本落到 <p>、再由后置的 LT 占位（clean 无编号形态）
     const p9 = cleaned.match(/<p data-idx="9">([\s\S]*?)<\/p>/)[1];
-    assert.ok(/\{\{LONG_TEXT_1\|\d+_chars\}\}/.test(p9), `占位符应落到 <p>: ${p9}`);
+    assert.ok(/\{\{LONG_TEXT\|\d+_chars\}\}/.test(p9), `占位符应落到 <p>: ${p9}`);
     assert.ok(!/<span/.test(p9), '包占位符的裸 span 应拆包');
     // 带样式版保留全部 span（含 style，供步骤 5-7）
     assert.ok(styled.includes('data-idx="3"') && styled.includes('data-idx="7"') && styled.includes('data-idx="10"'), '带样式版应保留这些 span');
-    // 孪生守卫：占位符集合两版一致（拆包只挪位置不改 k）
-    const ph = (h) => (h.match(/\{\{LONG_TEXT_\d+\|\d+_[a-z]+\}\}/g) || []).sort();
-    assert.deepEqual(ph(cleaned), ph(styled), '占位符集合两版应一致');
+    // 孪生守卫（clean LT 无编号形态）：规模后缀集合两版一致（拆包只挪位置）
+    const suf = (h) => (h.match(/\{\{LONG_TEXT(?:_\d+)?\|\d+_[a-z]+\}\}/g) || []).map((s) => s.replace(/^.*\|/, '')).sort();
+    assert.deepEqual(suf(cleaned), suf(styled), '占位规模后缀两版应一致');
     assert.equal(out.longTextCount, 1, '恢复清单条数不变');
   } finally { cleanup(); }
 });
@@ -1411,11 +1416,12 @@ test('K11: 含 span 树合计 >4 即折、a/button/h2 豁免、hidden/svg 阻断
 });
 
 test('K11: 含 LT 模块整棵折叠——LT 随折吞没（clean ⊆ styled）；纯 LT 文本行不折', async () => {
-  // 2026-09-03 三次修订：去除 LT 限制——保留式折叠（LT 文本行保持可见）
-  // 吞掉的折叠量太少。含 LT 的纯视图模块如今整棵折叠，模块内 LT 占位符随折
-  // 吞没；孪生守卫由「两版 LT 集合相等」放宽为 clean ⊆ styled——步骤 3 少看
-  // 见模块内 LT，还原链走带样式版路径不受影响（LT 原文仍在 2_long_text.json
-  // 与带样式版中）。纯 LT 文本行（结构门槛 0 内部元素）依旧不折。
+  // 2026-09-03 三次修订去 LT 限制 + 四次修订顺序重排：clean 趟 K11 先于 LT
+  // 占位执行——含长文本的纯视图模块整棵折叠（长文本原文随折吞没、不再以 LT
+  // 形态露面），幸存文本节点再按阈值占位且无编号（{{LONG_TEXT|n_unit}}——
+  // 唯一消费者步骤 3 只看结构+体量）。孪生守卫取「clean LT 规模后缀 ⊆
+  // styled」；还原链走带样式版路径不受影响（LT 原文在 2_long_text.json 与
+  // 带样式版中）。纯 LT 文本行（结构门槛 0 内部元素）依旧不折。
   const longZh = '这是一段超过十六个汉字的模块内长文本用于验证折叠行为。';
   const longP = '这是一段同样超过十六个汉字的独立长文本用于对照不折叠。';
   const snapshot = `<!DOCTYPE html>
@@ -1454,25 +1460,25 @@ test('K11: 含 LT 模块整棵折叠——LT 随折吞没（clean ⊆ styled）�
       `含 LT 模块整棵折叠: ${cleaned.match(/<div class="ra-raw" data-idx="3">[\s\S]{0,90}/)?.[0]}`
     );
     assert.ok(!cleaned.includes('data-idx="5"') && !cleaned.includes('data-idx="11"'), '模块内部 id（含 LT 行）随折叠消失');
-    // 纯 LT 文本行（0 内部元素、结构门槛不过）不折
-    assert.ok(/<div class="aside-body" data-idx="12">\{\{LONG_TEXT_2\|\d+_chars\}\}<\/div>/.test(cleaned), '纯 LT 文本行不折');
+    // 纯 LT 文本行（0 内部元素、结构门槛不过）不折——clean 无编号形态
+    assert.ok(/<div class="aside-body" data-idx="12">\{\{LONG_TEXT\|\d+_chars\}\}<\/div>/.test(cleaned), '纯 LT 文本行不折（无编号）');
     // 无 LT 模块照旧整棵折
     assert.match(cleaned, /<div class="chart" data-idx="13">\{\{VIEW_TEXT\|\d+_words\}\}<\/div>/, '无 LT 模块照折');
-    // 孪生守卫（放宽形）：clean 占位符集合 ⊆ styled——LT_1 随模块吞没、LT_2 两版都在
-    const ph = (h) => (h.match(/\{\{LONG_TEXT_\d+\|\d+_[a-z]+\}\}/g) || []).sort();
-    assert.ok(!cleaned.includes('{{LONG_TEXT_1|'), 'LT_1 随模块折叠吞没（clean 不见）');
-    assert.ok(styled.includes('{{LONG_TEXT_1|') && styled.includes('{{LONG_TEXT_2|'), 'styled 两 LT 保真');
-    assert.ok(ph(cleaned).every((s) => ph(styled).includes(s)), 'clean LT 集合 ⊆ styled');
-    assert.equal(out.longTextCount, 2, 'LT 计数不受 K11 影响');
+    // 模块内长文本随 K11 整折吞没：clean 全文恰一处 LT（aside-body），且无编号
+    const cleanLT = cleaned.match(/\{\{LONG_TEXT(?:_\d+)?\|\d+_[a-z]+\}\}/g) || [];
+    assert.equal(cleanLT.length, 1, `clean 恰一处 LT（模块内长文本随 K11 吞没）: ${cleanLT.join()}`);
+    assert.ok(!/\{\{LONG_TEXT_\d/.test(cleaned), 'clean LT 无编号形态');
+    assert.ok(styled.includes('{{LONG_TEXT_1|') && styled.includes('{{LONG_TEXT_2|'), 'styled 两 LT 编号保真');
+    assert.equal(out.longTextCount, 2, 'LT 计数（styled 收集）不受 K11 影响');
     assert.ok(styled.includes('95% 命中') && styled.includes('观察'), 'styled 模块内容保真');
     assert.equal(out.viewText.count, 2, 'emit viewText 计数 = 2（模块 3 + chart 13）');
   } finally { cleanup(); }
 });
 
-test('K11: p>span 形态——p 根（子树仅 text/span）span>4 即折；纯文本 p 不折、div 不因含 p 变纯', async () => {
-  // 2026-09-03 新增 p>span 形态：p 通常不嵌 p、只含 text 或 span——p 作为
-  // 折叠根独立一档，纯性 = 子树只含文本与 span（div/p/code/a 等任何其他标签
-  // 阻断），结构门槛沿用 span 档（span > 4）。p 不入 div/span 纯树的允许集：
+test('K11: p>span 形态——p 根（子树仅 text/行内集）行内>4 即折；纯文本 p 不折、div 不因含 p 变纯', async () => {
+  // 2026-09-03 新增 p>span 形态：p 通常不嵌 p、只含 text 或行内元素——p 作为
+  // 折叠根独立一档，纯性 = 子树只含文本与行内集（div/p/ul/img 等任何其他标签
+  // 阻断），结构门槛沿用行内档（行内元素 > 4）。p 不入 div/行内纯树的允许集：
   // 正文段落流 <div><p>…</p><p>…</p></div> 不能因 p 变纯而整块折叠。
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
@@ -1481,7 +1487,7 @@ test('K11: p>span 形态——p 根（子树仅 text/span）span>4 即折；纯�
     <p data-idx="2"><span class="k">alpha</span><span class="k">beta</span><span class="k">gamma</span><span class="k">delta</span><span class="k">epsilon zeta</span></p>
     <p data-idx="8">plain paragraph text stays</p>
     <p data-idx="9"><span class="k">only two</span><span class="k">spans</span></p>
-    <p data-idx="13"><span class="k">a</span><span class="k">b</span><span class="k">c</span><span class="k">d</span><span class="k">e</span><code data-idx="14">code()</code></p>
+    <p data-idx="13"><span class="k">a</span><span class="k">b</span><span class="k">c</span><span class="k">d</span><span class="k">e</span><img data-idx="14" src="x.png" alt="配图"></p>
     <div data-idx="20"><p data-idx="21">para one stays</p><p data-idx="22">para two stays</p></div>
   </div>
 </body></html>`;
@@ -1494,12 +1500,73 @@ test('K11: p>span 形态——p 根（子树仅 text/span）span>4 即折；纯�
     assert.ok(/<p data-idx="8">plain paragraph text stays<\/p>/.test(cleaned), '纯文本 p 不折');
     // span ≤ 4 不折
     assert.ok(cleaned.includes('only two') && cleaned.includes('<span class="k">spans</span>'), 'span ≤4 的 p 不折');
-    // code 阻断 p 纯性
-    assert.ok(cleaned.includes('<code data-idx="14">code()</code>') && cleaned.includes('<span class="k">a</span>'), '含 code 的 p 不折');
+    // img 阻断 p 纯性（图片是"此处有图"内容信号，不入行内允许集）
+    assert.ok(/<img data-idx="14"[^>]*alt="配图">/.test(cleaned) && cleaned.includes('<span class="k">a</span>'), '含 img 的 p 不折');
     // p 不入纯树：div 20 不因含 p 变纯、两个段落原样
     assert.ok(/<p data-idx="21">para one stays<\/p>/.test(cleaned) && /<p data-idx="22">para two stays<\/p>/.test(cleaned), 'div 不因含 p 变纯整折');
     assert.ok(!styled.includes('VIEW_TEXT'), '带样式版不应出现 VIEW_TEXT');
     assert.equal(out.viewText.count, 1, '只折 p 2 一处（无 p/span 双重计数）');
+  } finally { cleanup(); }
+});
+
+test('K11: 行内允许集扩展——strong/em/b/i/code/br/a 混排不再阻断、img 仍阻断', async () => {
+  // 2026-09-03 四次修订：纯视图允许集从 div/span 扩到行内文本类元素全集
+  // （点名的 a/strong/b/em/i/code/br/MathML + 同族 u/s/mark/sub/sup 等，剔 img
+  // ——图片是内容信号仍阻断）。可视模块内部常见行内强调/行内 code/换行混排，
+  // 此前任一 strong/em/code 都会阻断纯性、模块折不了。
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-idx="1">
+    <div class="legend" data-idx="2"><span class="k">tier 1</span> <strong>hot path</strong> <em>fast</em> <span class="k">tier 2</span> <code>warm</code> <b>medium</b> <i>slow</i> <a class="k" href="/x">details</a> line<br>break</div>
+    <div class="mixed" data-idx="3"><span class="k">x</span><span class="k">y</span><img data-idx="4" src="i.png" alt="图"></div>
+    <p data-idx="5">正文段落对照。</p>
+  </div>
+</body></html>`;
+  const { out, cleaned, styled, cleanup } = await runClean(snapshot, 'k11-inline-set');
+  try {
+    // 模块 2：span×2 + strong/em/code/b/i/a/br 合计 9 个行内元素 > 4、词数达标 → 折
+    assert.match(
+      cleaned,
+      /<div class="legend" data-idx="2">\{\{VIEW_TEXT\|\d+_words\}\}<\/div>/,
+      `行内混排模块应折叠: ${cleaned.match(/<div class="legend" data-idx="2">[\s\S]{0,80}/)?.[0]}`
+    );
+    assert.ok(!cleaned.includes('hot path') && !cleaned.includes('warm'), '行内元素文本随折叠消失');
+    // img 阻断：模块 3 保 live（img 是"此处有图"内容信号）
+    assert.ok(cleaned.includes('<span class="k">x</span>') && /<img data-idx="4"[^>]*alt="图">/.test(cleaned), '含 img 的模块不折');
+    assert.ok(/<p data-idx="5">正文段落对照。<\/p>/.test(cleaned), '段落对照不动');
+    assert.ok(!styled.includes('VIEW_TEXT'), '带样式版不应出现 VIEW_TEXT');
+    assert.equal(out.viewText.count, 1, '只折行内混排模块一处');
+  } finally { cleanup(); }
+});
+
+test('K11: MathML 整棵放行——含行内公式的 span 树可折、内部 mi/mo 不逐一检查', async () => {
+  // 2026-09-03 四次修订：math 加入行内允许集且整棵放行（KaTeX 的 MathML 孪生
+  // 含 mi/mo/mn/annotation 等私有结构，逐一检查必假阴性）。此前 math 阻断纯性、
+  // 公式段落永不折；LaTeX 还原链不受影响——步骤 6 的 math 消费走带样式版路径，
+  // clean 版唯一消费者步骤 3 不看公式内部。
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-idx="1">
+    <p data-idx="2"><span class="k">若</span> <math data-idx="3"><mi>a</mi><mo>+</mo><mi>b</mi></math> <span class="k">则</span> <math data-idx="4"><mi>c</mi></math> <span class="k">终值</span><span class="k">确认</span><span class="k">完毕</span><span class="k">合计</span></p>
+    <p data-idx="8">普通公式段 <math data-idx="9"><mi>x</mi></math> 原样保留。</p>
+  </div>
+</body></html>`;
+  const { out, cleaned, styled, cleanup } = await runClean(snapshot, 'k11-mathml');
+  try {
+    // p 2：6 span + 2 math = 8 个行内元素 > 4、文本 ≥ 8 汉字 → 折（math 整棵吞没）
+    assert.match(
+      cleaned,
+      /<p data-idx="2">\{\{VIEW_TEXT\|\d+_chars\}\}<\/p>/,
+      `含 MathML 的 p 应折叠: ${cleaned.match(/<p data-idx="2">[\s\S]{0,80}/)?.[0]}`
+    );
+    assert.ok(!cleaned.includes('data-idx="3"') && !cleaned.includes('data-idx="4"'), '模块内 math 随折叠消失');
+    // 行内元素 ≤4 的公式段不折：math 与文本保真
+    assert.ok(/<p data-idx="8">普通公式段 <math data-idx="9"><mi>x<\/mi><\/math> 原样保留。<\/p>/.test(cleaned), '低密度公式段保真');
+    assert.ok(styled.includes('<math data-idx="3">') && styled.includes('<mi>b</mi>'), '带样式版公式保真');
+    assert.ok(!styled.includes('VIEW_TEXT'), '带样式版不应出现 VIEW_TEXT');
+    assert.equal(out.viewText.count, 1, '只折公式密集段一处');
   } finally { cleanup(); }
 });
 
