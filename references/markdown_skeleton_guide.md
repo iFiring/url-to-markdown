@@ -245,6 +245,20 @@ DOM 示例：
 - 代码逐字照抄：源文若有空格粘连/损伤也照抄不改，只删除代码左侧的数字序号，不做任何修复
 - 代码内的长文本照常引用占位符（`content` 中可含 `{{LONG_TEXT_k}}`）
 
+#### 代码块：`{{CODE_k|N_lines}}` 占位符（预计算还原）
+
+`6_article.html` 中 `<pre>` 含 `{{CODE_k|N_lines}}` 占位符时，产出引用条目——
+**不要自转占位符块的代码内容**（预计算 JSON 是唯一事实源，转录会引入抄写错误）：
+
+```json
+{ "code": "{{CODE_3}}" }
+```
+
+- 剥掉 `|N_lines` 后缀，裸编号引用；每个 `{{CODE_k}}` 恰用一次（同 LONG_TEXT 约定）
+- `lang` 无需填写——步骤 8 物化时以快照的 `data-language` 收集值为准
+- 失败块（live 代码、无占位符，标 `data-u2m-code="fail"`）照旧自转 `{lang, content}`，
+  lang 优先抄 `data-language` 属性值
+
 DOM 结构示例：
 ```html
 <body>

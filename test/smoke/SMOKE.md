@@ -95,3 +95,14 @@ openai 页检查点（英文文档，展开器/嵌套图解/UI 控件密集）�
 两页共同：9_markdown 目检标题层级合理、无垃圾条目、trans2img 图片路径有效（`assets/trans/{id}.webp`）。
 
 记录：每页 skeleton 条目数 / trans2img 条目与 id 列表 / 发现的契约偏差。
+
+## 6. 代码块占位符（2026-09-02 新增）
+
+- URL: <mmh1.top prompt-cache 文章地址>（`working/mmh1.top_article_prompt-cache.html/`）
+- 预期：步骤 2 emit `codes` 全 ok（≥2 块）；重跑步骤 7-9 后 `9_markdown.md` 代码块
+  换行与原 LLM 语义重建结果逐字一致（内容来自 `2_code.json` 预计算而非转录）
+- URL: <developers.openai.com prompt-caching 指南地址>（`working/developers.openai.com_api_docs_guides_prompt-caching/`）
+- 预期：步骤 2 emit `codes` 14 块全 ok、其中 9 块 `gutterStripped`（user-select:none
+  序号槽层 1 排除）；pre 2874 的 `2_code.json` 内容以 `{` 开头且 `  "model"` 两格
+  缩进保留（旧 LLM 转录丢缩进）；步骤 7 对占位符块发 `{"code":"{{CODE_k}}"}`
+  引用不自转

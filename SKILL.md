@@ -207,4 +207,5 @@ node <skill-root>/script/render_skeleton.mjs --url <url>
 | 页面加载报 `net::ERR_TUNNEL_CONNECTION_FAILED` / `ERR_PROXY_CONNECTION_FAILED` | 本机系统代理不可用或拒绝目标站：设 `U2M_PROXY=direct` 绕过系统代理，或 `U2M_PROXY=http://<host>:<port>` 显式指定可用代理后重跑 |
 | `clean_snapshot` 报找不到快照 | 先运行步骤 1 生成 `1_snapshot.html` |
 | `extract_article` 报找不到纯内联视图 | 先运行步骤 5 生成 `5_juice_styles.html` |
+| `render_skeleton` 报 code 条目 value 应为 `{lang, content}` 对象 | 步骤 7 引用了未还原的代码占位符：检查 `7_skeleton.json` 的 code 条目——占位符块用 `{"code": "{{CODE_k}}"}` 引用、live 代码块自转（见骨架指南），修正后重跑步骤 8 |
 | `extract_styled` / `extract_article` 报找不到 key_ids | 先运行步骤 3 生成 `3_key_ids.json` |
