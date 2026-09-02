@@ -70,10 +70,23 @@ function entryToMarkdown(key, value) {
     }
 
     case 'code': {
-      if (!value || typeof value !== 'object') return null;
-      const lang = value.lang || '';
-      const content = value.content || '';
-      return `\`\`\`${lang}\n${content}\n\`\`\``;
+      // 残留守卫：步骤 8 已把 "{{CODE_k}}" 引用物化为对象；仍为字符串 =
+      // 引用了未还原的代码占位符（failedCodes 或步骤 8 未跑）。残留流到最终
+      // markdown 是静默损坏的代码块——宁可响亮失败（镜像 trans2img 守卫）。
+      if (!value || typeof value !== 'object') {
+        throw new Error(
+          `code 条目 value 应为 {lang, content} 对象（占位符引用由步骤 8 物化），实际为: ${JSON.stringify(value)}——引用了未还原的代码占位符，请先运行步骤 8 / 按步骤 7 指南修正 7_skeleton.json`
+        );
+      }
+      // lang 来自 data-language 属性链，可能携垃圾字符（反引号/换行会破坏围栏
+      // 首行）——剥离非法字符，空则裸围栏
+      const lang = String(value.lang || '').replace(/[^a-zA-Z0-9._+-]/g, '');
+      const content = String(value.content || '');
+      // GFM 围栏安全：围栏严格长于内容中任何反引号连续串即不可被内容闭合；
+      // 内容以反引号结尾亦无碍（换行 + 更长围栏）。对 LLM 自转路径同样生效。
+      const maxRun = (content.match(/`+/g) || []).reduce((m, r) => Math.max(m, r.length), 0);
+      const fence = '`'.repeat(Math.max(3, maxRun + 1));
+      return `${fence}${lang}\n${content}\n${fence}`;
     }
 
     case 'img':
@@ -124,7 +137,8 @@ async function main() {
   const md = convertSkeleton(skeleton);
 
   const outPath = path.join(dir, '9_markdown.md');
-  await fsPromises.writeFile(outPath, md);
+  // 文件以换行收尾（POSIX 文本惯例；空骨架写空串不写裸 \n）
+  await fsPromises.writeFile(outPath, md ? md + '\n' : '');
 
   log(`markdown 已生成: ${outPath}（${md.length} 字节）`);
 

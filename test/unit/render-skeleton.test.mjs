@@ -108,7 +108,8 @@ test('render_skeleton.mjs: 全类型条目按新契约转换（h/blockquote 以 
   assert.equal(blocks[13], '|a|b|\n|--|--|\n|1|2|');
   // trans2img：value 为步骤 8 回写的选中路径
   assert.equal(blocks[14], '![](assets/trans/92.webp)');
-  assert.equal(blocks[15], '结尾段落');
+  // 末块带文件尾换行（writeFile 以 \n 收尾的 POSIX 惯例）
+  assert.equal(blocks[15], '结尾段落\n');
 
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
@@ -140,5 +141,60 @@ test('render_skeleton.mjs: 空骨架输出空 markdown', async () => {
   const md = fs.readFileSync(mdPath, 'utf8');
   assert.equal(md.trim(), '', '空骨架应产出空 markdown');
 
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test('render_skeleton: 围栏 backtick 自适应——内容含 ``` 时用 4 重围栏', async () => {
+  const { tmpRoot } = setup('fence3', { resolved: [
+    { code: { lang: 'md', content: '外层\n```\ninner fence\n```\n结尾' } },
+  ] });
+  const r = await runScript(process.execPath, [scriptPath, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const md = fs.readFileSync(path.join(tmpRoot, urlToDirName(URL), '9_markdown.md'), 'utf8');
+  assert.equal(md, '````md\n外层\n```\ninner fence\n```\n结尾\n````\n');
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test('render_skeleton: 内容含 ```` 时用 5 重围栏；反引号结尾安全', async () => {
+  const { tmpRoot } = setup('fence4', { resolved: [
+    { code: { lang: '', content: 'a\n````\nb`' } },
+  ] });
+  const r = await runScript(process.execPath, [scriptPath, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const md = fs.readFileSync(path.join(tmpRoot, urlToDirName(URL), '9_markdown.md'), 'utf8');
+  assert.equal(md, '`````\na\n````\nb`\n`````\n');
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test('render_skeleton: lang 清洗——反引号/换行剥离（js`+换行+x → jsx）', async () => {
+  const { tmpRoot } = setup('langsan', { resolved: [
+    { code: { lang: 'js`\nx', content: 'y' } },
+  ] });
+  const r = await runScript(process.execPath, [scriptPath, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const md = fs.readFileSync(path.join(tmpRoot, urlToDirName(URL), '9_markdown.md'), 'utf8');
+  // 'js`\nx' = j s 反引号 换行 x → 剥离非法字符后 'jsx'
+  assert.equal(md, '```jsx\ny\n```\n');
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test('render_skeleton: code value 仍为字符串（{{CODE_ 残留）报 error 提示步骤 8', async () => {
+  const { tmpRoot } = setup('residual', { resolved: [
+    { code: '{{CODE_9}}' },
+  ] });
+  const r = await runScript(process.execPath, [scriptPath, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+  });
+  assert.equal(r.code, 1);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'error');
+  assert.ok(out.reason.includes('步骤 8'), `reason 应提示步骤 8: ${out.reason}`);
+  assert.ok(!fs.existsSync(path.join(tmpRoot, urlToDirName(URL), '9_markdown.md')), '不应产出 markdown');
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
