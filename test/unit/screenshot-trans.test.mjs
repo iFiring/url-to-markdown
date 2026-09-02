@@ -763,3 +763,33 @@ test('screenshot_trans: {{TABLE_k}} 还原为 2_tables.json 的 markdown', async
   assert.match(resolved[3].table, /\| 已是 \| 具体 \|/);
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
+
+// CODE 还原：准备最小工作目录（1_snapshot + 2_long_text + 2_code + 3_key_ids
+// + 7_skeleton，无 trans2img/img 条目——浏览器阶段不触发、早退 emit）
+import { setupCodeRestore } from '../helpers/code-restore.mjs';
+
+test('screenshot_trans: {{CODE_k}} 字符串引用整体物化为 {lang, content}（lang 取 JSON）', async () => {
+  const { tmpRoot, url } = setupCodeRestore('strref', [
+    { code: '{{CODE_1}}' },
+    { p: '段落' },
+    { code: { lang: 'wrong', content: '{{CODE_2}}' } },   // 对象形态兼容 + lang 覆写
+    { code: { lang: 'python', content: 'print(1)' } },     // LLM 自转不动
+    { code: '{{CODE_9}}' },                                 // 未定义/failed k → failedCodes
+    { code: { lang: 'js', content: 'const x = "{{CODE_1}} inline"' } }, // 中段子串不替换
+  ]);
+  try {
+    const r = await runScript(process.execPath,
+      [path.resolve('script/screenshot_trans.mjs'), '--url', url],
+      { env: { U2M_WORKING_ROOT: tmpRoot }, timeoutMs: 60000 });
+    assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+    const out = JSON.parse(r.stdout);
+    assert.equal(out.codesResolved, 2);
+    assert.deepEqual(out.failedCodes, ['9']);
+    const resolved = JSON.parse(fs.readFileSync(out.resolvedSkeleton, 'utf8'));
+    assert.deepEqual(resolved[0].code, { lang: 'javascript', content: 'const a = 1;\nconst b = 2;' });
+    assert.deepEqual(resolved[2].code, { lang: 'tsx', content: 'system: `...`' }, '对象形态替换 content 且 lang 覆写');
+    assert.deepEqual(resolved[3].code, { lang: 'python', content: 'print(1)' }, '自转条目不动');
+    assert.equal(resolved[4].code, '{{CODE_9}}', '未定义 k 保留字面');
+    assert.equal(resolved[5].code.content, 'const x = "{{CODE_1}} inline"', '中段子串不替换（精确匹配语义）');
+  } finally { fs.rmSync(tmpRoot, { recursive: true, force: true }); }
+});

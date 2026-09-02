@@ -233,6 +233,39 @@ async function main() {
       return match; // 保留字面
     });
   }
+
+  // ── {{CODE_k}} 还原（TABLE 之后）——精确匹配：只处理 code 键整体引用形态，
+  //    与 TABLE 的子串扫描有意分叉（代码内容字面含 {{CODE_n}} 是真实场景——
+  //    介绍本管线的文档，子串替换会跨块错替）。两种形态：
+  //    字符串 "{{CODE_k}}" → 整体物化为 {lang, content}；对象 {content: "{{CODE_k}}"}
+  //    → 替换 content + lang 覆写。lang 一律取 2_code.json 值（data-language
+  //    收集链结果，权重高于 LLM 猜测）。缺失/failed k 保留字面、记 failedCodes
+  //    （不阻断；残留由步骤 9 守卫响亮报错）──
+  const codesJsonPath = path.join(dir, '2_code.json');
+  const codesJson = fs.existsSync(codesJsonPath)
+    ? JSON.parse(await fsPromises.readFile(codesJsonPath, 'utf8'))
+    : {};
+  const CODE_REF_RE = /^\{\{CODE_(\d+)\}\}$/;
+  const failedCodes = [];
+  let codesResolved = 0;
+  for (const entry of resolvedSkeleton) {
+    const key = Object.keys(entry)[0];
+    if (key !== 'code') continue;
+    const val = entry[key];
+    const ref = typeof val === 'string'
+      ? CODE_REF_RE.exec(val)
+      : (val && typeof val === 'object' && typeof val.content === 'string'
+        ? CODE_REF_RE.exec(val.content) : null);
+    if (!ref) continue;
+    const c = codesJson[ref[1]];
+    if (c && c.status === 'ok' && c.content != null) {
+      codesResolved++;
+      if (typeof val === 'string') entry[key] = { lang: c.lang || '', content: c.content };
+      else { val.content = c.content; val.lang = c.lang || ''; }
+    } else {
+      failedCodes.push(ref[1]);
+    }
+  }
   await fsPromises.writeFile(resolvedPath, JSON.stringify(resolvedSkeleton, null, 2));
 
   // 按文档序收集 trans2img 条目（value 应为非空正整数 ID 数组——单传祖先链）；
@@ -269,7 +302,10 @@ async function main() {
 
   if (transIds.length === 0 && imgUrls.length === 0) {
     log('骨架无 trans2img 条目也无 img 条目（已写出 resolved skeleton）');
-    return emit({ status: 'ok', skipped: 'no_trans2img', resolvedSkeleton: resolvedPath, tablesResolved, failedTables });
+    return emit({
+      status: 'ok', skipped: 'no_trans2img', resolvedSkeleton: resolvedPath,
+      tablesResolved, failedTables, codesResolved, failedCodes,
+    });
   }
 
   const sigFn = await readSharedScript('page-element-signature.js');
@@ -486,6 +522,8 @@ async function main() {
       resolvedSkeleton: resolvedPath,
       tablesResolved,
       failedTables,
+      codesResolved,
+      failedCodes,
     });
   } catch (e) {
     if (browser) await browser.close().catch(() => {});
