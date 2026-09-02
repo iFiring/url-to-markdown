@@ -677,7 +677,7 @@ test('K5: hidden 裸属性折叠为 {{HIDDEN_TAG|规模;构成}}——规模按�
   } finally { cleanup(); }
 });
 
-test('K7: pre 折叠为 {{PRE_CODE_TAG|N_lines}}——data-language 提升到 pre，行内 code 不动', async () => {
+test('K7: pre 折叠为 {{CODE_1|N_lines}}——data-language 提升到 pre，行内 code 不动', async () => {
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
@@ -689,15 +689,15 @@ test('K7: pre 折叠为 {{PRE_CODE_TAG|N_lines}}——data-language 提升到 pr
   const { cleaned, styled, cleanup } = await runClean(snapshot, 'k7-pre');
   try {
     assert.ok(
-      /<pre[^>]*data-idx="2"[^>]*data-language="javascript"[^>]*>\{\{PRE_CODE_TAG\|1_lines\}\}<\/pre>/.test(cleaned),
-      `pre 应折叠为行数 token 且 data-language 提升: ${cleaned.match(/<pre[\s\S]*?<\/pre>/)?.[0]}`
+      /<pre[^>]*data-idx="2"[^>]*data-language="javascript"[^>]*>\{\{CODE_1\|1_lines\}\}<\/pre>/.test(cleaned),
+      `pre 应折叠为 CODE 占位符且 data-language 提升: ${cleaned.match(/<pre[\s\S]*?<\/pre>/)?.[0]}`
     );
     assert.ok(!cleaned.includes('data-idx="3"') && !cleaned.includes('data-idx="4"'), 'pre 内部 id 随子树删除');
     assert.ok(!cleaned.includes('shiki-token'), 'token span 应删除');
     // p7 外围 filler 特意用英文短词——本断言守护 K7 不动行内 code；
     // 占位按文本节点判阈值，各节点均低于阈值、原文保留
     assert.ok(cleaned.includes('<code data-idx="8">client.create()</code>'), '行内 code 不动');
-    assert.ok(styled.includes('shiki-token') && styled.includes('import'), '带样式版完整保留代码');
+    assert.ok(styled.includes('{{CODE_1|1_lines}}'), '带样式版 ok 块折叠为 CODE 占位符');
     assert.ok(!styled.includes('{{PRE_CODE_TAG'), '守卫: 带样式版不得出现行数 token');
   } finally { cleanup(); }
 });
@@ -716,11 +716,11 @@ test('K7: 行数按换行切分——高亮 span 是语法 token 不是行', asy
   try {
     const seg = cleaned.match(/<pre data-idx="2"[^>]*>([\s\S]*?)<\/pre>/)[1];
     // 3 个高亮 span 但只有 2 行——数 span 会得 3，数换行得 2
-    assert.ok(seg === '{{PRE_CODE_TAG|2_lines}}', `行数按换行切分而非 span 个数: ${seg}`);
+    assert.ok(seg === '{{CODE_1|2_lines}}', `行数按换行切分而非 span 个数: ${seg}`);
   } finally { cleanup(); }
 });
 
-test('K7: 每行一个 div 的编辑器式代码块——div 行块数兜底，容器 div 不虚增', async () => {
+test('K7: 每行一个 div 的编辑器式代码块——div 行块数兜底；容器 div 双信号矛盾判 failed', async () => {
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
@@ -732,14 +732,21 @@ let c = 3;</div></code></pre>
     <p data-idx="6">正文段落</p>
   </div>
 </body></html>`;
-  const { cleaned, cleanup } = await runClean(snapshot, 'k7-div-lines');
+  const { out, cleaned, styled, cleanup } = await runClean(snapshot, 'k7-div-lines');
   try {
     // 无换行文本节点（div 块拼接无分隔）→ 换行法只得 1，div 行块 3 条兜底
     const divPerLine = cleaned.match(/<pre data-idx="2"[^>]*>([\s\S]*?)<\/pre>/)[1];
-    assert.ok(divPerLine === '{{PRE_CODE_TAG|3_lines}}', `div 行块数兜底编辑器式代码块: ${divPerLine}`);
-    // 单个容器 div 内含真实换行 → 换行法 3 胜过 div 计数 1，不虚增
+    assert.ok(divPerLine === '{{CODE_1|3_lines}}', `div 行块数兜底编辑器式代码块: ${divPerLine}`);
+    // 单个容器 div 内含真实换行：\n=2 与块容器=1 双信号矛盾（|3-1|>1）→
+    // mixed_signal_mismatch 判 failed——styled 保 live + 标记，clean 恒折叠
+    // （行数取收集 walkLines 的 3 行）
     const containerDiv = cleaned.match(/<pre data-idx="4"[^>]*>([\s\S]*?)<\/pre>/)[1];
-    assert.ok(containerDiv === '{{PRE_CODE_TAG|3_lines}}', `容器 div 不虚增行数: ${containerDiv}`);
+    assert.ok(containerDiv === '{{CODE_2|3_lines}}', `容器 div 形态 failed 仍恒折叠、行数不虚增: ${containerDiv}`);
+    assert.match(styled, /data-u2m-code="fail"/, '容器 div 形态 styled 保 live + 失败标记');
+    const cj = JSON.parse(fs.readFileSync(out.codeJson, 'utf8'));
+    assert.equal(cj['2'].status, 'failed');
+    assert.equal(cj['2'].reason, 'mixed_signal_mismatch');
+    assert.equal(cj['1'].status, 'ok');
   } finally { cleanup(); }
 });
 
@@ -748,8 +755,9 @@ test('P0: pre 内空白 token span 不被空元素级联删除——shiki 逐 to
   // （逐 token）。空元素级联 hasContent() 用 trim 判空，会把这种仅含空白的
   // 行内 span 当空壳删掉，丢失空格致 constclient=newOpenAI()。pre 子树内
   // 空白是语义内容（<pre> 白空保留是 HTML 语义），应计为内容、不删。
-  // 级联在两趟共享段执行——带样式版（喂步骤 4-7 的路径）同样受害，故这里
-  // 断言带样式版：空白 token span 存活、空格保留。
+  // 级联在两趟共享段执行（收集之前）——CODE 管线后 ok 块在两版折叠，空白
+  // 保真改由 2_code.json 内容断言（比看 span 存活更强的端到端断言：空格
+  // 若被级联吞掉会直接出现在提取内容里）。
   // 对照：Prism 式（裸空白文本节点夹在 span 之间）cascade 只删空元素、不删
   // 文本节点，本就无此 bug；块级仅含空白的元素仍删（既有「空元素级联删除」
   // 测试的 div data-idx=5 已守护）。
@@ -761,17 +769,15 @@ test('P0: pre 内空白 token span 不被空元素级联删除——shiki 逐 to
     <p data-idx="12">正文段落</p>
   </div>
 </body></html>`;
-  const { styled, cleaned, cleanup } = await runClean(snapshot, 'p0-pre-ws');
+  const { out, styled, cleaned, cleanup } = await runClean(snapshot, 'p0-pre-ws');
   try {
-    // 空白 token span 在带样式版存活（cascade 不删）
-    assert.ok(styled.includes('data-idx="6"'), '空白 token span (data-idx=6) 不应被空元素级联删除');
-    assert.ok(styled.includes('data-idx="10"'), '空白 token span (data-idx=10) 不应被空元素级联删除');
-    // 空白文本本身保留在 span 内（> </span>）
-    const pre = styled.match(/<pre data-idx="2"[\s\S]*?<\/pre>/)[0];
-    assert.ok(/> <\/span>/.test(pre), `空白文本应保留在 token span 内: ${pre}`);
-    assert.ok(styled.includes('const') && styled.includes('client'), '代码文本存活');
-    // 对照：清洗版 pre 由 K7 折叠为行数 token（既有行为不变）
-    assert.ok(cleaned.includes('{{PRE_CODE_TAG|'), '清洗版 pre 仍由 K7 折叠');
+    // 提取内容保真：词间空格存活（级联若吞掉空白 span 会粘连）
+    const cj = JSON.parse(fs.readFileSync(out.codeJson, 'utf8'));
+    assert.equal(cj['1'].status, 'ok');
+    assert.equal(cj['1'].content, 'const client=new OpenAI', `空白 token 应保留在提取内容: ${cj['1'].content}`);
+    // 对照：两版 ok 折叠（清洗版 CODE 占位符、带样式版同形）
+    assert.ok(cleaned.includes('{{CODE_1|1_lines}}'), '清洗版 pre 折叠为 CODE 占位符');
+    assert.ok(styled.includes('{{CODE_1|1_lines}}'), '带样式版 ok 块折叠为 CODE 占位符');
   } finally { cleanup(); }
 });
 
@@ -779,6 +785,8 @@ test('P0: pre 内含换行的空白 token span 不被删除——换行保留', 
   // 用户点名的换行形态：shiki 把换行也包成 <span>\n</span>（逐 token），
   // cascade trim 判空会删掉该 span 丢换行。pre 子树内空白（含换行）一律
   // 计为内容。对照：span 间裸换行（Prism 式）cascade 本就不删（只删空元素）。
+  // CODE 管线后 ok 块两版折叠——换行保真改由 2_code.json 内容断言（span
+  // 若被级联删除，换行丢失会直接出现在提取内容里）。
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
@@ -790,19 +798,20 @@ test('P0: pre 内含换行的空白 token span 不被删除——换行保留', 
     <p data-idx="11">正文段落</p>
   </div>
 </body></html>`;
-  const { styled, cleanup } = await runClean(snapshot, 'p0-pre-nl');
+  const { out, styled, cleanup } = await runClean(snapshot, 'p0-pre-nl');
   try {
-    // 含换行的空白 span 存活、换行保留
-    assert.ok(styled.includes('data-idx="5"'), '含换行的空白 span (data-idx=5) 不应被删除');
-    const preA = styled.match(/<pre data-idx="2"[\s\S]*?<\/pre>/)[0];
-    assert.ok(preA.includes('\n'), '换行应保留在 pre 内');
+    const cj = JSON.parse(fs.readFileSync(out.codeJson, 'utf8'));
+    // 含换行的空白 span 存活 → 提取内容换行保留
+    assert.equal(cj['1'].status, 'ok');
+    assert.equal(cj['1'].content, 'line1\nline2', `span 包裹换行应保留: ${JSON.stringify(cj['1'].content)}`);
     // 对照：span 间裸换行（文本节点）本就保留
-    const preB = styled.match(/<pre data-idx="7"[\s\S]*?<\/pre>/)[0];
-    assert.ok(preB.includes('line1</span>\n<span data-idx="10">line2'), 'span 间裸换行应保留');
+    assert.equal(cj['2'].status, 'ok');
+    assert.equal(cj['2'].content, 'line1\nline2', `裸换行应保留: ${JSON.stringify(cj['2'].content)}`);
+    assert.ok(styled.includes('{{CODE_1|2_lines}}') && styled.includes('{{CODE_2|2_lines}}'), '两块 ok 折叠');
   } finally { cleanup(); }
 });
 
-test('K7: 空 pre 折叠为 0_lines', async () => {
+test('K7: 空 pre 判 failed(empty)、clean 恒折叠 1_lines、styled 保 live 标记', async () => {
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
@@ -811,17 +820,25 @@ test('K7: 空 pre 折叠为 0_lines', async () => {
     <p data-idx="3">正文段落</p>
   </div>
 </body></html>`;
-  const { cleaned, cleanup } = await runClean(snapshot, 'k7-empty-pre');
+  const { out, cleaned, styled, cleanup } = await runClean(snapshot, 'k7-empty-pre');
   try {
     const seg = cleaned.match(/<pre data-idx="2"[^>]*>([\s\S]*?)<\/pre>/)[1];
-    assert.ok(seg === '{{PRE_CODE_TAG|0_lines}}', `空 pre 行数为 0: ${seg}`);
+    // walkLines 对空 pre 得单空行（旧 countPreLines 的 0 来自 trim 特判）；
+    // empty 校验判 failed、clean 仍恒折叠（占位符行数 = 收集行数 1）
+    assert.ok(seg === '{{CODE_1|1_lines}}', `空 pre failed 仍折叠: ${seg}`);
+    assert.match(styled, /data-u2m-code="fail"/, '空 pre styled 保 live + 标记');
+    const cj = JSON.parse(fs.readFileSync(out.codeJson, 'utf8'));
+    assert.equal(cj['1'].status, 'failed');
+    assert.equal(cj['1'].reason, 'empty');
   } finally { cleanup(); }
 });
 
-test('K7: 行数在长文本占位前预计算——占位吞掉换行后行数不塌缩', async () => {
-  // 回归：pre 内单个长文本节点（含汉字、超阈值）被两趟共享的长文本占位折叠成
-  // {{LONG_TEXT_k|N_chars}} 后，textContent 不再含换行——行数若在占位后才量会
-  // 塌缩成 1。行数必须在共享段占位之前预计算挂 expando。
+test('K7: 长文本占位块走 CODE 管线——纪元豁免下 ok、行数取展开后', async () => {
+  // 回归前身：pre 内单个长文本节点（含汉字、超阈值）被两趟共享的长文本占位
+  // 折叠成 {{LONG_TEXT_k|N_chars}}。CODE 管线下收集 text 为占位符（单行）、
+  // Node 层预展开还原原文——LONG_TEXT 纪元豁免（spec §6.1 补注）使渲染交叉
+  // 校验跳过（占位符形态 renderedLines 与展开后行数不可比），块判 ok、
+  // 行数取展开后修剪值（3 行而非 1）。
   const preLong = '第一行超过阈值的中文长文本行；\n第二行超过阈值的中文长文本行；\n第三行超过阈值的中文长文本行；';
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
@@ -831,12 +848,16 @@ test('K7: 行数在长文本占位前预计算——占位吞掉换行后行数�
     <p data-idx="4">正文段落</p>
   </div>
 </body></html>`;
-  const { cleaned, styled, cleanup } = await runClean(snapshot, 'k7-precompute');
+  const { out, cleaned, styled, cleanup } = await runClean(snapshot, 'k7-precompute');
   try {
     const seg = cleaned.match(/<pre data-idx="2"[^>]*>([\s\S]*?)<\/pre>/)[1];
-    assert.ok(seg === '{{PRE_CODE_TAG|3_lines}}', `行数按占位前原文的换行计（3 行而非 1）: ${seg}`);
-    // 对照：带样式版里这段 pre 文本同样被占位（既有行为不变）
-    assert.ok(styled.includes('{{LONG_TEXT_1|'), '带样式版 pre 长文本照常占位');
+    assert.ok(seg === '{{CODE_1|3_lines}}', `行数按展开后原文计（3 行而非 1）: ${seg}`);
+    assert.ok(styled.includes('{{CODE_1|3_lines}}'), '带样式版 ok 折叠（LONG_TEXT 占位符随折叠消失）');
+    const cj = JSON.parse(fs.readFileSync(out.codeJson, 'utf8'));
+    assert.equal(cj['1'].status, 'ok');
+    assert.equal(cj['1'].content, preLong, '内容 = 预展开原文');
+    // 占位符条目仍在恢复清单（未被引用则无害）
+    assert.ok(JSON.parse(fs.readFileSync(out.longText, 'utf8'))['1'] === preLong);
   } finally { cleanup(); }
 });
 
@@ -1254,4 +1275,71 @@ test('table 占位符：--table-engine / U2M_TABLE_ENGINE 选 turndown', async (
     assert.equal(tablesJson['1'].engine, 'turndown');
     assert.equal(tablesJson['1'].status, 'ok');
   } finally { r.cleanup(); }
+});
+
+test('CODE 占位符：shiki 形态两版折叠 + 2_code.json + emit 计数', async () => {
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-idx="1">
+    <pre data-idx="2"><code data-idx="3" data-language="javascript"><span data-idx="4">const</span> a = 1;
+<span data-idx="5">const</span> b = <span data-idx="6">2</span>;</code></pre>
+    <p data-idx="7">正文段落</p>
+  </div>
+</body></html>`;
+  const { out, cleaned, styled, cleanup } = await runClean(snapshot, 'code-ph-shiki');
+  try {
+    assert.equal(out.codes.total, 1);
+    assert.equal(out.codes.ok, 1);
+    assert.equal(out.codes.failed, 0);
+    assert.ok(fs.existsSync(out.codeJson));
+    const cj = JSON.parse(fs.readFileSync(out.codeJson, 'utf8'));
+    assert.equal(cj['1'].status, 'ok');
+    assert.equal(cj['1'].lang, 'javascript');
+    assert.equal(cj['1'].content, 'const a = 1;\nconst b = 2;');
+    assert.equal(cj['1'].lines, 2);
+    // 两版同形折叠（clean 恒折、styled ok 折）、data-language 提升
+    assert.ok(/<pre[^>]*data-idx="2"[^>]*data-language="javascript"[^>]*>\{\{CODE_1\|2_lines\}\}<\/pre>/.test(cleaned));
+    assert.ok(/<pre[^>]*data-idx="2"[^>]*data-language="javascript"[^>]*>\{\{CODE_1\|2_lines\}\}<\/pre>/.test(styled));
+    assert.ok(!cleaned.includes('data-idx="3"'), 'clean 版 pre 内 id 随折叠消失');
+  } finally { cleanup(); }
+});
+
+test('CODE 占位符：ra 形态（grid 行容器零 \\n）行数修正——不再塌缩为 1', async () => {
+  // 行内样式 display:grid——真 chromium 里 computed display 生效
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-idx="1">
+    <pre data-idx="2"><code data-idx="3"><span style="display:grid">system: \`...\`</span><span style="display:grid">const t = 1;</span><span style="display:grid">const u = 2;</span></code></pre>
+  </div>
+</body></html>`;
+  const { out, cleaned, cleanup } = await runClean(snapshot, 'code-ph-ra');
+  try {
+    assert.equal(out.codes.ok, 1);
+    assert.ok(cleaned.includes('{{CODE_1|3_lines}}'), `grid 行容器行数=3（旧 countPreLines 得 1）: ${cleaned.match(/<pre[\s\S]*?<\/pre>/)?.[0]}`);
+    const cj = JSON.parse(fs.readFileSync(out.codeJson, 'utf8'));
+    assert.equal(cj['1'].content, 'system: `...`\nconst t = 1;\nconst u = 2;');
+  } finally { cleanup(); }
+});
+
+test('CODE 占位符：失败块 styled 保 live + 标记、clean 恒折叠、日志落盘', async () => {
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-idx="1">
+    <pre data-idx="2"><code data-idx="3">code <img data-idx="4" src="x.png"> with img</code></pre>
+  </div>
+</body></html>`;
+  const { out, cleaned, styled, cleanup } = await runClean(snapshot, 'code-ph-fail');
+  try {
+    assert.equal(out.codes.ok, 0);
+    assert.equal(out.codes.failed, 1);
+    assert.match(styled, /data-u2m-code="fail"/, 'styled 失败块保 live + 标记');
+    assert.ok(styled.includes('src="x.png"'), '失败块子树保留');
+    assert.ok(cleaned.includes('{{CODE_1|'), 'clean 版恒折叠（含失败块）');
+    const logs = fs.readdirSync(path.join(path.dirname(out.codeJson), 'logs', 'codes'));
+    assert.equal(logs.length, 1);
+    assert.ok(fs.readFileSync(path.join(path.dirname(out.codeJson), 'logs', 'codes', logs[0]), 'utf8').includes('reason: non_textual'));
+  } finally { cleanup(); }
 });

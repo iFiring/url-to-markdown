@@ -359,11 +359,17 @@ function __u2mCleanSnapshot(cfg) {
     // 本函数前注入 evaluate 作用域；单独跑本函数时（无注入）退化为空列表。
     var tablesCollected = (typeof __u2mCollectTables === 'function') ? __u2mCollectTables() : [];
 
+    // 收集代码块元数据（折叠前、与表格同场——LONG_TEXT 占位已就位）。
+    // __u2mCollectCode 由 clean_snapshot.mjs 把 page-collect-code.js 源码拼在
+    // 本函数前注入 evaluate 作用域；单独跑本函数时（无注入）退化为空列表。
+    var codesCollected = (typeof __u2mCollectCode === 'function') ? __u2mCollectCode() : [];
+
     return {
       html: '<!DOCTYPE html>\n' + document.documentElement.outerHTML,
       longTextCount: k,
       longTexts: longTexts,
-      tables: tablesCollected
+      tables: tablesCollected,
+      codes: codesCollected
     };
   }
 
@@ -523,10 +529,15 @@ function __u2mCleanSnapshot(cfg) {
     tb.appendChild(document.createTextNode('{{TABLE_' + tableK + '|' + shape.rows + '×' + shape.cols + '}}'));
   }
 
-  // K7. pre 折叠（仅清洗版）：data-language 从 code 壳提升到 pre；行数取共享段
-  //     占位前预计算的原文换行/div 行块较大值（算法见共享段 countPreLines——
-  //     长文本占位吞掉换行后再量会塌缩为 1）。
+  // K7. pre 折叠（仅清洗版，map 驱动）：codeFold 由 clean_snapshot.mjs 按收集
+  //     结果构造（含 failed 条目——clean 无条件折叠全部非 hidden pre，镜像 K6
+  //     对表的处理）。map 未命中（防御分支，编排层保证收集全覆盖，理论不可达）
+  //     → 退回 {{PRE_CODE_TAG|n_lines}} 局部计数（__u2mPreLines 占位前预计算），
+  //     不占 k 编号、不参与还原链。clean 趟 <style> 已删、computed display 退化
+  //     为 UA 默认，无法本地重算 walkLines——行数必须来自 styled 趟收集结果
+  //     （附带修正：grid 行容器形态不再塌缩为 1 行）。
   //     带 hidden 的 pre 由 K5 独占折叠（其折叠 token 已就位），跳过防二次覆盖
+  var codeFold = cfg.codeFold || {};
   var pres = document.querySelectorAll('pre');
   for (var i = 0; i < pres.length; i++) {
     var pre = pres[i];
@@ -536,9 +547,18 @@ function __u2mCleanSnapshot(cfg) {
     if (langShell && !pre.hasAttribute('data-language')) {
       pre.setAttribute('data-language', langShell.getAttribute('data-language'));
     }
-    var lines = pre.__u2mPreLines;
-    while (pre.firstChild) pre.removeChild(pre.firstChild);
-    pre.appendChild(document.createTextNode('{{PRE_CODE_TAG|' + lines + '_lines}}'));
+    var fr = codeFold[pre.getAttribute('data-idx') || ''];
+    if (fr) {
+      if (fr.lang && !pre.hasAttribute('data-language')) {
+        pre.setAttribute('data-language', fr.lang);
+      }
+      while (pre.firstChild) pre.removeChild(pre.firstChild);
+      pre.appendChild(document.createTextNode('{{CODE_' + fr.k + '|' + fr.lines + '_lines}}'));
+    } else {
+      var lines = pre.__u2mPreLines;
+      while (pre.firstChild) pre.removeChild(pre.firstChild);
+      pre.appendChild(document.createTextNode('{{PRE_CODE_TAG|' + lines + '_lines}}'));
+    }
   }
 
   // 行内标签集（K9 用）：判行间空白是否敏感

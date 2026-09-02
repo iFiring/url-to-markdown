@@ -51,12 +51,15 @@
  *     K1-K7/K9 机械规则——K1 class 语义过滤、K2 属性白名单（href/src/
  *     aria 全删）、K3 SVG 清空、K4 astro 解包（两趟共享）、K5 hidden 裸属性
  *     折叠 {{HIDDEN_TAG|n_chars;构成}}（规模按占位前原文预计算）、K6/K7
- *     table/pre 折叠 {{TABLE_k|rows×cols}}/{{PRE_CODE_TAG|n_lines}}
- *     （行列/行数规模信号，pre 行数占位前预计算）、K9 空白压缩
+ *     table/pre 折叠 {{TABLE_k|rows×cols}}/{{CODE_k|n_lines}}
+ *     （行列/行数规模信号；CODE 行数来自 styled 趟 walkLines 收集、
+ *     两版 k 对齐，成功代码块带样式版也折叠为同形占位符）、K9 空白压缩
  *
  * stdout 输出（有且仅有一行 JSON，日志一律走 stderr）:
  *   {"status":"ok","cleanedSnapshot":"...","styledSnapshot":"...",
- *    "longText":".../2_long_text.json","longTextCount":N}   → 退出码 0
+ *    "longText":".../2_long_text.json","longTextCount":N,
+ *    "tables":{"total":N,"ok":N,"failed":N},"tablesJson":".../2_tables.json",
+ *    "codes":{"total":N,"ok":N,"failed":N},"codeJson":".../2_code.json"} → 退出码 0
  *   {"status":"error","reason":"..."}                        → 1
  *
  * 退出码: 0 成功；1 失败；2 参数错误。
@@ -70,6 +73,7 @@ import { urlDir } from './lib/env.mjs';
 import { readSharedScript } from './lib/placeholder.mjs';
 import { proxyLaunchOptions, newU2MContext } from './lib/browser.mjs';
 import { convertTables } from './lib/table2md.js';
+import { convertCodes } from './lib/code2md.mjs';
 
 function parseArgs(argv) {
   const out = { _: [] };
@@ -108,6 +112,8 @@ async function main() {
   const pageCleanFn = await readSharedScript('page-clean-snapshot.js');
   const collectTablesFn = await readSharedScript('page-collect-tables.js');
   const foldTablesFn = await readSharedScript('page-fold-tables.js');
+  const collectCodeFn = await readSharedScript('page-collect-code.js');
+  const foldCodeFn = await readSharedScript('page-fold-code.js');
 
   let browser;
   try {
@@ -117,10 +123,11 @@ async function main() {
     // 只拦 http(s) 子资源：DOM 解析不需要图片/字体，file:// 主文档导航不经路由
     await page.route(/^https?:/, (route) => route.abort());
 
-    // 趟 1（styled）：结构清洗 + 长文本占位 + SVG 瘦身 → 带样式版（live 表）
-    // __u2mCollectTables 源码拼在前，使 __u2mCleanSnapshot 末尾能调用它收集表元数据
+    // 趟 1（styled）：结构清洗 + 长文本占位 + SVG 瘦身 → 带样式版（live 表/失败代码块）
+    // __u2mCollectTables/__u2mCollectCode 源码拼在前，使 __u2mCleanSnapshot 末尾
+    // 能调用它们收集表/代码块元数据
     await page.goto(`file://${snapshotPath}`, { waitUntil: 'domcontentloaded' });
-    const styledEvalSrc = `${collectTablesFn}\n(${pageCleanFn})(${JSON.stringify({ mode: 'styled' })})`;
+    const styledEvalSrc = `${collectTablesFn}\n${collectCodeFn}\n(${pageCleanFn})(${JSON.stringify({ mode: 'styled' })})`;
     const styled = await page.evaluate(styledEvalSrc);
 
     // ── Node 层表格转换：预展开长文本 → 引擎 → 纯结构校验 → 2_tables.json + 日志 ──
@@ -136,10 +143,36 @@ async function main() {
     for (const [k, info] of Object.entries(tablesJson)) {
       resultByDataIdx[info.dataIdx] = { k: Number(k), status: info.status, rows: info.rows, cols: info.cols };
     }
+
+    // ── Node 层代码块转换：七类校验 + 序号剥离 + 序列化 → 2_code.json + 日志 ──
+    const { codes: codesJson, counts: codeCounts } = await convertCodes(
+      styled.codes || [], { longTextMap, logsDir: path.join(dir, 'logs', 'codes') });
+    const codeJsonPath = path.join(dir, '2_code.json');
+    await fsPromises.writeFile(codeJsonPath, JSON.stringify(codesJson, null, 2), 'utf8');
+
+    // styled fold 映射 + clean 趟 codeFold 映射（clean 恒折叠含 failed——
+    // 行数：ok 取 JSON 修剪后行数，failed 取收集原始行数）
+    const codeResultByDataIdx = {};
+    const codeFold = {};
+    for (const c of styled.codes || []) {
+      const r = codesJson[String(c.k)];
+      codeResultByDataIdx[c.dataIdx] = {
+        k: c.k, status: r.status, lines: r.lines, lang: r.lang,
+      };
+      codeFold[c.dataIdx] = {
+        k: c.k,
+        lines: r.status === 'ok' ? r.lines : c.lines,
+        lang: r.status === 'ok' ? r.lang : c.lang,
+      };
+    }
+
     // styled fold：同页 DOM（evaluate 间状态保留，未 reload）——成功表折成
-    // {{TABLE_k|rows×cols}}、失败表打 data-u2m-table="fail"。fold 后重新序列化
-    // （用与 styled 趟 return 同形的 '<!DOCTYPE html>\n' + outerHTML，保持产物格式）
+    // {{TABLE_k|rows×cols}}、失败表打 data-u2m-table="fail"；随后代码块
+    // （成功折成 {{CODE_k|n_lines}}、失败打 data-u2m-code="fail"）。fold 后
+    // 重新序列化（用与 styled 趟 return 同形的 '<!DOCTYPE html>\n' + outerHTML，
+    // 保持产物格式）
     await page.evaluate(`(${foldTablesFn})(${JSON.stringify(resultByDataIdx)})`);
+    await page.evaluate(`(${foldCodeFn})(${JSON.stringify(codeResultByDataIdx)})`);
     const styledHtml = '<!DOCTYPE html>\n' + await page.evaluate(() => document.documentElement.outerHTML);
     const styledPath = path.join(dir, '2_clean_style_snapshot.html');
     await fsPromises.writeFile(styledPath, styledHtml, 'utf8');
@@ -149,13 +182,13 @@ async function main() {
 
     // 趟 2（clean）：重新加载同一快照，结构清洗 + K1-K9 → 清洗版（终端视图）
     await page.goto(`file://${snapshotPath}`, { waitUntil: 'domcontentloaded' });
-    const clean = await page.evaluate(`(${pageCleanFn})(${JSON.stringify({ mode: 'clean' })})`);
+    const clean = await page.evaluate(`(${pageCleanFn})(${JSON.stringify({ mode: 'clean', codeFold })})`);
 
     const cleanedPath = path.join(dir, '2_clean_snapshot.html');
     await fsPromises.writeFile(cleanedPath, clean.html, 'utf8');
 
-    debug(`[clean] hidden 折叠 ${clean.stats.hiddenCount} · 清洗版 ${Buffer.byteLength(clean.html, 'utf8')} 字节 · 表格 ${tableCounts.ok}ok/${tableCounts.failed}fail`);
-    log(`清洗完成: ${cleanedPath} (${styled.longTextCount} 个长文本占位符, 表格 ${tableCounts.total} 个: ${tableCounts.ok} 成功 ${tableCounts.failed} 失败)`);
+    debug(`[clean] hidden 折叠 ${clean.stats.hiddenCount} · 清洗版 ${Buffer.byteLength(clean.html, 'utf8')} 字节 · 表格 ${tableCounts.ok}ok/${tableCounts.failed}fail · 代码块 ${codeCounts.ok}ok/${codeCounts.failed}fail`);
+    log(`清洗完成: ${cleanedPath} (${styled.longTextCount} 个长文本占位符, 表格 ${tableCounts.total} 个: ${tableCounts.ok} 成功 ${tableCounts.failed} 失败, 代码块 ${codeCounts.total} 个: ${codeCounts.ok} 成功 ${codeCounts.failed} 失败)`);
 
     await context.close();
     await browser.close();
@@ -168,6 +201,8 @@ async function main() {
       longTextCount: styled.longTextCount,
       tables: tableCounts,
       tablesJson: tablesJsonPath,
+      codes: codeCounts,
+      codeJson: codeJsonPath,
     });
   } catch (e) {
     await browser?.close().catch(() => {});
