@@ -140,8 +140,14 @@ styled 趟的原因。
 对每个文档序、attached、非 `[hidden]` 的 `<pre>` 收集：
 
 ```
-{ k, dataIdx, lang, text, lines, renderedLines, hasNonText, textContentNoGutter }
+{ k, dataIdx, lang, text, lines, renderedLines, hasNonText, textContentNoGutter,
+  blockContainers, gutterStripped, outerHTML }
 ```
+
+- `blockContainers`：code 壳直接子元素中 computed display 非行内且非 `<br>` 的个数
+  （行容器计数——`mixed_signal_mismatch` 校验输入）。
+- `gutterStripped`：层 1 是否命中过槽排除。
+- `outerHTML`：pre 原始序列化（折叠前，含占位符），失败诊断日志用（写入时截断）。
 
 **walkLines 结构化行重建**：
 
