@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { convertCodes } from '../../script/lib/code2md.mjs';
+import { convertCodes, stripLeadingNumbers } from '../../script/lib/code2md.mjs';
 
 // 收集载荷工厂——字段含义见 spec §5.1；jsdom 无关（纯 Node 数据变换）
 function payload(over = {}) {
@@ -143,4 +143,66 @@ test('counts 与失败诊断日志落盘', async () => {
     assert.ok(log.includes('reason: non_textual'));
     assert.ok(log.includes('--- outerHTML ---'));
   } finally { fs.rmSync(logsDir, { recursive: true, force: true }); }
+});
+
+test('层 2：行首序号剥离——bare / 点 / 管道分隔三形态', () => {
+  const bare = stripLeadingNumbers(['1 import x', '2 const a = 1', '3 export default a']);
+  assert.equal(bare.stripped, true);
+  assert.deepEqual(bare.lines, ['import x', 'const a = 1', 'export default a']);
+
+  const dotted = stripLeadingNumbers(['1. alpha', '2. beta', '3. gamma']);
+  assert.deepEqual(dotted.lines, ['alpha', 'beta', 'gamma']);
+
+  const piped = stripLeadingNumbers(['1 | code one', '2 | code two', '3 | code three']);
+  assert.deepEqual(piped.lines, ['code one', 'code two', 'code three']);
+});
+
+test('层 2：起始任意（摘录槽从 26 起）', () => {
+  const r = stripLeadingNumbers(['26 "model": "x"', '27 "input": []', '28 }']);
+  assert.equal(r.stripped, true);
+  assert.deepEqual(r.lines, ['"model": "x"', '"input": []', '}']);
+});
+
+test('层 2：多空格槽对齐——数字后水平空白全剥；不足 3 行不剥', () => {
+  const r = stripLeadingNumbers(['1    import', '2    export']);
+  // 仅 2 行 < 3 不剥——换 3 行
+  const r3 = stripLeadingNumbers(['1    import', '2    export', '3    const']);
+  assert.equal(r3.stripped, true);
+  assert.deepEqual(r3.lines, ['import', 'export', 'const']);
+  assert.equal(r.stripped, false);
+});
+
+test('层 2 不剥：序列中断（yaml 数字键后有普通行）', () => {
+  const r = stripLeadingNumbers(['1: a', '2: b', 'foo: bar']);
+  assert.equal(r.stripped, false);
+  assert.equal(r.lines[0], '1: a');
+});
+
+test('层 2 不剥：非公差 1', () => {
+  const r = stripLeadingNumbers(['1 a', '3 b', '5 c']);
+  assert.equal(r.stripped, false);
+});
+
+test('层 2 不剥：某行无行首整数', () => {
+  const r = stripLeadingNumbers(['1 a', 'no number', '3 c']);
+  assert.equal(r.stripped, false);
+});
+
+test('层 2 不剥：长数字不是序号（10 位数前缀 lookahead 失败）', () => {
+  const r = stripLeadingNumbers(['1234567890 abc', '1234567891 def', '1234567892 ghi']);
+  assert.equal(r.stripped, false);
+});
+
+test('层 2 不剥：剥后退化（剩余全数字+分隔符）', () => {
+  const r = stripLeadingNumbers(['1 2', '2 3', '3 4']);
+  assert.equal(r.stripped, false);
+});
+
+test('convertCodes 集成：内联序号形态产出 numberStripped 元数据', async () => {
+  const text = '1. alpha\n2. beta\n3. gamma';
+  const { codes } = await convertCodes([payload({ text, textContentNoGutter: text })], {});
+  assert.equal(codes['1'].status, 'ok');
+  assert.equal(codes['1'].content, 'alpha\nbeta\ngamma');
+  assert.equal(codes['1'].numberStripped, true);
+  assert.equal(codes['1'].lines, 3);
 });

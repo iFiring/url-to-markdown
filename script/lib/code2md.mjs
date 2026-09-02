@@ -94,7 +94,31 @@ export async function convertCodes(codeList, { longTextMap = {}, logsDir } = {})
   return { codes, counts: { total: codeList.length, ok, failed } };
 }
 
-// 层 2 行首序号剥离——Task 2 实现，先返回原样
-function stripLeadingNumbers(lines) {
-  return { lines, stripped: false };
+// 层 2：行首算术序号剥离（spec §6.2）——保守条件全满足才剥，防误剥 yaml
+// 数字键等真实代码：≥3 个非空行全部带行首整数 token、构成公差 1 连续序列
+// （起始任意——OpenAI 摘录槽有从 26 起形态）、剥后内容非退化。
+// 剥离量 = 行首水平空白 + 数字 + 水平空白串 + 至多一个分隔符 + 尾随水平空白
+// （不吞更深缩进）。长数字（>3 位）不是序号：lookahead 要求数字后是
+// 分隔符/空白/行尾。覆盖 '1 x' / '1. x' / '1: x' / '1 | x' / '26 "x"' 形态。
+const LEADING_NUM_RE = /^[ \t]*(\d{1,3})(?=[ \t.:;)|·•\-–—]|$)/;
+const NUM_PREFIX_RE = /^[ \t]*\d{1,3}[ \t]*(?:[.:;)|·•\-–—][ \t]*)?/;
+
+export function stripLeadingNumbers(lines) {
+  const idxs = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim() !== '') idxs.push(i);
+  }
+  if (idxs.length < 3) return { lines, stripped: false };
+  const firsts = idxs.map((i) => {
+    const m = LEADING_NUM_RE.exec(lines[i]);
+    return m ? Number(m[1]) : null;
+  });
+  if (firsts.some((n) => n === null)) return { lines, stripped: false };
+  for (let j = 1; j < firsts.length; j++) {
+    if (firsts[j] !== firsts[0] + j) return { lines, stripped: false };
+  }
+  const out = lines.slice();
+  for (const i of idxs) out[i] = out[i].replace(NUM_PREFIX_RE, '');
+  if (out.every((l) => GUTTERISH_RE.test(l))) return { lines, stripped: false };
+  return { lines: out, stripped: true };
 }
