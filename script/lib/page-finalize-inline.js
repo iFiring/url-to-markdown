@@ -143,6 +143,15 @@ function __u2mFinalizeInline(computedMap) {
       styled[i].removeAttribute('style');
       continue;
     }
+    // table 子树内全部内联样式删净（表格占位符设计）：成功表已折叠为文本节点、
+    // 无 [style] 单元格子树 → 此分支对它们 no-op；仅命中失败 live 表
+    //（data-u2m-table="fail" 或 styled 趟保留 live 的表）——剥净 border/
+    // background/box-shadow 等，到 6_article.html 只剩结构+文本+长文本占位符
+    // 供步骤 7 LLM 语义还原。
+    if (styled[i].closest('table')) {
+      styled[i].removeAttribute('style');
+      continue;
+    }
     var st = styled[i].style;
     // 唯一元素级例外：<img> 的宽高保留——步骤 7 LLM 判图片权重的
     // 语义信号（小图标 / 大图 / 图片组）；值为 inherit 的照样删
