@@ -12,7 +12,7 @@
     - 段落：`<p>`
     - 标题：`<h1>`-`<h6>`
     - 预格式块/代码块：`<pre>`（内容折叠为 `{{PRE_CODE_TAG|x_lines}}` 占位）
-    - 表格块：`<table>`（内容折叠为 `{{TABLE_TAG|y_rows|x_cols}}` 占位）
+    - 表格块：`<table>`（内容折叠为 `{{TABLE_k|y×x}}` 占位，k 为文档序编号、y = 行数、x = 列数）
     - 复合单元：`<figure>`（图 + `<figcaption>`）
     - 列表：`<ul>`、`<ol>`
     - 定义列表 `<dl>`（`<dt>`/`<dd>` 的术语对、问答、元信息对）
@@ -214,7 +214,7 @@
 
 - `{{PRE_CODE_TAG|x_lines}}` 为代码块内容占位，x = 代码行数；`data-language` 在 pre 属性上
 
-- `{{TABLE_TAG|y_rows|x_cols}}`：表格整体占位，y = 行数（`<tr>` 数），x = 列数（各行 colspan 之和的最大值，即网格列数）。行列规模是判读表格的信号——大表（如 `30_rows` 级）大概率是核心数据载体
+- `{{TABLE_k|y×x}}`：表格整体占位，k = 文档序编号（1 起、跳过 `[hidden]` 表），y = 行数（`<tr>` 数），x = 列数（各行 colspan 之和的最大值，即网格列数）。行列规模是判读表格的信号——大表（如 `30×` 级）大概率是核心数据载体。成功表的 GFM markdown 已由步骤 2 预计算存 `2_tables.json`、步骤 8 还原；步骤 3 仅需标记其 `data-idx` 入 paragraphIds
 
 - `{{HIDDEN_TAG|n_chars;n_a/n_div/…}}` 为带 `hidden` 属性的元素，折叠了子树；token 是真实文本规模与标签构成（计数降序），标明其后是整块折叠内容。hidden 元素按内容语义判身份：文章正文（FAQ/附录/展开收起）→ 段落块（也是锚点）；页面功能（模态/抽屉/移动端导航）→ 流内标 `dumpIds`、流外不标
 
@@ -282,7 +282,7 @@
             <figure class="table" data-idx="23">
               <figcaption data-idx="24">表题</figcaption>
               <div data-idx="25">
-                <table data-idx="26">{{TABLE_TAG|8_rows|4_cols}}</table>
+                <table data-idx="26">{{TABLE_3|8×4}}</table>
               </div>
             </figure>
             <p data-idx="27"><span>…</span></p>

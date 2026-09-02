@@ -51,7 +51,7 @@
  *     K1-K7/K9 机械规则——K1 class 语义过滤、K2 属性白名单（href/src/
  *     aria 全删）、K3 SVG 清空、K4 astro 解包（两趟共享）、K5 hidden 裸属性
  *     折叠 {{HIDDEN_TAG|n_chars;构成}}（规模按占位前原文预计算）、K6/K7
- *     table/pre 折叠 {{TABLE_TAG|n_rows|m_cols}}/{{PRE_CODE_TAG|n_lines}}
+ *     table/pre 折叠 {{TABLE_k|rows×cols}}/{{PRE_CODE_TAG|n_lines}}
  *     （行列/行数规模信号，pre 行数占位前预计算）、K9 空白压缩
  *
  * stdout 输出（有且仅有一行 JSON，日志一律走 stderr）:
