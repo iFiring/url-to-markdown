@@ -1323,6 +1323,186 @@ test('CODE 占位符：ra 形态（grid 行容器零 \\n）行数修正——不
   } finally { cleanup(); }
 });
 
+test('K11: 纯视图文本折叠——纯 div 树需内部 div>6、文本量 ≥8 汉字；不达标不折、styled 不动', async () => {
+  // 2026-09-03 门槛修订：仅折叠「结构脚手架明显 + 文本量达标」的纯视图子树——
+  // 纯 div 树内部 div > 6；文本量 ≥8 汉字 / ≥6 词（英文）。短文本、结构单薄的
+  // 子树保留原样（步骤 3 的判读信号）。
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-idx="1">
+    <div class="ra-raw" data-idx="2">
+      <div data-idx="3">
+        <div data-idx="5">健康</div>
+        <div data-idx="6">1×</div>
+        <div data-idx="7">95% 命中</div>
+        <div data-idx="8">~1x cost</div>
+      </div>
+      <div data-idx="9">
+        <div data-idx="10">观察</div>
+        <div data-idx="11">4×</div>
+      </div>
+      <div data-idx="12">85% 命中</div>
+    </div>
+    <p data-idx="13">正文段落保持原样。</p>
+    <div data-idx="14">健康</div>
+    <div data-idx="15"><div data-idx="16"><div data-idx="17">短文本不折</div></div></div>
+  </div>
+</body></html>`;
+  const { out, cleaned, styled, cleanup } = await runClean(snapshot, 'k11-view-text');
+  try {
+    // 模块根 div 2（内部 9 个 div > 6、文本 ≥8 汉字）：壳保留 class/data-idx
+    assert.match(
+      cleaned,
+      /<div class="ra-raw" data-idx="2">\{\{VIEW_TEXT\|\d+_chars\}\}<\/div>/,
+      `纯 div 树（内部 9 div）应折叠: ${cleaned.match(/<div class="ra-raw"[^>]*>[\s\S]{0,60}/)?.[0]}`
+    );
+    assert.ok(!cleaned.includes('data-idx="5"') && !cleaned.includes('data-idx="12"'), '模块内部 id 应随折叠消失');
+    // 文本量不足（"健康" 2 字 < 8）不折
+    assert.ok(/<div data-idx="14">健康<\/div>/.test(cleaned), '文本量不足的纯文本 div 不折');
+    // 结构单薄（内部 2 div ≤ 6）不折——即使文本达标
+    assert.ok(cleaned.includes('data-idx="16"') && cleaned.includes('短文本不折'), '结构单薄的纯 div 树不折');
+    // 段落流不动
+    assert.ok(/<p data-idx="13">正文段落保持原样。<\/p>/.test(cleaned), '段落流内容不受影响');
+    // 带样式版完全不动
+    assert.ok(!styled.includes('VIEW_TEXT'), '带样式版不应出现 VIEW_TEXT');
+    assert.ok(styled.includes('data-idx="5"') && styled.includes('95% 命中'), '带样式版模块内容保真');
+    assert.equal(out.viewText.count, 1, 'emit 应报 viewText 折叠计数');
+  } finally { cleanup(); }
+});
+
+test('K11: 含 span 树合计 >4 即折、a/button/h2 豁免、hidden/svg 阻断、锚点旁模块单独折叠', async () => {
+  // 形态分档（2026-09-03）：含 span 的树 div/span 合计 > 4 即达结构门槛
+  // （span 包裹内容如 katex 孪生更易折）；纯 div 树仍需 >6。
+  // 豁免夹具用 5 层带 class 的 span（无属性 span 会先被 K10 拆包）+ 6 词文本
+  // ——只有豁免规则（而非门槛）能阻止折叠。刻度行验证逐节点计词（K9 删空白
+  // 后连接串无分隔，按 textContent 切词会塌缩成 1 词）。
+  const nest = (inner) => `<span class="k"><span class="k"><span class="k"><span class="k">${inner}</span></span></span></span>`;
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-idx="1">
+    <a data-idx="2">${nest('<span class="k">link text with enough words count</span>')}</a>
+    <button data-idx="8" type="button">${nest('<span class="k">button text with enough words here</span>')}</button>
+    <h2 data-idx="10">${nest('<span class="k">heading text with enough words here</span>')}</h2>
+    <div data-idx="12"><span class="v">a</span><span class="v">b</span><span class="v">c</span><span class="v">d</span><span class="v">e f g h</span></div>
+    <div data-idx="13"><div data-idx="14" hidden>折叠答案文本</div></div>
+    <div data-idx="15"><div data-idx="16">文本</div><svg data-idx="17"></svg></div>
+    <div data-idx="18"><p data-idx="19">段落锚点</p><div class="ticks" data-idx="20"><div data-idx="21">0</div><div data-idx="22">2.5k</div><div data-idx="23">5k</div><div data-idx="24">7.5k</div><div data-idx="25">10k</div><div data-idx="26">12.5k</div><div data-idx="27">15k</div></div></div>
+  </div>
+</body></html>`;
+  const { out, cleaned, cleanup } = await runClean(snapshot, 'k11-exempt');
+  try {
+    // 豁免：a/button/h2 内 5 层 span 树（结构/文本均达标）不折
+    assert.ok(cleaned.includes('link text with enough words count'), 'a 后代不折');
+    assert.ok(cleaned.includes('button text with enough words here'), 'button 后代不折');
+    assert.ok(cleaned.includes('heading text with enough words here'), 'h2 后代不折');
+    // 含 span 树：5 个内部 span 合计 > 4、8 词 ≥ 6 → 折
+    assert.match(cleaned, /<div data-idx="12">\{\{VIEW_TEXT\|\d+_words\}\}<\/div>/, '含 span 树合计 >4 折叠');
+    // hidden 阻断（K5 领地）
+    assert.ok(/<div data-idx="13"><div data-idx="14" hidden(="")?>\{\{HIDDEN_TAG\|/.test(cleaned), `含 hidden 子元素的子树不折: ${cleaned.match(/<div data-idx="13">[\s\S]{0,60}/)?.[0]}`);
+    // svg 阻断
+    assert.ok(cleaned.includes('<svg data-idx="17"></svg>') && cleaned.includes('<div data-idx="16">文本</div>'), 'svg 阻断纯性');
+    // 锚点旁刻度行：7 内部 div > 6、纯 div 树达标 → 单独折叠；p 不动
+    assert.match(cleaned, /<div class="ticks" data-idx="20">\{\{VIEW_TEXT\|\d+_words\}\}<\/div>/, '锚点旁纯 div 模块单独折叠');
+    assert.ok(/<p data-idx="19">段落锚点<\/p>/.test(cleaned), '段落锚点不动');
+    assert.equal(out.viewText.count, 2, '折 2 处（div 12 span 树 + div 20 刻度行）');
+  } finally { cleanup(); }
+});
+
+test('K11: 含 LT 模块整棵折叠——LT 随折吞没（clean ⊆ styled）；纯 LT 文本行不折', async () => {
+  // 2026-09-03 三次修订：去除 LT 限制——保留式折叠（LT 文本行保持可见）
+  // 吞掉的折叠量太少。含 LT 的纯视图模块如今整棵折叠，模块内 LT 占位符随折
+  // 吞没；孪生守卫由「两版 LT 集合相等」放宽为 clean ⊆ styled——步骤 3 少看
+  // 见模块内 LT，还原链走带样式版路径不受影响（LT 原文仍在 2_long_text.json
+  // 与带样式版中）。纯 LT 文本行（结构门槛 0 内部元素）依旧不折。
+  const longZh = '这是一段超过十六个汉字的模块内长文本用于验证折叠行为。';
+  const longP = '这是一段同样超过十六个汉字的独立长文本用于对照不折叠。';
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-idx="1">
+    <p data-idx="2">锚点段落。</p>
+    <div class="ra-raw" data-idx="3">
+      <div data-idx="4">
+        <div data-idx="5">健康</div>
+        <div data-idx="6">1×</div>
+        <div data-idx="7">95% 命中</div>
+        <div data-idx="8">~1x cost</div>
+      </div>
+      <div data-idx="9"><div data-idx="10">观察</div></div>
+      <div data-idx="11">${longZh}</div>
+    </div>
+    <div class="aside-body" data-idx="12">${longP}</div>
+    <div class="chart" data-idx="13">
+      <div data-idx="14">step one</div>
+      <div data-idx="15">step two</div>
+      <div data-idx="16">step three</div>
+      <div data-idx="17">step four</div>
+      <div data-idx="18">step five</div>
+      <div data-idx="19">step six</div>
+      <div data-idx="20">step seven</div>
+    </div>
+  </div>
+</body></html>`;
+  const { out, cleaned, styled, cleanup } = await runClean(snapshot, 'k11-longtext');
+  try {
+    // 模块 3：整棵折叠为占位符——LT 行 11 不再保留、随折吞没
+    assert.match(
+      cleaned,
+      /<div class="ra-raw" data-idx="3">\{\{VIEW_TEXT\|\d+_chars\}\}<\/div>/,
+      `含 LT 模块整棵折叠: ${cleaned.match(/<div class="ra-raw" data-idx="3">[\s\S]{0,90}/)?.[0]}`
+    );
+    assert.ok(!cleaned.includes('data-idx="5"') && !cleaned.includes('data-idx="11"'), '模块内部 id（含 LT 行）随折叠消失');
+    // 纯 LT 文本行（0 内部元素、结构门槛不过）不折
+    assert.ok(/<div class="aside-body" data-idx="12">\{\{LONG_TEXT_2\|\d+_chars\}\}<\/div>/.test(cleaned), '纯 LT 文本行不折');
+    // 无 LT 模块照旧整棵折
+    assert.match(cleaned, /<div class="chart" data-idx="13">\{\{VIEW_TEXT\|\d+_words\}\}<\/div>/, '无 LT 模块照折');
+    // 孪生守卫（放宽形）：clean 占位符集合 ⊆ styled——LT_1 随模块吞没、LT_2 两版都在
+    const ph = (h) => (h.match(/\{\{LONG_TEXT_\d+\|\d+_[a-z]+\}\}/g) || []).sort();
+    assert.ok(!cleaned.includes('{{LONG_TEXT_1|'), 'LT_1 随模块折叠吞没（clean 不见）');
+    assert.ok(styled.includes('{{LONG_TEXT_1|') && styled.includes('{{LONG_TEXT_2|'), 'styled 两 LT 保真');
+    assert.ok(ph(cleaned).every((s) => ph(styled).includes(s)), 'clean LT 集合 ⊆ styled');
+    assert.equal(out.longTextCount, 2, 'LT 计数不受 K11 影响');
+    assert.ok(styled.includes('95% 命中') && styled.includes('观察'), 'styled 模块内容保真');
+    assert.equal(out.viewText.count, 2, 'emit viewText 计数 = 2（模块 3 + chart 13）');
+  } finally { cleanup(); }
+});
+
+test('K11: p>span 形态——p 根（子树仅 text/span）span>4 即折；纯文本 p 不折、div 不因含 p 变纯', async () => {
+  // 2026-09-03 新增 p>span 形态：p 通常不嵌 p、只含 text 或 span——p 作为
+  // 折叠根独立一档，纯性 = 子树只含文本与 span（div/p/code/a 等任何其他标签
+  // 阻断），结构门槛沿用 span 档（span > 4）。p 不入 div/span 纯树的允许集：
+  // 正文段落流 <div><p>…</p><p>…</p></div> 不能因 p 变纯而整块折叠。
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-idx="1">
+    <p data-idx="2"><span class="k">alpha</span><span class="k">beta</span><span class="k">gamma</span><span class="k">delta</span><span class="k">epsilon zeta</span></p>
+    <p data-idx="8">plain paragraph text stays</p>
+    <p data-idx="9"><span class="k">only two</span><span class="k">spans</span></p>
+    <p data-idx="13"><span class="k">a</span><span class="k">b</span><span class="k">c</span><span class="k">d</span><span class="k">e</span><code data-idx="14">code()</code></p>
+    <div data-idx="20"><p data-idx="21">para one stays</p><p data-idx="22">para two stays</p></div>
+  </div>
+</body></html>`;
+  const { out, cleaned, styled, cleanup } = await runClean(snapshot, 'k11-p-span');
+  try {
+    // p 2：5 个 span > 4、6 词 ≥ 6 → 整棵折叠，壳保留标签/data-idx
+    assert.match(cleaned, /<p data-idx="2">\{\{VIEW_TEXT\|\d+_words\}\}<\/p>/, `p>span 形态折叠: ${cleaned.match(/<p data-idx="2">[\s\S]{0,60}/)?.[0]}`);
+    assert.ok(!cleaned.includes('alpha'), 'p 内 span 文本随折叠消失');
+    // 纯文本 p（0 内部元素）不折
+    assert.ok(/<p data-idx="8">plain paragraph text stays<\/p>/.test(cleaned), '纯文本 p 不折');
+    // span ≤ 4 不折
+    assert.ok(cleaned.includes('only two') && cleaned.includes('<span class="k">spans</span>'), 'span ≤4 的 p 不折');
+    // code 阻断 p 纯性
+    assert.ok(cleaned.includes('<code data-idx="14">code()</code>') && cleaned.includes('<span class="k">a</span>'), '含 code 的 p 不折');
+    // p 不入纯树：div 20 不因含 p 变纯、两个段落原样
+    assert.ok(/<p data-idx="21">para one stays<\/p>/.test(cleaned) && /<p data-idx="22">para two stays<\/p>/.test(cleaned), 'div 不因含 p 变纯整折');
+    assert.ok(!styled.includes('VIEW_TEXT'), '带样式版不应出现 VIEW_TEXT');
+    assert.equal(out.viewText.count, 1, '只折 p 2 一处（无 p/span 双重计数）');
+  } finally { cleanup(); }
+});
+
 test('CODE 占位符：失败块 styled 保 live + 标记、clean 恒折叠、日志落盘', async () => {
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>

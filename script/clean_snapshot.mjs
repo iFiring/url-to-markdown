@@ -48,18 +48,26 @@
  *     lang，外加 <style> 选择器引用的动态属性集；<style> 标签豁免）——
  *     target/rel/tabindex/loading/未被选择器引用的 data-* 等删净
  *   - clean 趟：删 style 属性与 <style> 标签，SVG 剥成裸 <svg></svg> 壳；
- *     K1-K7/K9 机械规则——K1 class 语义过滤、K2 属性白名单（href/src/
+ *     K1-K7/K9-K11 机械规则——K1 class 语义过滤、K2 属性白名单（href/src/
  *     aria 全删）、K3 SVG 清空、K4 astro 解包（两趟共享）、K5 hidden 裸属性
  *     折叠 {{HIDDEN_TAG|n_chars;构成}}（规模按占位前原文预计算）、K6/K7
  *     table/pre 折叠 {{TABLE_k|rows×cols}}/{{CODE_k|n_lines}}
  *     （行列/行数规模信号；CODE 行数来自 styled 趟 walkLines 收集、
- *     两版 k 对齐，成功代码块带样式版也折叠为同形占位符）、K9 空白压缩
+ *     两版 k 对齐，成功代码块带样式版也折叠为同形占位符）、K9 空白压缩、
+ *     K10 空壳 span 拆包、K11 纯视图文本折叠 {{VIEW_TEXT|n_chars/n_words}}
+ *     （仅清洗版：极大纯 div/span 子树与 p>span 形态（p 根子树只许
+ *     text/span、p 不入纯树）壳保留、内容整棵折为单占位符——含 LT 模块
+ *     同样整棵折、LT 随折吞没（clean LT 集合 ⊆ styled，还原链走带样式版
+ *     不受影响）；门槛——被折部分文本量 ≥8 汉字/≥6 词、结构量纯 div 树
+ *     内部 div>6 或含 span 树合计>4（p 根同 span 档）；豁免 a/button/
+ *     h1-h3 后代与 hidden/svg/MathML 阻断）
  *
  * stdout 输出（有且仅有一行 JSON，日志一律走 stderr）:
  *   {"status":"ok","cleanedSnapshot":"...","styledSnapshot":"...",
  *    "longText":".../2_long_text.json","longTextCount":N,
  *    "tables":{"total":N,"ok":N,"failed":N},"tablesJson":".../2_tables.json",
- *    "codes":{"total":N,"ok":N,"failed":N},"codeJson":".../2_code.json"} → 退出码 0
+ *    "codes":{"total":N,"ok":N,"failed":N},"codeJson":".../2_code.json",
+ *    "viewText":{"count":N}}                        → 退出码 0
  *   {"status":"error","reason":"..."}                        → 1
  *
  * 退出码: 0 成功；1 失败；2 参数错误。
@@ -187,7 +195,7 @@ async function main() {
     const cleanedPath = path.join(dir, '2_clean_snapshot.html');
     await fsPromises.writeFile(cleanedPath, clean.html, 'utf8');
 
-    debug(`[clean] hidden 折叠 ${clean.stats.hiddenCount} · 清洗版 ${Buffer.byteLength(clean.html, 'utf8')} 字节 · 表格 ${tableCounts.ok}ok/${tableCounts.failed}fail · 代码块 ${codeCounts.ok}ok/${codeCounts.failed}fail`);
+    debug(`[clean] hidden 折叠 ${clean.stats.hiddenCount} · 视图文本折叠 ${clean.stats.viewTextCount} · 清洗版 ${Buffer.byteLength(clean.html, 'utf8')} 字节 · 表格 ${tableCounts.ok}ok/${tableCounts.failed}fail · 代码块 ${codeCounts.ok}ok/${codeCounts.failed}fail`);
     log(`清洗完成: ${cleanedPath} (${styled.longTextCount} 个长文本占位符, 表格 ${tableCounts.total} 个: ${tableCounts.ok} 成功 ${tableCounts.failed} 失败, 代码块 ${codeCounts.total} 个: ${codeCounts.ok} 成功 ${codeCounts.failed} 失败)`);
 
     await context.close();
@@ -203,6 +211,7 @@ async function main() {
       tablesJson: tablesJsonPath,
       codes: codeCounts,
       codeJson: codeJsonPath,
+      viewText: { count: clean.stats.viewTextCount },
     });
   } catch (e) {
     await browser?.close().catch(() => {});
