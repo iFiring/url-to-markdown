@@ -732,3 +732,34 @@ test('screenshot_trans.mjs: trans2img 与 img 混合时截图、下载同轮完�
     await srv.close();
   }
 });
+
+test('screenshot_trans: {{TABLE_k}} 还原为 2_tables.json 的 markdown', async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-st-table-'));
+  const url = 'https://example.com/table-restore';
+  const dir = path.join(tmpRoot, urlToDirName(url));
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, '1_snapshot.html'), `<!DOCTYPE html><html><body><h1 data-idx="1">t</h1><p data-idx="2">body</p></body></html>`);
+  fs.writeFileSync(path.join(dir, '2_long_text.json'), '{}');
+  fs.writeFileSync(path.join(dir, '2_tables.json'), JSON.stringify({
+    '1': { dataIdx: '5', markdown: '| S | I |\n| --- | --- |\n| m | L |', status: 'ok', engine: 'self', rows: 2, cols: 2 },
+    '2': { dataIdx: '6', markdown: null, status: 'failed', reason: 'no header', engine: 'self', rows: 1, cols: 1 },
+  }, null, 2));
+  fs.writeFileSync(path.join(dir, '3_key_ids.json'), JSON.stringify({ titleId: 1, descriptionIds: [], paragraphIds: [2], dumpIds: [] }));
+  fs.writeFileSync(path.join(dir, '7_skeleton.json'), JSON.stringify([
+    { h1: '# t' },
+    { table: '{{TABLE_1}}' },
+    { table: '{{TABLE_2}}' },
+    { table: '| 已是 | 具体 |\n| --- | --- |\n| md | ! |' },
+  ], null, 2));
+  const r = await runScript(process.execPath, [path.resolve('script/screenshot_trans.mjs'), '--url', url],
+    { env: { U2M_WORKING_ROOT: tmpRoot }, timeoutMs: 60000 });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.tablesResolved, 1);
+  assert.deepEqual(out.failedTables, ['2']);
+  const resolved = JSON.parse(fs.readFileSync(out.resolvedSkeleton, 'utf8'));
+  assert.match(resolved[1].table, /\| S \| I \|/);
+  assert.equal(resolved[2].table, '{{TABLE_2}}', '失败 k 保留字面');
+  assert.match(resolved[3].table, /\| 已是 \| 具体 \|/);
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});

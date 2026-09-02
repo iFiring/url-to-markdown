@@ -212,6 +212,29 @@ async function main() {
     );
   }
 
+  // ── {{TABLE_k[|...]}} 还原（LONG_TEXT 之后）——成功路径表 markdown 已预展开
+  //    无 LONG_TEXT 占位，失败路径表值已是具体 markdown 不匹配。查 2_tables.json
+  //    替换为预计算 markdown；未定义/失败 k 保留字面、记 failedTables（不阻断）──
+  const tablesJsonPath = path.join(dir, '2_tables.json');
+  const tablesJson = fs.existsSync(tablesJsonPath)
+    ? JSON.parse(await fsPromises.readFile(tablesJsonPath, 'utf8'))
+    : {};
+  const TABLE_PH_RE = /\{\{TABLE_(\d+)(?:\|[^}]*)?\}\}/g;
+  const failedTables = [];
+  let tablesResolved = 0;
+  for (const entry of resolvedSkeleton) {
+    const key = Object.keys(entry)[0];
+    const val = entry[key];
+    if (typeof val !== 'string' || !val.includes('{{TABLE_')) continue;
+    entry[key] = val.replace(TABLE_PH_RE, (match, id) => {
+      const t = tablesJson[id];
+      if (t && t.status === 'ok' && t.markdown) { tablesResolved++; return t.markdown; }
+      failedTables.push(id);
+      return match; // 保留字面
+    });
+  }
+  await fsPromises.writeFile(resolvedPath, JSON.stringify(resolvedSkeleton, null, 2));
+
   // 按文档序收集 trans2img 条目（value 应为非空正整数 ID 数组——单传祖先链）；
   // 按文档序收集 img 条目括号内 URL（去重，只下 http/https）
   const transEntries = [];
@@ -246,7 +269,7 @@ async function main() {
 
   if (transIds.length === 0 && imgUrls.length === 0) {
     log('骨架无 trans2img 条目也无 img 条目（已写出 resolved skeleton）');
-    return emit({ status: 'ok', skipped: 'no_trans2img', resolvedSkeleton: resolvedPath });
+    return emit({ status: 'ok', skipped: 'no_trans2img', resolvedSkeleton: resolvedPath, tablesResolved, failedTables });
   }
 
   const sigFn = await readSharedScript('page-element-signature.js');
@@ -461,6 +484,8 @@ async function main() {
       images,
       failedImages,
       resolvedSkeleton: resolvedPath,
+      tablesResolved,
+      failedTables,
     });
   } catch (e) {
     if (browser) await browser.close().catch(() => {});

@@ -270,17 +270,18 @@ test('clean_snapshot.mjs: 删除 video/audio 与残余表单控件，header/asid
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('K6: table 整树折叠为 {{TABLE_TAG|N_rows|M_cols}}——带样式版结构完整（含空单元格）', async () => {
+test('K6: table 整树折叠为 {{TABLE_k|rows×cols}}——空单元格保留护（失败表带样式版结构完整）', async () => {
   // 回归：空 <td>/<th>/<tr>/<col> 不在 KEEP_EMPTY 白名单时会被空元素级联删除，
   // 删掉后表格行列错位；article-1 实测丢过整个 <colgroup>+4 <col>。
-  // 清洗版整树折叠为行列 token（结构守护转移至带样式版断言）。
+  // 本表无 <th>（thead 用 td）→ 转换失败 → 带样式版保 live，空单元格存活可验。
+  // 清洗版恒折叠为 {{TABLE_k|rows×cols}}（k 文档序、跳过 hidden）。
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
   <div data-idx="1">
     <table data-idx="2">
       <colgroup data-idx="3"><col data-idx="4"><col data-idx="5"></colgroup>
-      <thead data-idx="6"><tr data-idx="7"><th data-idx="8">列A</th><th data-idx="9"></th></tr></thead>
+      <thead data-idx="6"><tr data-idx="7"><td data-idx="8">列A</td><td data-idx="9"></td></tr></thead>
       <tbody data-idx="10">
         <tr data-idx="11"><td data-idx="12">有值</td><td data-idx="13"></td></tr>
       </tbody>
@@ -288,20 +289,21 @@ test('K6: table 整树折叠为 {{TABLE_TAG|N_rows|M_cols}}——带样式版结
     <p data-idx="14">正文段落</p>
   </div>
 </body></html>`;
-  const { cleaned, styled, cleanup } = await runClean(snapshot, 'k6-table');
+  const { cleaned, styled, cleanup } = await runClean(snapshot, 'k6-table', { U2M_TABLE_ENGINE: 'self' });
   try {
     const seg = cleaned.match(/<table data-idx="2"[^>]*>([\s\S]*?)<\/table>/)[1];
-    assert.ok(seg === '{{TABLE_TAG|2_rows|2_cols}}', `table 应折叠为行列 token（thead 1 行 + tbody 1 行 × 2 列）: ${seg}`);
+    assert.ok(seg === '{{TABLE_1|2×2}}', `table 应折叠为 {{TABLE_k|rows×cols}}（thead 1 行 + tbody 1 行 × 2 列）: ${seg}`);
     assert.ok(!cleaned.includes('列A') && !cleaned.includes('data-idx="3"'), '表格内部结构与内容从清洗版消失');
     assert.ok(cleaned.includes('正文段落'), '表外正文保留');
-    // 带样式版：表格结构全体保留（含空 th/td/col——删空单元格会让行列错位）
+    // 失败表带样式版保 live：空 td/col/colgroup 全体保留（删空单元格会让行列错位）
+    assert.match(styled, /data-u2m-table="fail"/, '失败表打 fail 标记');
     for (const [tid, what] of [
-      ['3', 'colgroup'], ['4', 'col'], ['6', 'thead'], ['8', '有值的 th'], ['9', '空 th'],
+      ['3', 'colgroup'], ['4', 'col'], ['6', 'thead'], ['8', '有值的 td'], ['9', '空 td'],
       ['12', '有值的 td'], ['13', '空 td'],
     ]) {
-      assert.ok(styled.includes(`data-idx="${tid}"`), `${what} (id=${tid}) 带样式版必须保留`);
+      assert.ok(styled.includes(`data-idx="${tid}"`), `${what} (id=${tid}) 失败表带样式版必须保留`);
     }
-    assert.ok(!styled.includes('{{TABLE_TAG'), '守卫: 带样式版不得出现行列 token');
+    assert.ok(!/\{\{TABLE_\d/.test(styled), '守卫: 失败表带样式版不得出现 TABLE 占位符');
   } finally { cleanup(); }
 });
 
@@ -321,7 +323,7 @@ test('K6: 列数按各行 colspan 之和的最大值——网格列数而非单�
   try {
     const seg = cleaned.match(/<table data-idx="2"[^>]*>([\s\S]*?)<\/table>/)[1];
     // 行1: colspan 3 + 1 = 4 列；行2: 2 列 → 取最大 4；行数 2
-    assert.ok(seg === '{{TABLE_TAG|2_rows|4_cols}}', `colspan 按网格列展开取各行最大: ${seg}`);
+    assert.ok(seg === '{{TABLE_1|2×4}}', `colspan 按网格列展开取各行最大: ${seg}`);
   } finally { cleanup(); }
 });
 
@@ -348,7 +350,7 @@ test('K6: 嵌套表格的行列不计入外层——行归属按最近 table 判
   try {
     const seg = cleaned.match(/<table data-idx="2"[^>]*>([\s\S]*?)<\/table>/)[1];
     // 外层只有 1 行 2 列；内层表格的 2 行不计入（整树折叠后内层随之消失）
-    assert.ok(seg === '{{TABLE_TAG|1_rows|2_cols}}', `嵌套表格行列不计入外层: ${seg}`);
+    assert.ok(seg === '{{TABLE_1|1×2}}', `嵌套表格行列不计入外层: ${seg}`);
   } finally { cleanup(); }
 });
 
@@ -853,7 +855,7 @@ test('K6/K7: 带 hidden 的 table/pre 由 K5 独占折叠——不被二次覆�
     const tbl = cleaned.match(/<table data-idx="2"[^>]*>([\s\S]*?)<\/table>/)[1];
     // chromium 解析 <table><tr> 时按规范自动插入 tbody，K5 构成含 1_tbody
     assert.ok(tbl === '{{HIDDEN_TAG|7_chars;1_tbody/1_tr/1_td}}', `hidden table 保留 K5 折叠 token: ${tbl}`);
-    assert.ok(!/\{\{TABLE_TAG/.test(tbl), '不得被 K6 覆盖');
+    assert.ok(!/\{\{TABLE_\d/.test(tbl), '不得被 K6 覆盖');
     const pre = cleaned.match(/<pre data-idx="3"[^>]*>([\s\S]*?)<\/pre>/)[1];
     assert.ok(pre === '{{HIDDEN_TAG|3_words;1_code}}', `hidden pre 保留 K5 折叠 token: ${pre}`);
     assert.ok(!/\{\{PRE_CODE_TAG/.test(pre), '不得被 K7 覆盖');
@@ -1198,3 +1200,58 @@ test('带样式版注入 <meta charset="utf-8">——清洗版不注入', async 
   } finally { cleanup(); }
 });
 
+
+test('table 占位符：成功表 styled 折叠为 {{TABLE_k}}、2_tables.json 存 markdown', async () => {
+  const snap = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head><body>
+    <table data-idx="5"><thead><tr><th>S</th><th>I</th></tr></thead><tbody><tr><td>m</td><td>L</td></tr></tbody></table>
+    </body></html>`;
+  const r = await runClean(snap, 'ok-table', { U2M_TABLE_ENGINE: 'self' });
+  try {
+    assert.match(r.styled, /\{\{TABLE_1\|2×2\}\}/, 'styled 成功表折叠');
+    const tablesJson = JSON.parse(fs.readFileSync(path.join(path.dirname(r.out.cleanedSnapshot), '2_tables.json'), 'utf8'));
+    assert.equal(tablesJson['1'].status, 'ok');
+    assert.match(tablesJson['1'].markdown, /\| S \| I \|/);
+    assert.equal(r.out.tables.ok, 1);
+    assert.equal(r.out.tables.failed, 0);
+  } finally { r.cleanup(); }
+});
+
+test('table 占位符：失败表 styled 保 live + data-u2m-table=fail + 诊断日志', async () => {
+  const snap = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head><body>
+    <table data-idx="5"><tbody><tr><td>无表头</td></tr><tr><td>x</td></tr></tbody></table>
+    </body></html>`;
+  const r = await runClean(snap, 'fail-table', { U2M_TABLE_ENGINE: 'self' });
+  try {
+    assert.equal(r.out.tables.failed, 1);
+    assert.match(r.styled, /data-u2m-table="fail"/);
+    assert.equal(r.styled.includes('{{TABLE_1'), false, '失败表未折叠');
+    const logFiles = fs.readdirSync(path.join(path.dirname(r.out.cleanedSnapshot), 'logs', 'tables')).filter((f) => f.endsWith('.log'));
+    assert.ok(logFiles.length >= 1, '诊断日志生成');
+  } finally { r.cleanup(); }
+});
+
+test('table 占位符：k 在 clean 与 styled 两版一致', async () => {
+  const snap = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head><body>
+    <table data-idx="5"><thead><tr><th>A</th></tr></thead><tbody><tr><td>1</td></tr></tbody></table>
+    <table data-idx="6"><thead><tr><th>B</th></tr></thead><tbody><tr><td>2</td></tr></tbody></table>
+    </body></html>`;
+  const r = await runClean(snap, 'k-consistency', { U2M_TABLE_ENGINE: 'self' });
+  try {
+    assert.match(r.cleaned, /\{\{TABLE_1\|2×1\}\}/);
+    assert.match(r.cleaned, /\{\{TABLE_2\|2×1\}\}/);
+    assert.match(r.styled, /\{\{TABLE_1\|2×1\}\}/);
+    assert.match(r.styled, /\{\{TABLE_2\|2×1\}\}/);
+  } finally { r.cleanup(); }
+});
+
+test('table 占位符：--table-engine / U2M_TABLE_ENGINE 选 turndown', async () => {
+  const snap = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head><body>
+    <table data-idx="5"><thead><tr><th>A</th></tr></thead><tbody><tr><td>1</td></tr></tbody></table>
+    </body></html>`;
+  const r = await runClean(snap, 'engine-flag', { U2M_TABLE_ENGINE: 'turndown' });
+  try {
+    const tablesJson = JSON.parse(fs.readFileSync(path.join(path.dirname(r.out.cleanedSnapshot), '2_tables.json'), 'utf8'));
+    assert.equal(tablesJson['1'].engine, 'turndown');
+    assert.equal(tablesJson['1'].status, 'ok');
+  } finally { r.cleanup(); }
+});

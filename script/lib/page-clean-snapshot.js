@@ -354,10 +354,16 @@ function __u2mCleanSnapshot(cfg) {
     metaCharset.setAttribute('charset', 'utf-8');
     document.head.insertBefore(metaCharset, document.head.firstChild);
 
+    // 收集表格元数据（折叠前、长文本占位已就位）供 Node 层跑转换引擎。
+    // __u2mCollectTables 由 clean_snapshot.mjs 把 page-collect-tables.js 源码拼在
+    // 本函数前注入 evaluate 作用域；单独跑本函数时（无注入）退化为空列表。
+    var tablesCollected = (typeof __u2mCollectTables === 'function') ? __u2mCollectTables() : [];
+
     return {
       html: '<!DOCTYPE html>\n' + document.documentElement.outerHTML,
       longTextCount: k,
-      longTexts: longTexts
+      longTexts: longTexts,
+      tables: tablesCollected
     };
   }
 
@@ -497,20 +503,24 @@ function __u2mCleanSnapshot(cfg) {
     hiddenCount++;
   }
 
-  // K6. table 折叠（仅清洗版）：整树清空、折叠为行列 token——行 = 本表自身的
-  //     <tr> 数（嵌套表格的行归属其最近的 table、不计入外层），列 = 各行
-  //     「单元格 colspan 之和」的最大值（网格列数而非单元格个数）；形状在 K2
-  //     前预计算（colspan 属性彼时尚在）。步骤 3 以行列规模判读表格；全表在
-  //     后续步骤从带样式版保真。
+  // K6. table 折叠（仅清洗版）：整树清空、折叠为 {{TABLE_k|rows×cols}} 占位符
+  //     ——k = 文档序编号（1 起、跳过 [hidden] 表，与 styled 趟 __u2mCollectTables
+  //     /__u2mFoldTables 一致，保证两版 k 对齐）。行 = 本表自身的 <tr> 数（嵌套
+  //     表格的行归属其最近的 table、不计入外层），列 = 各行「单元格 colspan 之和」
+  //     的最大值（网格列数而非单元格个数）；形状在 K2 前预计算（colspan 属性彼时
+  //     尚在）。步骤 3 以行列规模判读表格；成功表的原文存 2_tables.json、步骤 8
+  //     还原，全表在后续步骤从带样式版保真（成功表带样式版也折叠为同形占位符）。
   //     带 hidden 的 table 由 K5 独占折叠（其构成 token 已就位），跳过防二次覆盖
   var tables = document.querySelectorAll('table');
+  var tableK = 0;
   for (var i = 0; i < tables.length; i++) {
     var tb = tables[i];
     if (!tb.parentNode) continue;
     if (tb.hasAttribute('hidden')) continue;
+    tableK++;
     var shape = tb.__u2mTableShape;
     while (tb.firstChild) tb.removeChild(tb.firstChild);
-    tb.appendChild(document.createTextNode('{{TABLE_TAG|' + shape.rows + '_rows|' + shape.cols + '_cols}}'));
+    tb.appendChild(document.createTextNode('{{TABLE_' + tableK + '|' + shape.rows + '×' + shape.cols + '}}'));
   }
 
   // K7. pre 折叠（仅清洗版）：data-language 从 code 壳提升到 pre；行数取共享段
