@@ -42,7 +42,7 @@ test('compute_styles.mjs: 无参数时输出 usage_error', async () => {
 
 // 模拟步骤 4 产物：<style> 规则 + 原有内联样式（结构化/盒模型几何/字体类混杂）+ class + 文本/非文本元素
 const EXTRACT = `<!DOCTYPE html>
-<html lang="zh-CN"><head><title>样式计算</title><style>.box{border:2px solid red;background-color:#f0f0f0;box-shadow:0 2px 4px rgba(0,0,0,.1);text-align:center;overflow-x:auto;overflow-wrap:break-word;transform:translateY(2px)}.plain{color:#333;font-weight:bold;font-family:Georgia;letter-spacing:1px;line-height:1.6}p{font-size:18px}</style></head><body><div class="box" style="margin:0;padding:10px;width:100%;box-sizing:border-box;position:relative;font-family:Arial,sans-serif;-webkit-font-smoothing:antialiased;font-style:normal;color:inherit" data-idx="1"><p class="plain" data-idx="2">文本</p><div style="display:flex;flex-direction:column;gap:8px;padding:12px" data-idx="3">默认文本</div><em style="font-style:italic" data-idx="5">强调</em><span style="color:#f00;background-color:#ffff00" data-idx="4"></span></div></body></html>`;
+<html lang="zh-CN"><head><title>样式计算</title><style>.box{border:2px solid red;background-color:#f0f0f0;box-shadow:0 2px 4px rgba(0,0,0,.1);text-align:center;overflow-x:auto;overflow-wrap:break-word;transform:translateY(2px)}.plain{color:#333;font-weight:bold;font-family:Georgia;letter-spacing:1px;line-height:1.6}p{font-size:18px}</style></head><body><div class="box" style="margin:0;padding:10px;width:100%;box-sizing:border-box;position:relative;font-family:Arial,sans-serif;-webkit-font-smoothing:antialiased;font-style:normal;color:inherit" data-idx="1"><p class="plain" data-idx="2">文本</p><div style="display:flex;flex-direction:column;gap:8px;padding:12px;position:absolute" data-idx="3">默认文本</div><em style="font-style:italic" data-idx="5">强调</em><span style="color:#f00;background-color:#ffff00" data-idx="4"></span></div></body></html>`;
 
 const URL = 'https://example.com/test-article';
 
@@ -96,12 +96,13 @@ test('compute_styles.mjs: juice 内联并删净 <style> 与 class，只产一份
   assert.ok(juiced.includes('font-size: 18px'), 'font-size 声明应保留');
   assert.ok(juiced.includes('font-weight: bold'), 'font-weight 声明应保留');
 
-  // 盒模型几何与定位全删：margin / padding / 宽高 / box-sizing / position
+  // 盒模型几何全删：margin / padding / 宽高 / box-sizing；定位仅留 absolute（步骤 7 特殊定位信号）
   assert.ok(!juiced.includes('margin'), 'margin 声明应删除');
   assert.ok(!juiced.includes('padding'), 'padding 声明应删除');
   assert.ok(!juiced.includes('width'), 'width 声明应删除');
   assert.ok(!juiced.includes('box-sizing'), 'box-sizing 声明应删除');
-  assert.ok(!juiced.includes('position'), 'position 声明应删除');
+  assert.ok(!juiced.includes('position: relative'), 'position:relative 应删除（仅 absolute 保留）');
+  assert.ok(juiced.includes('position: absolute'), 'position:absolute 应保留（步骤 7 特殊定位信号）');
 
   // 其余字体与文本类声明全删：font-family/font-style / 行高 / 字距 / 文本对齐 / color / 文本换行
   assert.ok(!juiced.includes('font-family'), 'font-family 声明应删除');

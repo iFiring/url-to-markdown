@@ -9,20 +9,23 @@
  *     仅保留——边框背景（border、outline、background、box-shadow）、
  *     flex 与 grid 布局（display、flex、grid、gap、对齐、order）、
  *     滚动裁剪（overflow、overflow-x/y）、transform、font-size 与
- *     font-weight（步骤 7 LLM 判标题层级的信号）；长属性按前缀匹配覆盖
- *     （如 border- 前缀同时覆盖 border-radius 等长属性）。
+ *     font-weight（步骤 7 LLM 判标题层级的信号）、position:absolute
+ *     （步骤 7 LLM 判特殊定位元素的信号——浮层/装饰/trans2img 候选；
+ *     唯一按值门控的白名单项，仅 absolute 存活，relative/fixed/
+ *     sticky/static 一律删）；长属性按前缀匹配覆盖（如 border- 前缀
+ *     同时覆盖 border-radius 等长属性）。
  *     其余全删：盒模型几何（box-sizing、宽高、min/max、margin、padding；
  *     唯一例外——<img> 的 width/height 保留，见下）、
- *     定位（position、inset、z-index）、浮动、多栏、
- *     替换元素几何（aspect-ratio、object-fit）、块级视觉（opacity、
- *     clip-path）、字体与文本类其余（font-family、font-style、
- *     line-height、letter-spacing、word-spacing、color、text、
- *     white-space、word-break、overflow-wrap、vertical-align 等）、交互
- *     （cursor、user-select）、动画（transition、animation）、厂商前缀、
- *     自定义属性；值为 inherit 的声明同样删除。清空后移除 style 属性。
- *     白名单按属性判定而非按元素——行内元素（如高亮 span）的背景同样
- *     保留；唯一元素级例外是 <img>：宽高保留（步骤 7 LLM 判图片权重的
- *     信号——小图标 / 大图 / 图片组）。
+ *     定位其余（relative/fixed/sticky/static、inset、z-index）、浮动、
+ *     多栏、替换元素几何（aspect-ratio、object-fit）、块级视觉
+ *     （opacity、clip-path）、字体与文本类其余（font-family、
+ *     font-style、line-height、letter-spacing、word-spacing、color、
+ *     text、white-space、word-break、overflow-wrap、vertical-align 等）、
+ *     交互（cursor、user-select）、动画（transition、animation）、厂商
+ *     前缀、自定义属性；值为 inherit 的声明同样删除。清空后移除 style
+ *     属性。白名单按属性判定而非按元素——行内元素（如高亮 span）的背景
+ *     同样保留；唯一元素级例外是 <img>：宽高保留（步骤 7 LLM 判图片权重
+ *     的信号——小图标 / 大图 / 图片组）。
  *  1.5 函数值替换：声明值含 var()/color-mix()/calc() 时——白名单内且
  *     computedMap 有该元素该属性的计算值 → setProperty(真实值)（浏览器
  *     在原样式页上解析出的具体色值/solid/px）；否则（白名单外、或两版
@@ -68,6 +71,14 @@ function __u2mFinalizeInline(computedMap) {
       if (prop.indexOf(KEEP_PREFIX[k]) === 0) return true;
     }
     return false;
+  }
+  // position 按值门控：仅 absolute 保留（步骤 7 特殊定位元素信号）。
+  // 其余 position 值（relative/fixed/sticky/static）不在此返 true，落入
+  // 第二趟「不在白名单」删除。val 取该趟已落定的值——第一趟用解析后的
+  // real（var() 驱动时按计算值判定，与其他白名单属性解析 var() 一致），
+  // 第二趟用 val2（字面或已被第一趟替换为字面的绝对值）。
+  function keepPosition(prop, val) {
+    return prop === 'position' && val === 'absolute';
   }
   // 零值声明：值等于全元素初始值——写与不写等价，纯非信息（参考页
   // 1,946 个元素的 style 值只有 border: 0px solid——Tailwind preflight
@@ -141,8 +152,12 @@ function __u2mFinalizeInline(computedMap) {
     for (var j = st.length - 1; j >= 0; j--) {
       var prop = st.item(j).toLowerCase();
       var val = st.getPropertyValue(prop);
+      // real 提到 if 外：position 按值门控要用解析后的计算值判定
+      // （var() 驱动时取真实值，与 border 等白名单属性解析 var() 一致）
+      var real = computedMap && computedMap[idx] && computedMap[idx][prop];
       var keepThis = keep(prop) ||
-        (isImg && (prop === 'width' || prop === 'height'));
+        (isImg && (prop === 'width' || prop === 'height')) ||
+        keepPosition(prop, real);
       // 第一趟：函数值替换（白名单内且有计算值）或删净（否则）——机制见
       // 头注 1.5。空串值同路：简写属性带 var 在本页展开为 longhand 且值为
       // 空（收集侧见 page-collect-fn-values.js 头注），不替换就会把 var()
@@ -150,7 +165,6 @@ function __u2mFinalizeInline(computedMap) {
       // 早位置时，尚未替换的 style longhand 读作空串、会被零值表连带误删
       // 同边的 width/color
       if (FUNC_RE.test(val) || val === '') {
-        var real = computedMap && computedMap[idx] && computedMap[idx][prop];
         if (keepThis && real) st.setProperty(prop, real);
         else st.removeProperty(prop);
         dirty = true;
@@ -163,7 +177,8 @@ function __u2mFinalizeInline(computedMap) {
       var prop2 = st.item(j2).toLowerCase();
       var val2 = st.getPropertyValue(prop2);
       var keepThis2 = keep(prop2) ||
-        (isImg && (prop2 === 'width' || prop2 === 'height'));
+        (isImg && (prop2 === 'width' || prop2 === 'height')) ||
+        keepPosition(prop2, val2);
       if (!keepThis2 || val2 === 'inherit' || isVoidDeclaration(prop2, val2, st)) {
         st.removeProperty(prop2);
         dirty = true;
