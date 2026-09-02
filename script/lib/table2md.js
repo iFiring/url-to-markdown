@@ -6,7 +6,7 @@ import path from 'node:path';
 
 const LONG_TEXT_RE = /\{\{LONG_TEXT_(\d+)(?:\|[^}]*)?\}\}/g;
 
-function expandLongText(html, longTextMap) {
+export function expandLongText(html, longTextMap) {
   return html.replace(LONG_TEXT_RE, (match, id) =>
     Object.prototype.hasOwnProperty.call(longTextMap, id) ? longTextMap[id] : match);
 }
