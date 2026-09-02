@@ -1718,3 +1718,24 @@ git commit -m "docs+golden: 代码块占位符落地同步——指南/SKILL/CLA
 - **Spec 覆盖**：§5.1 收集→Task 3；§5.2 转换→Task 1/2；§5.3 styled 折叠→Task 4；§5.4 K7→Task 5；§5.5 编排→Task 5；§6.1 七类校验→Task 1；§6.2 层 2→Task 2（层 1 在 Task 3）；§7 步骤 8→Task 6；§8 步骤 9→Task 7；§9 失败路径（零代码，由 Task 8 集成间接验证 styled live 形态）；§10 指南文档→Task 9；§11 LONG_TEXT 交互→Task 1（预展开）+ Task 8（b2 夹具）；§12 测试→Task 1-8；golden→Task 9。无缺口。
 - **占位符扫描**：Task 7 lang 清洗用例中标注了一处笔误风险并给出正确期望值；Task 8 Step 3 声明「夹具微调」边界（断言不放松）；Task 9 Step 1 给出重生命令与 ESM 调用修正说明。无 TBD/「适当处理」类占位。
 - **类型一致性**：`convertCodes` 返回形状在 Task 1 定义、Task 5 消费（`codesJson[String(c.k)].status/lines/lang`）；`__u2mFoldCode` 的 map 形状 Task 4 定义 = Task 5 `codeResultByDataIdx` 构造（`{k, status, lines, lang}`）；codeFold map `{k, lines, lang}` 与 K7 消费一致；emit 字段名 `codes/codeJson/codesResolved/failedCodes` 全链一致；占位符语法 `{{CODE_k|N_lines}}` 各任务一致。
+
+## 执行期勘误（2026-09-02，执行前审查发现）
+
+1. **Task 1 lang 断言**：`guessCodeLang('const a = 1;…')` 命中
+   `(const|let|var)\s+\w+\s*=` → `'javascript'`，非 `'python'`。期望值按
+   `'javascript'` 写。
+2. **hidden 夹具形态**：Task 3 单测与 Task 8 b10 夹具误把 hidden 放在祖先
+   div 上；spec §5.1「非 `[hidden]`」指 pre 自身（镜像 `__u2mCollectTables`），
+   祖先隐藏块照常收集（renderedLines=null，spec §12.3.2）。夹具改为 hidden
+   直接挂 pre。
+3. **LONG_TEXT 纪元豁免（spec 已补 §6.1 补注）**：收集时 renderedLines 量的是
+   占位符形态、校验对象是展开后行数——纪元不可比。`text` 含 `{{LONG_TEXT_` 时
+   跳过渲染交叉校验（Task 1 实现加此分支 + 单测）。否则「行数在长文本占位前
+   预计算」用例（3 行中文长文本节点）会虚假 rendered_mismatch。
+4. **Task 5 K7 系列改写时的正确期望**：div 行块用例的容器 div 形态（单容器
+   内真实换行）按 §6.1 #7 判 `mixed_signal_mismatch` → failed、clean 折叠为
+   `{{CODE_2|3_lines}}`（该 pre 是文档中第 2 块，k=2）；空 pre 新管线下
+   walkLines 得 1 行 → clean `{{CODE_1|1_lines}}`（旧 0_lines 来自
+   countPreLines 的 trim 特判）；「长文本占位前预计算」用例的 styled 断言从
+   `{{LONG_TEXT_1|` 改为 `{{CODE_1|3_lines}}`（ok 块 styled 也折叠，占位符
+   从两版消失、原文进 2_code.json content）。

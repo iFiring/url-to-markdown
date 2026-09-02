@@ -202,7 +202,8 @@ convertCodes(codeList, { longTextMap, logsDir })
 5. 层 2 行首序号剥离（详见 §6.2）。
 6. `empty` 校验：剥离 + 修剪首尾空行后为空/纯空白 → fail。
 7. 渲染交叉校验（renderedLines 非 null 才判）：`single_line_suspect` /
-   `rendered_mismatch`（详见 §6.1）。
+   `rendered_mismatch`（详见 §6.1；`text` 含 `{{LONG_TEXT_` 时跳过——纪元
+   不可比，见 §6.1 补注）。
 8. 序列化：`\r\n`/`\r` 归一为 `\n`；修剪首尾空行（内部空行保留）；重算 n_lines；
    存 raw content（**不存围栏**——围栏统一在步骤 9 构建）。
 9. 失败落 `logs/codes/{k}_{dataIdx}.log`。
@@ -269,6 +270,15 @@ emit 增: codes / codeJson
 （21=21、18=18）；文本 `\n` 分隔站点完全空行无字形无行盒 → distinctTops 少计
 interiorBlankCount。按「空行**可能**不渲染」取下界补偿，只会放松判定、不会误杀。
 软换行只增不减视觉行，`distinctTops ≥ trimmedLines − interiorBlanks` 是合法域。
+
+**LONG_TEXT 纪元豁免（2026-09-02 执行期补注）**：收集发生在 LONG_TEXT 折叠之后
+（§5.1 时机），`renderedLines` 量的是**占位符形态**的渲染行数（占位符是单行文本
+节点），而交叉校验的对象是**预展开后**的行数——两纪元不可比：占位符展开为多行
+原文时会虚假触发 `rendered_mismatch`。当收集 `text` 含 `{{LONG_TEXT_` 字面占位符时
+**跳过渲染交叉校验**（`single_line_suspect` 与 `rendered_mismatch` 同跳）——展开
+引入的换行逐字来自原始 DOM 文本节点、非提取器发明（该校验的打击目标）；结构信号
+（`content_loss` / `mixed_signal`）仍全量在场。与 renderedLines=null 的隐藏祖先
+豁免同款 rationale：不可比的信号不判，只信可比的。
 
 ### 6.2 序号清除两层防线
 
