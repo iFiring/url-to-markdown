@@ -137,9 +137,10 @@ async function main() {
       resultByDataIdx[info.dataIdx] = { k: Number(k), status: info.status, rows: info.rows, cols: info.cols };
     }
     // styled fold：同页 DOM（evaluate 间状态保留，未 reload）——成功表折成
-    // {{TABLE_k|rows×cols}}、失败表打 data-u2m-table="fail"
+    // {{TABLE_k|rows×cols}}、失败表打 data-u2m-table="fail"。fold 后重新序列化
+    // （用与 styled 趟 return 同形的 '<!DOCTYPE html>\n' + outerHTML，保持产物格式）
     await page.evaluate(`(${foldTablesFn})(${JSON.stringify(resultByDataIdx)})`);
-    const styledHtml = await page.content();
+    const styledHtml = '<!DOCTYPE html>\n' + await page.evaluate(() => document.documentElement.outerHTML);
     const styledPath = path.join(dir, '2_clean_style_snapshot.html');
     await fsPromises.writeFile(styledPath, styledHtml, 'utf8');
 

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>表格测试</title>
+  <style>th,td{border:1px solid #999;padding:6px}thead th{background:#eef}</style>
+</head>
+<body>
+  <h1>表格测试</h1>
+  <p>简单 2 列表（类 data-idx 1998）：</p>
+  <table class="w-full">
+    <thead><tr><th>Setting</th><th>Impact</th></tr></thead>
+    <tbody>
+      <tr><td>model</td><td>大</td></tr>
+      <tr><td>temperature</td><td>中</td></tr>
+    </tbody>
+  </table>
+  <p>跨行跨列表（rowspan×colspan 混合）：</p>
+  <table>
+    <thead>
+      <tr><th rowspan="2">时间</th><th colspan="2">上午</th></tr>
+      <tr><th>第1节</th><th>第2节</th></tr>
+    </thead>
+    <tbody>
+      <tr><td rowspan="2">周一</td><td>语文</td><td>数学</td></tr>
+      <tr><td>物理</td><td>化学</td></tr>
+    </tbody>
+  </table>
+  <p>无表头表（应失败落步骤 7）：</p>
+  <table>
+    <tbody>
+      <tr><td>A</td><td>B</td></tr>
+      <tr><td>C</td><td>D</td></tr>
+    </tbody>
+  </table>
+</body>
+</html>
