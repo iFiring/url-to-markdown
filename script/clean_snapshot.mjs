@@ -69,6 +69,7 @@ import { emit, emitError, usage, log, debug } from './lib/contract.mjs';
 import { urlDir } from './lib/env.mjs';
 import { readSharedScript } from './lib/placeholder.mjs';
 import { proxyLaunchOptions, newU2MContext } from './lib/browser.mjs';
+import { convertTables } from './lib/table2md.js';
 
 function parseArgs(argv) {
   const out = { _: [] };
@@ -90,6 +91,12 @@ async function main() {
   const url = args.url;
   if (!url) return usage('用法: clean_snapshot.mjs --url <url>');
 
+  // 表格转换引擎：--table-engine 或 U2M_TABLE_ENGINE，默认 self
+  const engine = args['table-engine'] || process.env.U2M_TABLE_ENGINE || 'self';
+  if (engine !== 'self' && engine !== 'turndown') {
+    return usage(`--table-engine 仅支持 self|turndown，实际: ${engine}`);
+  }
+
   const dir = urlDir(url);
   const snapshotPath = path.join(dir, '1_snapshot.html');
 
@@ -99,6 +106,8 @@ async function main() {
   debug(`读入快照 ${snapshotPath}（${fs.statSync(snapshotPath).size} 字节）`);
 
   const pageCleanFn = await readSharedScript('page-clean-snapshot.js');
+  const collectTablesFn = await readSharedScript('page-collect-tables.js');
+  const foldTablesFn = await readSharedScript('page-fold-tables.js');
 
   let browser;
   try {
@@ -108,9 +117,34 @@ async function main() {
     // 只拦 http(s) 子资源：DOM 解析不需要图片/字体，file:// 主文档导航不经路由
     await page.route(/^https?:/, (route) => route.abort());
 
-    // 趟 1（styled）：结构清洗 + 长文本占位 + SVG 瘦身 → 带样式版 + 恢复清单
+    // 趟 1（styled）：结构清洗 + 长文本占位 + SVG 瘦身 → 带样式版（live 表）
+    // __u2mCollectTables 源码拼在前，使 __u2mCleanSnapshot 末尾能调用它收集表元数据
     await page.goto(`file://${snapshotPath}`, { waitUntil: 'domcontentloaded' });
-    const styled = await page.evaluate(`(${pageCleanFn})(${JSON.stringify({ mode: 'styled' })})`);
+    const styledEvalSrc = `${collectTablesFn}\n(${pageCleanFn})(${JSON.stringify({ mode: 'styled' })})`;
+    const styled = await page.evaluate(styledEvalSrc);
+
+    // ── Node 层表格转换：预展开长文本 → 引擎 → 纯结构校验 → 2_tables.json + 日志 ──
+    const longTextMap = styled.longTexts || {};
+    const logsDir = path.join(dir, 'logs', 'tables');
+    const { tables: tablesJson, counts: tableCounts } = await convertTables(
+      styled.tables || [], { engine, longTextMap, logsDir });
+    const tablesJsonPath = path.join(dir, '2_tables.json');
+    await fsPromises.writeFile(tablesJsonPath, JSON.stringify(tablesJson, null, 2), 'utf8');
+
+    // 构造 resultByDataIdx 供 fold（成功表折叠、失败表保 live + 标记）
+    const resultByDataIdx = {};
+    for (const [k, info] of Object.entries(tablesJson)) {
+      resultByDataIdx[info.dataIdx] = { k: Number(k), status: info.status, rows: info.rows, cols: info.cols };
+    }
+    // styled fold：同页 DOM（evaluate 间状态保留，未 reload）——成功表折成
+    // {{TABLE_k|rows×cols}}、失败表打 data-u2m-table="fail"
+    await page.evaluate(`(${foldTablesFn})(${JSON.stringify(resultByDataIdx)})`);
+    const styledHtml = await page.content();
+    const styledPath = path.join(dir, '2_clean_style_snapshot.html');
+    await fsPromises.writeFile(styledPath, styledHtml, 'utf8');
+
+    const longTextPath = path.join(dir, '2_long_text.json');
+    await fsPromises.writeFile(longTextPath, JSON.stringify(styled.longTexts), 'utf8');
 
     // 趟 2（clean）：重新加载同一快照，结构清洗 + K1-K9 → 清洗版（终端视图）
     await page.goto(`file://${snapshotPath}`, { waitUntil: 'domcontentloaded' });
@@ -118,13 +152,9 @@ async function main() {
 
     const cleanedPath = path.join(dir, '2_clean_snapshot.html');
     await fsPromises.writeFile(cleanedPath, clean.html, 'utf8');
-    const styledPath = path.join(dir, '2_clean_style_snapshot.html');
-    await fsPromises.writeFile(styledPath, styled.html, 'utf8');
-    const longTextPath = path.join(dir, '2_long_text.json');
-    await fsPromises.writeFile(longTextPath, JSON.stringify(styled.longTexts), 'utf8');
 
-    debug(`[clean] hidden 折叠 ${clean.stats.hiddenCount} · 清洗版 ${Buffer.byteLength(clean.html, 'utf8')} 字节`);
-    log(`清洗完成: ${cleanedPath} (${styled.longTextCount} 个长文本占位符)`);
+    debug(`[clean] hidden 折叠 ${clean.stats.hiddenCount} · 清洗版 ${Buffer.byteLength(clean.html, 'utf8')} 字节 · 表格 ${tableCounts.ok}ok/${tableCounts.failed}fail`);
+    log(`清洗完成: ${cleanedPath} (${styled.longTextCount} 个长文本占位符, 表格 ${tableCounts.total} 个: ${tableCounts.ok} 成功 ${tableCounts.failed} 失败)`);
 
     await context.close();
     await browser.close();
@@ -135,6 +165,8 @@ async function main() {
       styledSnapshot: styledPath,
       longText: longTextPath,
       longTextCount: styled.longTextCount,
+      tables: tableCounts,
+      tablesJson: tablesJsonPath,
     });
   } catch (e) {
     await browser?.close().catch(() => {});
