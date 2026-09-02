@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>代码块形态测试</title>
+<style>
+  .grid-line { display: grid; }
+  .lns span, .ln { user-select: none; }
+  .narrow { white-space: pre-wrap; width: 120px; }
+</style></head>
+<body>
+  <h1 data-idx="1">代码块形态测试</h1>
+
+  <!-- b1 (k=1) shiki 形态：inline 行 span + 真实 \n，data-language -->
+  <pre data-idx="2"><code data-language="javascript" data-idx="3"><span data-idx="4">import</span> OpenAI;
+<span data-idx="5">const</span> client = <span data-idx="6">1</span>;</code></pre>
+
+  <!-- b2 (k=2) ra 形态：grid 行容器零 \n + 超阈值中文注释（触发 LONG_TEXT 预展开）+ language-* class -->
+  <pre data-idx="10"><code class="ra-code language-tsx" data-idx="11"><span class="grid-line" data-idx="12"><span class="cjk-comment" data-idx="13">这是一条超过十六个汉字阈值的中文注释行内容</span></span><span class="grid-line" data-idx="14">system: `...`</span><span class="grid-line" data-idx="15">const t = 1;</span></code></pre>
+
+  <!-- b3 (k=3) OpenAI 槽形态：user-select:none 数字列 + HTML 注释节点，data-language=json -->
+  <pre data-idx="20"><code data-language="json" data-idx="21"><span class="lns" data-idx="22"><span class="ln" data-idx="23">1<!-- -->
+</span><span class="ln" data-idx="24">2<!-- -->
+</span></span><span data-idx="25">{</span>
+<span data-idx="26">  "model": "gpt-5.6"</span>
+<span data-idx="27">}</span></code></pre>
+
+  <!-- b4 (k=4) 行首内联序号：层 2 剥离 -->
+  <pre data-idx="30"><code data-idx="31">1. alpha
+2. beta
+3. gamma</code></pre>
+
+  <!-- b5 (k=5) yaml 数字键后跟普通行：层 2 不剥 -->
+  <pre data-idx="40"><code class="language-yaml" data-idx="41">1: a
+2: b
+foo: bar</code></pre>
+
+  <!-- b6 (k=6) non_textual：pre 内嵌 img -->
+  <pre data-idx="50"><code data-idx="51">code <img data-idx="52" src="x.png"> with img</code></pre>
+
+  <!-- b7 (k=7) 空 pre：empty -->
+  <pre data-idx="60"><code data-idx="61">   </code></pre>
+
+  <!-- b8 (k=8) pre-wrap 真单行：single_line_suspect（渲染多行、结构 1 行）。
+       词数 ≤12 防 LONG_TEXT 占位（占位符单行短 token 不折行、纪元豁免跳过检查） -->
+  <pre class="narrow" data-idx="70"><code data-idx="71">short words wrap here because the box is narrow</code></pre>
+
+  <!-- b9 (k=9) 内容含 ``` 与字面 {{CODE_2}}：围栏安全 + 精确匹配 -->
+  <pre data-idx="80"><code class="language-markdown" data-idx="81">outer
+```
+inner fence
+```
+ref {{CODE_2}} inline</code></pre>
+
+  <!-- b10 hidden pre：K5 独占，不占 k（hidden 在 pre 自身） -->
+  <pre data-idx="91" hidden><code data-idx="92">hidden code</code></pre>
+
+  <!-- b11 (k=10) br 分行 -->
+  <pre data-idx="100"><code data-idx="101">alpha<br>beta<br>gamma</code></pre>
+
+  <!-- b12 (k=11) 复制保护整块：user-select:none 非数字内容，层 1 不杀 -->
+  <pre style="user-select:none" data-idx="110"><code data-idx="111">protected const a = 1;
+protected const b = 2;</code></pre>
+
+  <p data-idx="120">正文段落。</p>
+</body></html>
