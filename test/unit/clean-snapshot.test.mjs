@@ -741,6 +741,65 @@ let c = 3;</div></code></pre>
   } finally { cleanup(); }
 });
 
+test('P0: pre 内空白 token span 不被空元素级联删除——shiki 逐 token 高亮代码不粘连', async () => {
+  // 回归（2026-09-02）：shiki 把空格也包成 <span style="color"> </span>
+  // （逐 token）。空元素级联 hasContent() 用 trim 判空，会把这种仅含空白的
+  // 行内 span 当空壳删掉，丢失空格致 constclient=newOpenAI()。pre 子树内
+  // 空白是语义内容（<pre> 白空保留是 HTML 语义），应计为内容、不删。
+  // 级联在两趟共享段执行——带样式版（喂步骤 4-7 的路径）同样受害，故这里
+  // 断言带样式版：空白 token span 存活、空格保留。
+  // 对照：Prism 式（裸空白文本节点夹在 span 之间）cascade 只删空元素、不删
+  // 文本节点，本就无此 bug；块级仅含空白的元素仍删（既有「空元素级联删除」
+  // 测试的 div data-idx=5 已守护）。
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-idx="1">
+    <pre data-idx="2" class="shiki"><code data-idx="3"><span data-idx="4" class="line"><span data-idx="5" style="color:#fff">const</span><span data-idx="6" style="color:#fff"> </span><span data-idx="7" style="color:#fff">client</span><span data-idx="8" style="color:#fff">=</span><span data-idx="9" style="color:#fff">new</span><span data-idx="10" style="color:#fff"> </span><span data-idx="11" style="color:#fff">OpenAI</span></span></code></pre>
+    <p data-idx="12">正文段落</p>
+  </div>
+</body></html>`;
+  const { styled, cleaned, cleanup } = await runClean(snapshot, 'p0-pre-ws');
+  try {
+    // 空白 token span 在带样式版存活（cascade 不删）
+    assert.ok(styled.includes('data-idx="6"'), '空白 token span (data-idx=6) 不应被空元素级联删除');
+    assert.ok(styled.includes('data-idx="10"'), '空白 token span (data-idx=10) 不应被空元素级联删除');
+    // 空白文本本身保留在 span 内（> </span>）
+    const pre = styled.match(/<pre data-idx="2"[\s\S]*?<\/pre>/)[0];
+    assert.ok(/> <\/span>/.test(pre), `空白文本应保留在 token span 内: ${pre}`);
+    assert.ok(styled.includes('const') && styled.includes('client'), '代码文本存活');
+    // 对照：清洗版 pre 由 K7 折叠为行数 token（既有行为不变）
+    assert.ok(cleaned.includes('{{PRE_CODE_TAG|'), '清洗版 pre 仍由 K7 折叠');
+  } finally { cleanup(); }
+});
+
+test('P0: pre 内含换行的空白 token span 不被删除——换行保留', async () => {
+  // 用户点名的换行形态：shiki 把换行也包成 <span>\n</span>（逐 token），
+  // cascade trim 判空会删掉该 span 丢换行。pre 子树内空白（含换行）一律
+  // 计为内容。对照：span 间裸换行（Prism 式）cascade 本就不删（只删空元素）。
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-idx="1">
+    <pre data-idx="2"><code data-idx="3"><span data-idx="4">line1</span><span data-idx="5" style="color:#fff">
+</span><span data-idx="6">line2</span></code></pre>
+    <pre data-idx="7"><code data-idx="8"><span data-idx="9">line1</span>
+<span data-idx="10">line2</span></code></pre>
+    <p data-idx="11">正文段落</p>
+  </div>
+</body></html>`;
+  const { styled, cleanup } = await runClean(snapshot, 'p0-pre-nl');
+  try {
+    // 含换行的空白 span 存活、换行保留
+    assert.ok(styled.includes('data-idx="5"'), '含换行的空白 span (data-idx=5) 不应被删除');
+    const preA = styled.match(/<pre data-idx="2"[\s\S]*?<\/pre>/)[0];
+    assert.ok(preA.includes('\n'), '换行应保留在 pre 内');
+    // 对照：span 间裸换行（文本节点）本就保留
+    const preB = styled.match(/<pre data-idx="7"[\s\S]*?<\/pre>/)[0];
+    assert.ok(preB.includes('line1</span>\n<span data-idx="10">line2'), 'span 间裸换行应保留');
+  } finally { cleanup(); }
+});
+
 test('K7: 空 pre 折叠为 0_lines', async () => {
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>

@@ -122,6 +122,16 @@ function __u2mFinalizeInline(computedMap) {
   }
   var styled = document.querySelectorAll('[style]');
   for (var i = 0; i < styled.length; i++) {
+    // pre 子树内样式对最终 markdown 无语义——仅文本与 data-language 是步骤 7
+    // 所需。高亮 token span 携 font-weight/background/border 等白名单内幸存
+    // 样式，若流进步骤 7 会让 LLM 误产 **bold** 损坏代码。pre 子树内直接剥净
+    // 全部内联样式（跳过白名单/函数值/零值三趟），token span 变 bare 由步骤 6
+    // 规则⑥（既有、不改）解包为纯文本。pre 外的 font-weight（标题层级信号）
+    // 不受影响、仍按白名单保留。
+    if (styled[i].closest('pre')) {
+      styled[i].removeAttribute('style');
+      continue;
+    }
     var st = styled[i].style;
     // 唯一元素级例外：<img> 的宽高保留——步骤 7 LLM 判图片权重的
     // 语义信号（小图标 / 大图 / 图片组）；值为 inherit 的照样删

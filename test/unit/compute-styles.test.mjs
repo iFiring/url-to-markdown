@@ -454,6 +454,42 @@ test('compute_styles.mjs: 零值声明过滤——等于全元素初始值的声
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
+// pre>code 内部样式对最终 markdown 无语义——仅文本与 data-language 是步骤 7
+// 所需。高亮 token span 携 font-weight/background/border 等白名单内幸存样式，
+// 若流进步骤 7 会让 LLM 误产 **bold** 损坏代码。finalize 在 pre 子树内直接
+// 剥净全部内联样式（跳过白名单），token span 变 bare 由步骤 6 规则⑥解包为
+// 纯文本。对照：pre 外的 font-weight（标题层级信号）仍按白名单保留。
+const PRE_CODE_EXTRACT = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>代码块样式</title><style>body{transition:opacity .2s}</style></head><body>
+<pre data-idx="1"><code data-language="python" data-idx="2"><span style="font-weight:700" data-idx="3">const</span><span style="color:#f00" data-idx="4"> </span><span style="background-color:#ffff00" data-idx="5">client</span></code></pre>
+<p style="font-weight:bold" data-idx="6">普通段落粗体</p>
+</body></html>`;
+
+test('compute_styles.mjs: pre 内 token span 样式全删（markdown 无需）——pre 外 font-weight 仍保留', async () => {
+  const { tmpRoot } = setupTmp('pre-code-styles', { extractHtml: PRE_CODE_EXTRACT });
+  const r = await runScript(process.execPath, [scriptPath, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+
+  const juiced = fs.readFileSync(out.juiceStyles, 'utf8');
+  const tagOf = (id) => juiced.match(new RegExp(`<[^>]*data-idx="${id}"[^>]*>`))?.[0] || '';
+  // pre 内 token span 样式全删（font-weight/background/color 均无意义）
+  assert.ok(!tagOf(3).includes('style='), `pre 内 font-weight span 应剥净 style: ${tagOf(3)}`);
+  assert.ok(!tagOf(4).includes('style='), `pre 内 color span 应剥净 style: ${tagOf(4)}`);
+  assert.ok(!tagOf(5).includes('style='), `pre 内 background span 应剥净 style: ${tagOf(5)}`);
+  // pre 外的 font-weight 仍保留（标题层级信号，步骤 7 判 div→h2 用）
+  assert.ok(tagOf(6).includes('font-weight'), `pre 外的 font-weight 应保留: ${tagOf(6)}`);
+  // 代码文本与语言信号存活
+  assert.ok(juiced.includes('const') && juiced.includes('client'), '代码文本存活');
+  assert.ok(juiced.includes('data-language="python"'), 'data-language 语言信号存活');
+
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
 test('compute_styles.mjs: 缺步骤 4 产物时报 error 指路步骤 4', async () => {
   const { tmpRoot, urlDir } = setupTmp('miss', { withExtract: false });
   const r = await runScript(process.execPath, [scriptPath, '--url', URL], {

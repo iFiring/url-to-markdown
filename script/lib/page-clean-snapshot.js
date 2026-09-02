@@ -126,6 +126,13 @@ function __u2mCleanSnapshot(cfg) {
       var n = nodes[i];
       if (n.nodeType === 3) {
         if (n.textContent.trim() !== '') return true;
+        // pre 子树内空白是语义内容：shiki/hljs 逐 token 高亮把空格也包成
+        // <span style="color"> </span>（行内 token），trim 判空会把这种仅含
+        // 空白的 span 当空壳删掉，丢失空格致代码粘连（constclient=…）。
+        // <pre> 白空保留是 HTML 语义，pre 子树内一律计为内容。scoped 到 pre
+        // ——块级仅含空白的元素（缩进 filler）照删，既有空元素级联行为不变。
+        // 级联在两趟共享段执行，带样式版（喂步骤 4-7 的路径）同样受益。
+        if (el.closest('pre')) return true;
       } else if (n.nodeType === 1) {
         if (keepTag(n)) return true;
         if (hasContent(n)) return true;
