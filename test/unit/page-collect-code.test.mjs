@@ -102,6 +102,27 @@ test('层 1 槽壳传播防空穴：空行容器（零子命中）不算槽—�
   assert.equal(c.blockContainers, 3, '空行容器照常计数');
 });
 
+test('行内流空白保真：行首缩进 token span 不被吞（OpenAI shiki 实测形态）', () => {
+  // 回归（2026-09-03，pre 2874 探针）：缩进是独立空白 token span
+  // （<span class="shiki-token">"  "</span>），断行在上一行行 span 尾部 \n
+  // 文本节点。旧守卫「纯空白 + 当前行空」在断行后必命中 → 缩进永久丢失。
+  const out = run(
+    `<pre data-idx="56"><code data-idx="57"><span style="display:inline"><span style="display:inline">{</span>
+</span><span style="display:inline"><span style="display:inline">  </span><span style="display:inline">"m": 1</span>
+</span></code></pre>`);
+  assert.equal(out[0].text, '{\n  "m": 1');
+});
+
+test('行内流空白保真：空行（仅含 \\n 的行 span）不塌缩', () => {
+  // 回归（2026-09-03，pre 3127：textContentNoGutter 为 ";\n\nconst" 而提取
+  // 只剩一个 \n）：空行本体是仅含 "\n" 的行内 span，旧守卫连换行一起吞
+  const out = run(
+    `<pre data-idx="58"><code data-idx="59"><span style="display:inline">a
+</span><span style="display:inline">
+</span><span style="display:inline">b</span></code></pre>`);
+  assert.equal(out[0].text, 'a\n\nb');
+});
+
 test('层 1 不误杀：user-select:none 但内容非纯数字（复制保护整块）', () => {
   const out = run(`
     <pre data-idx="60" style="user-select:none"><code data-idx="61">const a = 1;

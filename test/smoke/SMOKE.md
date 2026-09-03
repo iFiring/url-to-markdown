@@ -104,9 +104,9 @@ openai 页检查点（英文文档，展开器/嵌套图解/UI 控件密集）�
 - URL: <developers.openai.com prompt-caching 指南地址>（`working/developers.openai.com_api_docs_guides_prompt-caching/`）
 - 预期：步骤 2 emit `codes` 14 块全 ok、其中 10 块 `gutterStripped`（user-select:none
   序号槽层 1 排除 + 2026-09-03 槽壳传播——display:block 壳 us:auto、数字 span 才
-  us:none 的形态不剔除会 mixed_signal 误杀）；pre 2874 内容以 `{` 开头（缩进
-  保留为已知待办：walkLines 纯空白守卫吞行首空白，与代码内空行塌缩同族待修）；
-  步骤 7 对占位符块发 `{"code":"{{CODE_k}}"}` 引用不自转
-- 实测（2026-09-03 槽壳传播落地后）：`codes: {total:14, ok:14, failed:0}`，k=5/6
-  （2874/3127，此前 mixed_signal_mismatch）转 ok、行数各 -1（幻影空行消失）、
-  `logs/codes/` 空
+  us:none 的形态不剔除会 mixed_signal 误杀）；pre 2874 的 `2_code.json` 内容以 `{`
+  开头且 `  "model"` 两格缩进保留（2026-09-03 空白守卫结构化后恢复；k=6 代码内
+  空行同步保真）；步骤 7 对占位符块发 `{"code":"{{CODE_k}}"}` 引用不自转
+- 实测（2026-09-03 槽壳传播 + 空白守卫结构化后）：`codes: {total:14, ok:14,
+  failed:0}`，k=5/6（2874/3127，此前 mixed_signal_mismatch）转 ok；k=5 两格缩进
+  在位、k=6 空行恢复 13 行全保真；`logs/codes/` 空

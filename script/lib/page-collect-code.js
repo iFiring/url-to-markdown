@@ -4,8 +4,10 @@
 //  blockContainers, gutterStripped, outerHTML}。跳过 [hidden] pre（K5 独占，
 // 与 __u2mCollectTables 同款判定——hidden 在 pre 自身；祖先隐藏块照常收集，
 // renderedLines=null 走纪元豁免）。walkLines：文本节点 \n 切分 + <br> 断行 +
-// 非行内元素边界软断行（行已空不重复断——块间纯空白文本节点天然吞掉，与 CSS
-// 渲染语义一致；内部空行保留）。槽排除（层 1）：userSelect:none 且子树纯数字
+// 非行内元素边界软断行（行已空不重复断）。空白守卫结构化（2026-09-03）：
+// 仅块间隙纯空白（两侧紧邻块级/容器边缘、非行内独子）零贡献——CSS 块盒间
+// 空白不渲染；行内流空白按 pre 语义保留（缩进 token/行尾 \n/空行）。
+// 槽排除（层 1）：userSelect:none 且子树纯数字
 // +分隔符文本 → 整棵跳过。双条件缺一不可：只有 user-select 会误杀复制保护
 // 整块；只有数字条件会误杀纯数字代码行。computed display 在 display:none
 // 祖先下仍返回计算值——隐藏子树（折叠展开器内）也能提取，innerText 做不到
@@ -48,13 +50,24 @@ function __u2mCollectCode() {
         if (force) contentCount++;
       }
     }
-    function visit(n) {
+    // 块间隙侧：块级元素 / 容器边缘 / 纯空白文本（间隙延伸）。
+    // BR 视作行内断行不算间隙侧——其旁空白按 pre 语义保留
+    function gapSide(s) {
+      if (!s) return true;
+      if (s.nodeType === 3) return s.textContent.trim() === '';
+      if (s.nodeType === 1) return s.tagName !== 'BR' && !isInline(s);
+      return true; // 注释等它类节点
+    }
+    function visit(n, parentInline) {
       if (n.nodeType === 3) {
         var t = n.textContent;
-        // 块间纯空白文本节点：当前行已空（块边界刚断行）→ 零贡献零断行
-        // （CSS 块盒间空白不渲染——防幻影空行）；当前行非空（行内词间空白/
-        // 缩进）→ 正常切分追加
-        if (t.trim() === '' && lines[lines.length - 1] === '') return;
+        // 块间隙纯空白（2026-09-03 结构化修订）：两侧皆块间隙侧、且不是
+        // 行内元素的独子 → 零贡献零断行（CSS 块盒间空白不渲染——防幻影
+        // 空行）。行内流中的空白是 pre 语义内容——行首缩进 token、行尾
+        // \n、空行——必须保留；旧「纯空白 + 当前行空」内容条件在每次断行
+        // 后必命中，吞掉缩进与空行（OpenAI pre 2874/3127 实测）
+        if (t.trim() === '' && gapSide(n.previousSibling) && gapSide(n.nextSibling) &&
+            !(parentInline && !n.previousSibling && !n.nextSibling)) return;
         var parts = t.split('\n');
         for (var i = 0; i < parts.length; i++) {
           if (i > 0) brk(true);
@@ -70,16 +83,16 @@ function __u2mCollectCode() {
       if (!inline) {
         brk(false);
         var mark = contentCount;
-        for (var c = n.firstChild; c; c = c.nextSibling) visit(c);
+        for (var c = n.firstChild; c; c = c.nextSibling) visit(c, false);
         // 空行容器（内部零内容事件）= 一行真实空行——强制断一行保真；
         // 计数随 brk(true) 传播，嵌套空容器各自占一行
         if (contentCount === mark) brk(true);
         else brk(false);
       } else {
-        for (var ci = n.firstChild; ci; ci = ci.nextSibling) visit(ci);
+        for (var ci = n.firstChild; ci; ci = ci.nextSibling) visit(ci, true);
       }
     }
-    visit(root);
+    visit(root, false);
     // 弹掉尾随空行（末块退出的 pending 断行——CSS 无尾随空行盒，Node 层
     // 反正修剪；内部空行保留——代码保真）
     while (lines.length > 1 && lines[lines.length - 1] === '') lines.pop();
