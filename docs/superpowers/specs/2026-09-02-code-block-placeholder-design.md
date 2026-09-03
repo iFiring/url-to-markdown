@@ -144,8 +144,10 @@ styled 趟的原因。
   blockContainers, gutterStripped, outerHTML }
 ```
 
-- `blockContainers`：code 壳直接子元素中 computed display 非行内且非 `<br>` 的个数
-  （行容器计数——`mixed_signal_mismatch` 校验输入）。
+- `blockContainers`：code 壳直接子元素中 computed display 非行内且非 `<br>` 且
+  非槽（含传播壳）的个数（行容器计数——`mixed_signal_mismatch` 校验输入；
+  2026-09-03 补注：display:block 的槽壳计入会让文本/容器两侧对槽不对称，实测
+  由此误杀）。
 - `gutterStripped`：层 1 是否命中过槽排除。
 - `outerHTML`：pre 原始序列化（折叠前，含占位符），失败诊断日志用（写入时截断）。
 
@@ -164,6 +166,13 @@ styled 趟的原因。
   → 整棵子树跳过（零贡献、零断行）。双条件缺一不可：只有 user-select 会误杀
   复制保护的整块代码（整 pre 都 none）；只有数字条件会误杀纯数字代码行。
   排除同时记 `gutterStripped` 元数据。
+- **槽壳传播（2026-09-03 补注，prompt-caching 页实测修订）**：槽壳自身
+  `user-select:auto`、none 只设在数字 span 上（OpenAI
+  `.syntax-highlighter-line-numbers` display:block 壳）——壳 textContent 过数字
+  RE 且全部子元素皆槽、自身无槽外文本、**≥1 子命中**（防空传播：空行容器
+  textContent 空串过 RE 但零子命中，不算槽——空行保真依赖）→ 壳整棵视为槽。
+  不传播则壳计入 blockContainers（文本侧剔槽、容器侧计槽——mixed_signal
+  双信号矛盾误杀），且 walkLines 对零内容壳触发幻影空行。
 - 内部空行保留（代码保真）；首尾空行由 Node 层修剪。
 
 **lang 探测**：`code[data-language]` → `pre[data-language]` → code/pre 的 class 中
@@ -263,7 +272,7 @@ emit 增: codes / codeJson
 | 4 | `empty` | 层 2 剥离 + 修剪首尾空行后为空/纯空白 | 空 pre 留 live 给步骤 7 看结构；序号-only 伪代码块在此兜住 |
 | 5 | `single_line_suspect` | `trimmedLines === 1 && distinctTops > 1`（renderedLines 非 null 才判） | 结构零信号但视觉多行——软换行真单行或提取器漏检；步骤 7 语义重排 |
 | 6 | `rendered_mismatch` | `trimmedLines − interiorBlankCount > distinctTops`（renderedLines 非 null 才判） | 提取行数扣除「空行无矩形」合法豁免后仍超出渲染行数 = 断行系发明 |
-| 7 | `mixed_signal_mismatch` | `\n` 文本节点数 > 0 **且** 块级行容器数 > 0，但 `\|newlineCount+1 − blockContainers\| > 1` | 两套行约定互相矛盾 = 提取不可信；±1 容差吸收尾随 `\n`。单信号形态（mmh1：`\n`=0；OpenAI：computed inline 容器=0）天然跳过 |
+| 7 | `mixed_signal_mismatch` | `\n` 文本节点数 > 0 **且** 块级行容器数 > 0，但 `\|newlineCount+1 − blockContainers\| > 1` | 两套行约定互相矛盾 = 提取不可信；±1 容差吸收尾随 `\n`。单信号形态（mmh1：`\n`=0；OpenAI：槽壳经传播排除后容器=0）天然跳过。2026-09-03 修订：原记"OpenAI：computed inline 容器=0"系观察偏差——壳实为 display:block，靠槽壳传播（§5.1）排除后才归零 |
 
 `rendered_mismatch` 的空行豁免推导（复核实证）：元素行容器站点（ra-code
 `display:grid` + `min-height:1.6em`）空行有盒子 → 实测 trimmed == distinctTops
@@ -285,7 +294,9 @@ interiorBlankCount。按「空行**可能**不渲染」取下界补偿，只会�
 **层 1（浏览器侧，槽元素排除）**：见 §5.1——`userSelect === 'none'` 且子树纯
 数字+分隔符文本 → 整棵跳过。OpenAI 实测：`.syntax-highlighter-line-number` CSS
 带 `user-select:none`，span 文本 `"1\n"` 命中；容器 `line-numbers` 本身不带
-user-select，但其子逐个命中、float 容器在空行上软断行被抑制 → 整槽零贡献。
+user-select，但其子逐个命中（2026-09-03 修订：容器实为 display:block 而非
+float，需经 §5.1 槽壳传播整棵排除——否则出场空容器 brk(true) 产幻影空行、且
+计入 blockContainers 致 mixed_signal 误杀）→ 整槽零贡献。
 ra-code 的 `ra-code__line-no`（同为 user-select:none 数字列）同路径覆盖。
 
 **层 2（Node 侧，行首算术序号剥离）**——兜无 user-select 的框架：

@@ -75,6 +75,33 @@ test('层 1 槽排除：user-select:none 纯数字子树零贡献、gutterStripp
   assert.ok(!c.textContentNoGutter.includes('1'), 'textContentNoGutter 减槽');
 });
 
+test('层 1 槽壳传播：壳 us:auto、全部子元素皆槽 → 整棵视为槽、bc 不计壳', () => {
+  // 回归（2026-09-03，developers.openai.com prompt-caching k=5/6）：真实形态
+  // .syntax-highlighter-line-numbers 壳 display:block 但 user-select:auto，
+  // us:none 只设在数字 span 上——旧谓词不认壳：walkLines 幻影首空行 +
+  // blockContainers 计壳（唯一块容器）与 \n 双信号矛盾 mixed_signal_mismatch
+  // 误杀。<!-- --> 是注释节点，textContent 不含、三处信号均不可见——夹具
+  // 保留以钉死这一点。
+  const out = run(
+    `<pre data-idx="52"><code data-language="json" data-idx="53"><span style="display:block"><span ${GUT}>1<!-- --></span><span ${GUT}>2<!-- --></span></span><span style="display:inline">{"a": 1}\n` +
+    `</span><span style="display:inline">{"b": 2}</span></code></pre>`);
+  const c = out[0];
+  assert.equal(c.gutterStripped, true);
+  assert.equal(c.text, '{"a": 1}\n{"b": 2}', '槽零贡献且无幻影首空行');
+  assert.equal(c.blockContainers, 0, '槽壳不计行容器 → mixed_signal 单信号跳过');
+  assert.equal(c.lines, 2);
+});
+
+test('层 1 槽壳传播防空穴：空行容器（零子命中）不算槽——空行保真', () => {
+  // textContent 空串过 GUTTER_TEXT_RE，但无 us:none 子命中——传播必须
+  // 要求 ≥1 子命中，否则空行 div 会被当槽吞掉（块间空行容器保真依赖）
+  const out = run(
+    `<pre data-idx="54"><code data-idx="55"><div>line1</div><div></div><div>line3</div></code></pre>`);
+  const c = out[0];
+  assert.equal(c.text, 'line1\n\nline3', '空行容器贡献空行');
+  assert.equal(c.blockContainers, 3, '空行容器照常计数');
+});
+
 test('层 1 不误杀：user-select:none 但内容非纯数字（复制保护整块）', () => {
   const out = run(`
     <pre data-idx="60" style="user-select:none"><code data-idx="61">const a = 1;

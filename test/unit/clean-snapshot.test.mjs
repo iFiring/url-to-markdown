@@ -753,6 +753,35 @@ let c = 3;</div></code></pre>
   } finally { cleanup(); }
 });
 
+test('K7: OpenAI 槽壳形态全链路——传播后 mixed_signal 单信号跳过判 ok、无幻影空行', async () => {
+  // 回归（2026-09-03，developers.openai.com prompt-caching k=5/6）：槽壳
+  // .syntax-highlighter-line-numbers display:block 但 us:auto（us:none 只在
+  // 数字 span，class 级 CSS）→ 旧实现 bc 计壳=1 与 \n 信号矛盾 →
+  // mixed_signal_mismatch 误杀落步骤 7。<!-- --> 为注释节点三处信号不可见，
+  // 夹具保留以钉死。修复：isGutter 容器传播 → 壳整棵视为槽、bc=0 单信号跳过。
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title>
+<style>.lns{display:block}.lns span{user-select:none}</style></head>
+<body>
+  <div data-idx="1"><pre data-idx="2"><code data-language="javascript" data-idx="3"><span class="lns" data-idx="4"><span data-idx="5">1<!-- --></span><span data-idx="6">2</span><span data-idx="7">3</span><span data-idx="8">4</span></span><span data-idx="9">let a = 1;
+</span><span data-idx="10">let b = 2;
+</span><span data-idx="11">let c = 3;
+</span><span data-idx="12">let d = 4;</span></code></pre>
+  <p data-idx="13">正文段落</p></div>
+</body></html>`;
+  const { out, cleaned, styled, cleanup } = await runClean(snapshot, 'k7-gutter-shell');
+  try {
+    const cj = JSON.parse(fs.readFileSync(out.codeJson, 'utf8'));
+    assert.equal(cj['1'].status, 'ok', `reason: ${cj['1'] && cj['1'].reason}`);
+    assert.equal(cj['1'].gutterStripped, true);
+    assert.equal(cj['1'].content, 'let a = 1;\nlet b = 2;\nlet c = 3;\nlet d = 4;');
+    // 收集行数 = 真实 4 行（槽壳不再触发幻影空行）
+    const folded = cleaned.match(/<pre data-idx="2"[^>]*>([\s\S]*?)<\/pre>/)[1];
+    assert.ok(folded === '{{CODE_1|4_lines}}', `槽壳形态折叠行数: ${folded}`);
+    assert.doesNotMatch(styled, /data-u2m-code="fail"/, '槽壳形态不应标失败');
+  } finally { cleanup(); }
+});
+
 test('P0: pre 内空白 token span 不被空元素级联删除——shiki 逐 token 高亮代码不粘连', async () => {
   // 回归（2026-09-02）：shiki 把空格也包成 <span style="color"> </span>
   // （逐 token）。空元素级联 hasContent() 用 trim 判空，会把这种仅含空白的

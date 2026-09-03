@@ -10,13 +10,29 @@
 // 整块；只有数字条件会误杀纯数字代码行。computed display 在 display:none
 // 祖先下仍返回计算值——隐藏子树（折叠展开器内）也能提取，innerText 做不到
 // （退化为 textContent）。
+// 槽壳传播（2026-09-03，OpenAI 实测）：行号槽壳自身 us:auto、us:none 只设在
+// 数字 span 上（class 级 CSS）——全部子元素皆槽且自身无槽外文本的壳也整棵
+// 视为槽。否则壳计入 blockContainers（文本侧剔槽、容器侧计槽）会让
+// mixed_signal 双信号矛盾误杀；walkLines 还会对零内容壳触发幻影空行。
+// ≥1 子命中防空传播：空行容器（textContent 空串过 RE 但零子命中）不算槽。
 function __u2mCollectCode() {
   var INLINE_DISPLAY_RE = /^(inline|contents|ruby)/;
   var GUTTER_TEXT_RE = /^[\d\s.,;:)|·•\-–—]*$/;
 
   function isGutter(el) {
-    if (getComputedStyle(el).userSelect !== 'none') return false;
-    return GUTTER_TEXT_RE.test(el.textContent || '');
+    if (!GUTTER_TEXT_RE.test(el.textContent || '')) return false;
+    if (getComputedStyle(el).userSelect === 'none') return true;
+    // 容器传播：余子皆槽元素或纯空白文本节点，且至少一个子命中
+    var saw = false;
+    for (var c = el.firstChild; c; c = c.nextSibling) {
+      if (c.nodeType === 3) {
+        if (c.textContent.trim() !== '') return false;
+      } else if (c.nodeType === 1) {
+        if (!isGutter(c)) return false;
+        saw = true;
+      }
+    }
+    return saw;
   }
   function isInline(el) {
     return INLINE_DISPLAY_RE.test(getComputedStyle(el).display);
@@ -120,10 +136,12 @@ function __u2mCollectCode() {
       }
     }
 
-    // blockContainers：code 壳直接子元素中非行内且非 <br> 的个数（行容器计数）
+    // blockContainers：code 壳直接子元素中非行内且非 <br> 的个数（行容器计数；
+    // 槽整棵排除——display:block 的槽壳计入会让 mixed_signal 的文本/容器两侧
+    // 对槽不对称，OpenAI 实测形态由此误杀）
     var blocks = 0;
     for (var ci = code.firstChild; ci; ci = ci.nextSibling) {
-      if (ci.nodeType === 1 && ci.tagName !== 'BR' && !isInline(ci)) blocks++;
+      if (ci.nodeType === 1 && ci.tagName !== 'BR' && !isInline(ci) && !isGutter(ci)) blocks++;
     }
 
     var hasNonText = !!pre.querySelector(
