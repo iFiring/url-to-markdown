@@ -2,7 +2,17 @@
 import http from 'node:http';
 import { WebSocketServer } from 'ws';
 
-export function loginViewerHtml({ width = 1280, height = 800 } = {}) {
+const escapeHtml = (s) => String(s).replace(/[&<>"']/g,
+  (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/** 跨平台打开 viewer 的命令分派（原 login_url.mjs 行为，合并进 snapshot.mjs 时遗失）。 */
+export function openViewerCommand(platform, url) {
+  if (platform === 'win32') return { cmd: 'cmd', args: ['/c', 'start', '', url] };
+  if (platform === 'darwin') return { cmd: 'open', args: [url] };
+  return { cmd: 'xdg-open', args: [url] };
+}
+
+export function loginViewerHtml({ width = 1280, height = 800, reason = '' } = {}) {
   return `<!doctype html>
 <html lang="zh">
 <head>
@@ -23,13 +33,18 @@ export function loginViewerHtml({ width = 1280, height = 800 } = {}) {
   #done { padding: 10px 28px; font-size: 15px; border-radius: 8px; border: 1px solid #4ade80;
           background: #14532d; color: #eafbe7; cursor: pointer; }
   #done:hover { background: #166534; }
+  #skip { padding: 10px 28px; font-size: 15px; border-radius: 8px; border: 1px solid #555;
+          background: #1a1a2e; color: #bbb; cursor: pointer; margin-left: 10px; }
+  #skip:hover { background: #22223a; }
   .info { margin-top: 10px; color: #888; font-size: 12px; }
+  .reason { color: #fbbf24; }
 </style>
 </head>
 <body>
 <div class="header"><h1>🖥️ 远程页面登录</h1><span id="status">连接中…</span></div>
 <canvas id="screen" width="${width}" height="${height}" tabindex="0"></canvas>
-<div class="toolbar"><button id="done">✅ 登录完成</button></div>
+<div class="toolbar"><button id="done">✅ 登录完成</button><button id="skip">⏭️ 跳过登录</button></div>
+${reason ? `<p class="info reason">📍 ${escapeHtml(reason)}。若无需登录可点「跳过登录」。</p>` : ''}
 <p class="info">在画面中完成登录后点「登录完成」。点击画面后可键盘输入；滚轮滚动。</p>
 <script>
   const canvas = document.getElementById('screen');
@@ -73,6 +88,8 @@ export function loginViewerHtml({ width = 1280, height = 800 } = {}) {
     send({type:'keyup', key: e.key, code: e.code, keyCode: e.keyCode}); } });
   document.getElementById('done').onclick = () => { send({type:'login_done'});
     statusEl.textContent = '检测登录态中…'; statusEl.className = ''; };
+  document.getElementById('skip').onclick = () => { send({type:'skip_login'});
+    statusEl.textContent = '跳过登录，继续转换…'; statusEl.className = ''; };
 </script>
 </body>
 </html>`;
@@ -91,30 +108,33 @@ async function relayInput(cdp, msg) {
 
 /** 起 HTTP(viewer 页)+WS 服务，把 page 的 CDP Screencast 转发给 WS 客户端并转发输入。 */
 export async function startScreencastViewer({
-  page, port = 0, width = 1280, height = 800, quality = 80,
-  onLoginDone, onClientClose, log = () => {},
+  page, port = 0, width = 1280, height = 800, quality = 80, reason = '',
+  onLoginDone, onSkipLogin, onClientClose, log = () => {},
 }) {
   const server = http.createServer((req, res) => {
     if (req.url === '/' || req.url === '') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-      res.end(loginViewerHtml({ width, height }));
+      res.end(loginViewerHtml({ width, height, reason }));
     } else { res.writeHead(404); res.end(); }
   });
   const wss = new WebSocketServer({ server });
   const cdp = await page.context().newCDPSession(page);
   let client = null;
 
-  wss.on('connection', async (ws) => {
+  wss.on('connection', (ws) => {
     client = ws;
     log('viewer 已连接');
-    await cdp.send('Page.startScreencast', { format: 'jpeg', quality, maxWidth: width, maxHeight: height, everyNthFrame: 1 }).catch(() => {});
+    // 监听器必须先于任何 await 挂载——客户端可能在握手完成后立即发消息
+    // （自动化测试即如此），EventEmitter 不排队无监听期的帧，晚挂 = 静默丢消息
     ws.on('message', async (raw) => {
       let msg;
       try { msg = JSON.parse(raw); } catch { return; }
       if (msg.type === 'login_done') { onLoginDone?.(ws); return; }
+      if (msg.type === 'skip_login') { onSkipLogin?.(); return; }
       await relayInput(cdp, msg).catch(() => {});
     });
     ws.on('close', () => { client = null; onClientClose?.(); });
+    cdp.send('Page.startScreencast', { format: 'jpeg', quality, maxWidth: width, maxHeight: height, everyNthFrame: 1 }).catch(() => {});
   });
 
   cdp.on('Page.screencastFrame', async ({ data, sessionId }) => {

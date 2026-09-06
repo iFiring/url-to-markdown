@@ -64,7 +64,7 @@ export function proxyLaunchOptions(env = process.env) {
 /**
  * 浏览器 UA 去无头特征：把无头 UA 的 HeadlessChrome/ 换成 Chrome/。
  * 部分站点（如极客时间，响应头 X-GEEK-WARN: ua black list）按 UA 拉黑无头
- * 浏览器直接回 451 空页——快照拿到 0 元素空文档、登录检测六信号全 0 而误判
+ * 浏览器直接回 451 空页——快照拿到 0 元素空文档、登录检测信号全 0 而误判
  * 已登录。Playwright 1.62 已移除 browser.userAgent()；经 CDP
  * Browser.getVersion 直读即可（实测与 navigator.userAgent 逐字符一致），
  * 无需起临时 context。

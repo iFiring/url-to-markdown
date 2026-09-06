@@ -7,9 +7,10 @@
  *   node snapshot.mjs --url <url> [--timeout 300000] [--scroll-rounds 60]
  *
  * 四阶段（依次执行，共享同一浏览器上下文，避免重复启动开销）:
- *   1. 登录阶段（lib/snapshot-login.mjs）—— 六信号检测是否需要登录：
- *      全 frames 密码框 / URL 特征 / 标题与正文关键词 / 认证 cookie 反查 /
- *      重定向 / SPA 等待，≥2 命中判定需登录；此时弹出 CDP Screencast
+ *   1. 登录阶段（lib/snapshot-login.mjs）—— 七信号两级制检测是否需要登录：
+ *      密码框 / 登录注册按钮为强信号单票成立，其余（URL 特征 / 标题与正文
+ *      关键词 / 认证 cookie 反查 / 重定向 / SPA 等待）≥2 命中判定需登录；
+ *      此时弹出 CDP Screencast
  *      viewer（地址记到 stderr）供人工登录，登录态写入全局唯一的
  *      working/cookies/storage_state.json（后续脚本只读）
  *   2. 滚动阶段（lib/snapshot-scroll.mjs）—— 渐进滚动到底再回顶，触发

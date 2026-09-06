@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>专栏试读 - 迟渲染</title></head>
+<body>
+<header><strong>某专栏</strong><nav id="nav"></nav></header>
+<main>
+<h1>专栏试读标题</h1>
+<p>未登录可试读的部分正文。LATE_SPAN_PARA。</p>
+</main>
+<script>
+// 模拟 SPA 迟水合：登录入口 800ms 后才注入 DOM（真实站实测：极客时间偶发
+// networkidle 提前达成、检测跑在头部水合之前）
+setTimeout(() => {
+  const s = document.createElement('span');
+  s.id = 'login-entry';
+  s.style.cursor = 'pointer';
+  s.textContent = '登录';
+  document.getElementById('nav').appendChild(s);
+}, 800);
+</script>
+</body>
+</html>

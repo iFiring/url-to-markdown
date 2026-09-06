@@ -42,7 +42,7 @@ package.json
 pnpm-lock.yaml
 
 working/                 # 运行时工作目录（gitignore，仅保留骨架）
-  cookies/               # 所有访问过 URL 的登录态公共存储（storage_state.json）
+  cookies/               # 所有访问过 URL 的登录态公共存储（storage_state.json + login_decisions.json）
   <url-path>/            # 该 URL 步骤 1-9 的全部产物
     assets/
       images/            # 步骤 8 下载的正文图片
@@ -84,6 +84,7 @@ working/                 # 运行时工作目录（gitignore，仅保留骨架�
 - **stdout 单行 JSON 契约**：每个 CLI（含 `init.sh`）向 stdout 输出恰好一行 JSON，失败路径也不例外；日志走 stderr；退出码 0/1/2（usage_error=2）。agent 依据 `status` 字段分支，这是整个技能的骨架约定。
 - **共享页面脚本是分类的唯一事实源**：`script/lib/page-*.js` 由 Node 编排层当文本读入注入页面，分类、清理、iframe 合并、样式内联等页面侧逻辑只存在于这些文件，不重复实现于 `.mjs` 层。
 - **登录态**：`working/cookies/storage_state.json` 是唯一全局登录态，仅步骤 1 的登录流程写入（cookie 按 name|domain|path 去重、localStorage 按 origin+name、读取时剔除过期）；转换脚本只读。需要人工登录时弹出 CDP Screencast viewer（无头 chromium → HTTP+WS 页面，JS/CSS 全内联）。
+- **登录检测两级制**：密码框 / 登录注册按钮为强信号单独判定需登录，其余信号 ≥2 命中成立。viewer 的「登录完成 / 跳过登录」按钮兼作强信号用户确认，选择按站点记入 `working/cookies/login_decisions.json`——跳过的信号在该站点视为不存在（不单票、不计票），需要恢复时删除该条目。
 - **虚拟列表检测**：仅渲染可见窗口的页面无法全文转化，步骤 1 命中即终止（`reason=virtual_list`），不写快照。
 - **长文本占位**：步骤 2 把长文本（超阈值 16 汉字/12 词的单个文本节点）替换为 `{{LONG_TEXT_k|n_chars}}` / `{{LONG_TEXT_k|n_words}}`，agent 只见结构不见内容，步骤 8 机械还原——语义判断不携带全文，token 可控。占位分两趟执行：带样式版带编号（还原链消费），清洗版无编号 `{{LONG_TEXT|n_chars}}`（唯一消费者步骤 3 只看结构+体量）；原文进 `2_long_text.json` 恢复清单，还原链只走带样式版路径。
 - **trans2img live 重渲染截图**：`data-idx` 按文档序编号是 prepare 后 DOM 的纯函数——步骤 8 按 `--url` 参数重渲染原页面并重注入同一套标记脚本，两次渲染结构一致则 id 精确对位；与快照侧逐 id 签名严校验（假阴性偏向，宁降级不出错图），失配或重渲染失败自动降级快照渲染兜底，`source` 字段如实标注来源。

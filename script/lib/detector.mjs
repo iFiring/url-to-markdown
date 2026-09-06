@@ -25,21 +25,57 @@ const norm = (u) => {
   try { const x = new Url(u); return `${x.origin}${x.pathname.replace(/\/$/, '')}`; } catch { return u; }
 };
 
-/** ≥2 项命中判定需登录（README/spec 裁决）。 */
-export function scoreSignals(signals) {
-  const keys = ['password', 'url', 'content', 'cookieMissing', 'redirected', 'spa'];
-  const hits = keys.filter((k) => signals[k]).length;
-  return { hits, needsLogin: hits >= 2 };
+/** 强信号：单独命中即判定需登录；demoted = 用户已裁决为 skip 的强信号（按域名记忆），在该域名视为不存在——不单票、不计票。 */
+const STRONG_SIGNALS = ['password', 'loginButton'];
+
+/** 强信号单票成立，其余 ≥2 项命中判定需登录（README/spec 裁决）。 */
+export function scoreSignals(signals, demoted = []) {
+  const keys = ['password', 'url', 'content', 'cookieMissing', 'redirected', 'spa', 'loginButton'];
+  const hits = keys.filter((k) => signals[k] && !demoted.includes(k)).length;
+  const strong = STRONG_SIGNALS.filter((k) => signals[k] && !demoted.includes(k));
+  return { hits, needsLogin: strong.length > 0 || hits >= 2, strong };
 }
 
-export async function collectSignals(page, context, originalUrl, { spaWaitMs = 5000, includeSpa = true } = {}) {
-  const signals = { password: false, url: false, content: false, cookieMissing: false, redirected: false, spa: false };
+/**
+ * 登录/注册入口匹配（只扫主 frame——广告 iframe 里的「立即注册」不误伤；
+ * iframe 内登录表单由 password 信号覆盖，其遍历全部 frames）。
+ * 交互元素（a/button/[role=button]）看子树文本；其余元素（Vue/React 常用
+ * span/div 实现按钮——真实站实测：极客时间登录注册入口即 cursor:pointer
+ * 的 span，无 role 无 onclick 属性）看自身直接文本且须有指针光标佐证交互性。
+ * 长度上限挡「登录后查看全文」类长文案；EXCLUDE 排除「退出登录」等已登录态
+ * 文案；可见性用 checkVisibility（Chromium 105+，连 visibility:hidden 一起
+ * 挡，比 getClientRects 严）。已知边界：不穿透 shadow DOM、不读 aria-label。
+ */
+const matchLoginButton = (page) => page.evaluate(() => {
+  const INCLUDE = ['登录', '登入', '登陆', '注册', 'log in', 'sign in', 'login', 'register', 'sign-in', 'log-in'];
+  const EXCLUDE = ['退出', '登出', 'logout', '切换'];
+  const ownText = (el) => Array.from(el.childNodes)
+    .filter((n) => n.nodeType === 3).map((n) => n.textContent).join('').trim().toLowerCase();
+  for (const el of document.querySelectorAll('a, button, [role="button"], span, div, li')) {
+    const interactive = el.tagName === 'A' || el.tagName === 'BUTTON' || el.hasAttribute('role');
+    const text = interactive ? (el.textContent || '').trim().toLowerCase() : ownText(el);
+    if (!text || text.length > 8) continue;
+    if (EXCLUDE.some((w) => text.includes(w))) continue;
+    if (!interactive && getComputedStyle(el).cursor !== 'pointer') continue;
+    if (el.checkVisibility ? !el.checkVisibility() : el.getClientRects().length === 0) continue;
+    if (INCLUDE.some((w) => text.includes(w))) return true;
+  }
+  return false;
+}).catch(() => false);
+
+export async function collectSignals(page, context, originalUrl, { spaWaitMs = 5000, includeSpa = true, demoted = [] } = {}) {
+  const signals = { password: false, url: false, content: false, cookieMissing: false, redirected: false, spa: false, loginButton: false };
   const currentUrl = page.url().toLowerCase();
   signals.url = URL_PATTERNS.some((p) => new RegExp(p).test(currentUrl));
 
   for (const f of page.frames()) { // 遍历全部 frames（含 iframe 内登录表单）
     if (await f.locator('input[type="password"]').count() > 0) { signals.password = true; break; }
   }
+
+  // 登录/注册入口（强信号）：检测时刻一次；未定论时在 spa 等待窗内轮询——
+  // SPA 迟水合（真实站实测：极客时间偶发 networkidle 提前达成、检测跑在
+  // 头部渲染完成之前）会让一次性检查随机扑空
+  signals.loginButton = await matchLoginButton(page);
 
   try {
     const title = (await page.title()).toLowerCase();
@@ -56,20 +92,30 @@ export async function collectSignals(page, context, originalUrl, { spaWaitMs = 5
 
   signals.redirected = norm(page.url()) !== norm(originalUrl) && (signals.url || signals.password);
 
-  if (includeSpa && !scoreSignals(signals).needsLogin) {
-    try {
-      await page.waitForSelector('input[type="password"]', { state: 'visible', timeout: spaWaitMs });
-      signals.spa = true;
-    } catch { /* 未出现 */ }
+  if (includeSpa && !scoreSignals(signals, demoted).needsLogin) {
+    // 等待窗内两路并行：可见密码框（spa）与迟水合的登录入口（loginButton 轮询）
+    await Promise.all([
+      page.waitForSelector('input[type="password"]', { state: 'visible', timeout: spaWaitMs })
+        .then(() => { signals.spa = true; })
+        .catch(() => { /* 未出现 */ }),
+      (async () => {
+        const deadline = Date.now() + spaWaitMs;
+        while (!signals.loginButton && Date.now() < deadline) {
+          if (await matchLoginButton(page)) { signals.loginButton = true; break; }
+          await page.waitForTimeout(400);
+        }
+      })(),
+    ]).catch(() => { /* 页面关闭等异常，未出现处理 */ });
   }
   return signals;
 }
 
 export async function needsLogin(page, context, originalUrl, opts = {}) {
-  const { log = () => {} } = opts;
-  const signals = await collectSignals(page, context, originalUrl, opts);
-  const score = scoreSignals(signals);
+  const { log = () => {}, demoted = [] } = opts;
+  const signals = await collectSignals(page, context, originalUrl, { ...opts, demoted });
+  const score = scoreSignals(signals, demoted);
   const hits = Object.keys(signals).filter((k) => signals[k]);
-  log(`登录检测: ${hits.length ? hits.join('+') : '无信号'} 命中（${score.hits}/6）→ ${score.needsLogin ? '需要登录' : '已登录'}`);
+  const strongNote = score.strong.length ? `，强信号 ${score.strong.join('+')}` : '';
+  log(`登录检测: ${hits.length ? hits.join('+') : '无信号'} 命中（${score.hits}/7）${strongNote} → ${score.needsLogin ? '需要登录' : '已登录'}`);
   return { ...score, signals };
 }
