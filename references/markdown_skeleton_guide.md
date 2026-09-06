@@ -1,66 +1,22 @@
 # 任务
 
-读取 HTML `<url-working-path>/6_article.html` 的 DOM 结构，把文章视图转换成一份 **markdown 骨架**——数组按文档序排列，每项一个单键对象，key 是语义标签，value 是该块的内容模板。长文本只引用占位编号、一字不抄，正文回填由后续脚本完成。
+读取 HTML `<url-working-path>/6_article.html` 的 DOM 结构，把文章视图转换成一份 **markdown 骨架**——数组按文档序排列，每项一个单键对象，key 是语义标签，value 是该块的内容模板。占位符（`{{LONG_TEXT_k|…}} / {{CODE_k|…}} / {{TABLE_k|…}}`）只引用占位编号，去除所有后缀（包括 `|`）。
 
 ## 专有名词
 
-**「单传祖先链」**：
+**「段落块」**：`<body>` 下的每个直接子元素都是一个「段落块」。每个「段落块」都可能包含独立的「小段落」（`h1-h6` / `p` / `span` / `blockquote` / `ul` / `ol` / `pre>code` / `table` / `img`），每个小段落都是**独占一行**的 Markdown 文本；**无法用小段落表达的内容，整体截图成 Markdown 图片**（`trans2img`）。
 
-- 对某个目标模块，链 = 分叉点与模块容器之间的全部独占包裹层，双向确定：
-  - **向上**：从模块逐层上探——父元素的其余子元素全部是无效空元素（子树内无文字/图标/图片）→ 该父元素入链、继续向上；父元素还包含其它有效子元素 → 停在该父元素，它是**分叉点**、不入链
-  - **向下**：从链顶向下走——每一级的子元素中，没有有效内容（子树内无文字/图标/图片，`h/p/span/table/img/text/pre/…`）的空元素当它不存在；剩下的有效子元素只有一个 → 穿过它继续下探；剩余多个 → 停在该元素（含该元素），它就是**模块容器**
-- 链上所有元素的 `data-idx` 组成该模块的 ID 集
-- UI 控件的文本在链判定中同样算「有效内容」（参与分叉点/停止点确定）——它只是在条目层面不产生条目
-- 顶层模块的分叉点是 `<body>`——链首即 `<body>` 子元素（链首本身也可能就是容器，此时链只有一个元素）；模块嵌套在其它内容单元（如展开器）内时，分叉点是那个内容单元，链只在它内部取
-
-DOM 结构示例（顶层模块——分叉点是 `<body>`）：
-
-> 单传祖先链：`[1]-[3]`
-
+DOM 结构示例：
 ```html
 <body>
-<!-- 顶层模块：分叉点是 <body>、链首即 <body> 子元素 [1]；模块容器是 [3]——链 [1, 3] -->
-<div data-idx="1">
-  <!-- 元素 [2] 为没有任何有效内容「文字/图标/图片」的空元素：向上探时 [1] 的其余子元素全无效 → [1] 入链；向下走时 [2] 当它不存在 -->
-  <div data-idx="2"><p><span></span></p></div>
-  <!-- 向下：[1] 的唯一有效子元素 [3] → 穿过；[3] 含两个有效子元素 → 停，[3] 是模块容器 -->
-  <div data-idx="3">
-    <!-- 元素 [4] 和 [6] 都是有效兄弟元素 -->
-    <div data-idx="4">
-      <img data-idx="5" src="url">
-    </div>
-    <div data-idx="6">
-      <p data-idx="7">text</p>
-    </div>
-  </div>
-</div>
+<!-- 段落块 [1]，包含 `h1` / `p` 两个小段落 -->
+<div data-idx="1"><h1>…</h1><p>…</p></div>
+<!-- 段落块 [10]，包含 `img` / `pre` 两个小段落 -->
+<section data-idx="10"><img src="…"/><pre>…</pre></section>
+<!-- 段落块 [20]，不能再拆成小段落 -->
+<ol data-idx="20">…</ol>
 </body>
 ```
-
-DOM 结构示例（嵌套模块——分叉点是外层内容单元）：
-
-> 单传祖先链：`[23]-[25]`，输出 `{"trans2img": [23, 24, 25]}`
-
-```html
-<body>
-<!-- 嵌套模块：目标模块 = 图解 [24]。向上：[23] 独占包裹 [24] → 入链；父 [20] 还有其它有效子元素（标题 [21]、段落 [22]）→ 停，[20] 是分叉点、不入链 -->
-<div data-idx="20">
-  <span data-idx="21">展开器标题</span>
-  <p data-idx="22">{{LONG_TEXT_1}}</p>
-  <div data-idx="23">
-    <!-- 向下：[24] 是 [23] 的唯一有效子元素 → 穿过；[25] 含两个有效子元素 → 模块容器 -->
-    <figure data-idx="24" style="border: xxx;">
-      <div data-idx="25">
-        <div data-idx="26">图 A</div>
-        <div data-idx="27">图 B</div>
-      </div>
-    </figure>
-  </div>
-</div>
-</body>
-```
-
-分叉点 [20] 不入链——展开器标题 [21] 与段落 [22] 各自成条目，不被卷进截图。
 
 **「块元素样式」**：「背景/边框/圆角/阴影」
 
@@ -75,25 +31,18 @@ DOM 结构示例（嵌套模块——分叉点是外层内容单元）：
 | `img` | 图片绝对 URL：`![img](url)`|
 | `code` | 语言类型 + 独立代码内容：`{"lang": "tsx", "content": "…"}` |
 | `table` | 完整 markdown 表格：含 `|--|--|` 分隔行 |
-| `trans2img` | 独立复杂视觉模块：取「单传祖先链」的 `data-idx` |
+| `trans2img` | 独立复杂视觉模块：取「截图边界链」的 `data-idx` |
 
-- 保持文档序、不重不漏、不要修改原义
+- 保持原始 `HTML` 文档序、不重不漏、不要修改原义
 - key 是**语义判断**的结果，具体按照下面的**判定规则**判定
-- value 要带上 Markdown 语法，包括行外语法（`#`、`>`、`-`、`1.`、`![img](url)`等），行内格式（`**粗体**`、`[链接文本](url)`、`` `code` ``等）
-- 「长文本」的占位符**只引用编号**（不带统计后缀）：`{{LONG_TEXT_5|…}}`  → `{{LONG_TEXT_5}}`
-- 「长文本」占位符**每个编号在整个骨架中恰引用一次**；两类豁免：`trans2img` 模块子树内、以及 UI 控件内的文本不产生条目，其中的占位符也不被引用（含 `figcaption` 等）
+- value 要带上 Markdown 语法：行外语法（`#`、`>`、`-`、`1.`、`![img](url)`等）和行内格式（`**粗体**`、`[链接文本](url)`、行内 code 等）都要写进 value
+- 「长文本」的占位符**只引用编号**（不带统计后缀）：`{{LONG_TEXT_5|…}}`  → `{{LONG_TEXT_5}}`；**每个编号在整个骨架中恰引用一次**（`trans2img` 子树内的编号除外——原文随截图保留，不引用、不出条目）
 - 短文本（未达长文本占位阈值）与 URL → 照抄
 - 数学公式（行内 `$…$` / 块级 `$$…$$`）照抄 LaTeX 源码，不转写为普通文本；块级公式可独立成 `p` 条
-- 一个顶层元素可展开为多条（`figure` → `img` 条 + `figcaption` 的 `p` 条），也可收敛为一条（无块样式的卡片 div → 单个 `p`）
-- UI 控件仅指**纯互斥选择器**：选项卡标签组、下拉/切换触发器、单选组、语言切换等（`role="group"` / `role="button"` / `role="tablist"` / `role="radiogroup"` 一类）——不是内容，不产生条目、其文本不并入正文，其中出现的占位符也不被引用（与 `trans2img` 子树同等对待）
-- 展开器/折叠器（accordion）标题**不是** UI 控件，是内容标题——按页面内相对层级判 `h`（通常比最近的前一个结构标题低一级，嵌套展开器再低一级）
-- 控件本体承载可枚举的实质内容（概念映射、选项说明等）时不丢弃，降级为 `ul`/`table`
-- 互斥选择器的各面板同时存在于 DOM 时，各面板内容照常产生条目（全部保留）
-- 在「单传祖先链」中，没有「块元素样式」的父组件可直接忽略
 
 ## 判定规则
 
-规则冲突时按以下优先级取先命中者：`{{TABLE_k}}` 占位符 → `table` 引用（不自转）；真实 live `<table>`（步骤 2 转换失败的表）恒走 `table`、结构不可表达才降级 `trans2img` → 多层级「块元素样式」等视觉模块走 `trans2img` → 单层「块元素样式」包装的提示/代码模块走 `blockquote` / `code`+`p` → 真实列表标签 / 同构短条目走 `ul`/`ol` → 其余文本走 `p`。`h1-h6` 单独判定且只留给文档结构性标题（见「`h1 - h6` 判定」），模块内部的标题/标签跟随模块归属形态；`img`/`picture` 标签直接走 `img`，不参与以上优先级
+对每个「段落块」逐个判定、产出条目。多条规则同时命中时，按本节自上而下的顺序取**先命中者**；`trans2img` 是最后的兜底——无法用「小段落」表达的内容整体截图成 Markdown 图片。
 
 ### `h1 - h6` 判定
 
@@ -124,6 +73,7 @@ DOM 结构示例：
     <span style="font-size: 32px;">
       <span>{{LONG_TEXT_1}}</span>
     </span>
+    <!-- 字号 2rem 达 h1 级别，同样判成 h1 -->
     <p style="font-size: 2rem;">
       <span>{{LONG_TEXT_2}}</span>
     </p>
@@ -145,9 +95,9 @@ DOM 结构示例：
 
 ### `blockquote` 判定
 
-- 带有明显 `blockquote` 标签 → `blockquote`
+- 明显 `<blockquote>` 标签 → `blockquote`
 - `<aside>` 一类语义旁注/边栏提示标签 → `blockquote`（即使无块样式）
-- 在「单传祖先链」上，存在单个元素有「块元素样式」的提示段落，子孙元素没有「块元素样式」，只有文本内容 → `blockquote`
+- 「段落块」内，**只有一层**带「块元素样式」的包裹（包裹内层与外层都没有其它「块元素样式」）、子孙元素只有文本（`p`/`span`/文本节点，不含图片/表格等）→ `blockquote`
 
 DOM 结构示例：
 ```html
@@ -165,10 +115,8 @@ DOM 结构示例：
 </div>
 <div>
   <div style="background-color: xxx;">
-    <ol>
-      <li>{{LONG_TEXT_4}}</li>
-      <li>{{LONG_TEXT_5}}</li>
-    </ol>
+    <p>{{LONG_TEXT_4}}</p>
+    <p>{{LONG_TEXT_5}}</p>
   </div>
 </div>
 </body>
@@ -178,15 +126,15 @@ DOM 结构示例：
 ```json
 {"blockquote": "> {{LONG_TEXT_1}}\n> {{LONG_TEXT_2}}"}
 {"blockquote": "> {{LONG_TEXT_3}}"}
-{"blockquote": "> 1. {{LONG_TEXT_4}}\n> 2. {{LONG_TEXT_5}}"}
+{"blockquote": "> {{LONG_TEXT_4}}\n> {{LONG_TEXT_5}}"}
 ```
 
 ### `ul` / `ol` 判定
 
-- 真实列表标签：`<ul>`/`<ol>`/`<li>` → `ul`/`ol`；
-- 在「单传祖先链」上，无列表标签但子元素**同构重复**的**短条目**（多个纯文本行的「卡片组、垂直堆叠的图标+文本行、要点罗列、标签组等」），能够用多级 `ul` / `ol` 展示的 → `ul`/`ol`；连续的完整句正文段落 → 多个 `p` 条，不判列表
+- 真实列表标签：`<ul>`/`<ol>`/`<li>` → `ul`/`ol`；有序语义（步骤、排名、编号）→ `ol`；无序 → `ul`
+- 「段落块」内有多个子面板，子面板内容以可列表化文本为主（标题+简述等）时，按文本形态优先**于截图** → `ul`/`ol`（图片为主时反转，见 `trans2img` 判定反例）；
+- 「段落块」内，无列表标签但子元素**同构重复**的**短条目**（多个纯文本行的「卡片组、垂直堆叠的图标+文本行、要点罗列、标签组等」），能够用多级 `ul` / `ol` 展示的 → `ul`/`ol`；连续的完整句正文段落 → 多个 `p` 条，不判列表
 - 「标签：值」成对重复的元数据行（作者/日期/阅读量等）→ 收敛为单个 `p` 条（如「作者：X · 日期：Y · 阅读：Z」），不判列表
-- 有序语义（步骤、排名、编号）→ `ol`；无序 → `ul`
 - value 是**一个字符串**：一行一项、`\n ` 分隔，行级 `- ` / `1. ` 语法写在 value；嵌套列表用缩进表达（每级缩进 2 空格）、写进同一字符串
 
 DOM 结构示例：
@@ -201,13 +149,29 @@ DOM 结构示例：
     <p><span>{{LONG_TEXT_12}}</span></p>
     <p><span>{{LONG_TEXT_13}}</span></p>
   </div>
+
+<div data-idx="30" style="display: flex">
+  <div data-idx="31">
+    <div>
+      <p>Title_1…</p>
+      <img src="https://example.com/i/icon-1.png">
+      <span>{{LONG_TEXT_14}}</span>
+    </div>
+    <div>
+      <p>Title_2…</p>
+      <img src="https://example.com/i/icon-2.png">
+      <span>{{LONG_TEXT_15}}</span>
+    </div>
+  </div>
+</div>
 </body>
 ```
 
 输出示例：
 ```json
 {"ol": "1. {{LONG_TEXT_10}}\n 2. {{LONG_TEXT_11}}"},
-{"ul": "- {{LONG_TEXT_12}}\n - {{LONG_TEXT_13}}"}
+{"ul": "- {{LONG_TEXT_12}}\n - {{LONG_TEXT_13}}"},
+{"ul": "- Title_1…\n  {{LONG_TEXT_14}}\n- Title_2…\n  {{LONG_TEXT_15}}"}
 ```
 
 ### `img` 判定
@@ -239,137 +203,338 @@ DOM 示例：
 
 ### `code` 判定
 
-- 在「单传祖先链」下主体是「代码块 + 标题/说明文字」 → `code` + `p`
-- `lang` 必填：优先取 `pre` / `code` 上的 `data-language` 属性，无线索时写 `""`
-- `pre` 自带背景/边框不影响判定（同 `table`），仍走 `code`
-- 代码逐字照抄：源文若有空格粘连/损伤也照抄不改，只删除代码左侧的数字序号，不做任何修复
-- 代码内的长文本照常引用占位符（`content` 中可含 `{{LONG_TEXT_k}}`）
-
-#### 代码块：`{{CODE_k|N_lines}}` 占位符（预计算还原）
-
-`6_article.html` 中 `<pre>` 含 `{{CODE_k|N_lines}}` 占位符时，产出引用条目——
-**不要自转占位符块的代码内容**（预计算 JSON 是唯一事实源，转录会引入抄写错误）：
-
-```json
-{ "code": "{{CODE_3}}" }
-```
-
-- 剥掉 `|N_lines` 后缀，裸编号引用；每个 `{{CODE_k}}` 恰用一次（同 LONG_TEXT 约定）
-- `lang` 无需填写——步骤 8 物化时以快照的 `data-language` 收集值为准
-- 失败块（live 代码、无占位符，标 `data-u2m-code="fail"`）照旧自转 `{lang, content}`，
-  lang 优先抄 `data-language` 属性值
+- 见 `pre>code>{{CODE_k|N_lines}}` 占位符 → 生成 `{{CODE_k}}`，剥掉 `|N_lines` 后缀， **不用自行转换**
+- 「段落块」内主体是「代码块`pre>code>…` + 标题/说明文字」 → 格式化 `code` + `p`；「标题/说明文字」不一定存在
+  - `lang` 必填：优先取 `pre` / `code` 上的 `data-language` 属性，无线索时写 `""`
+  - `pre` 自带背景/边框不影响判定（同 `table`），仍走 `code`
+  - 代码逐字照抄：源文若有空格粘连/损伤也照抄不改，只删除代码左侧的数字序号，不做任何修复
+  - 代码内的长文本照常引用占位符（`content` 中可含 `{{LONG_TEXT_k}}`）
 
 DOM 结构示例：
 ```html
 <body>
-<!-- 单层块元素样式 → `code` -->
-<section style="background-color: xxx; border: xxx">
-  <div>
-    <div style="border-bottom: xxx">
-      <p>{{LONG_TEXT_k}}</p>
-    </div>
+<!-- 见 `pre>code>…` 原始代码块  → 格式化的 `code…` -->
+<section style="background-color: xxx; border: xxx;">
+  <div style="border-bottom: xxx">
+    <p>{{LONG_TEXT_6}}</p>
   </div>
-  <pre>
-    <code>code…</code>
+  <pre style="background-color: xxx;">
+    <code><span>code</span>…</code>
   </pre>
+</section>
+
+<!-- 见 `pre>code>{{CODE_k|N_lines}}` 占位符  → `{{CODE_k}}` -->
+<section style="background-color: xxx; border: xxx;">
+  <div style="background-color: xxx;">
+    <pre>
+      <code data-language="lang">{{CODE_k|N_lines}}</code>
+    </pre>
+  </div>
+  <p style="border-top: xxx">{{LONG_TEXT_7}}</p>
 </section>
 </body>
 ```
 
 输出示例：
 ```json
-{"p": "{{LONG_TEXT_k}}"},
-{"code": {"lang": "", "content": "code…"}}
+{"p": "{{LONG_TEXT_6}}"},
+{"code": {"lang": "lang", "content": "[formatted]code…"}},
+{"code": {"lang": "lang", "content": "{{CODE_k}}"}},
+{"p": "{{LONG_TEXT_7}}"}
 ```
 
 ### `table` 判定
 
-- 见 `{{TABLE_k|rows×cols}}` 占位符（步骤 2 预计算成功的表）→ 发 `{"table":"{{TABLE_k}}"}` 引用，**不要自行转换**——预计算 GFM markdown 已就绪、步骤 8 还原。每个 `k` 在骨架中恰引用一次
-- 见 live 无样式表（步骤 2 转换失败、经步骤 5 剥样式保 live 的表，标 `data-u2m-table="fail"`）→ 自转 GFM `table` 条；仅当结构无法用 markdown 表格表达（嵌套表 / 单元格内块级内容 / 无法对齐）才降级 `trans2img`
-- 单元格内的脚注锚点（如 `[*](#...)`）保留链接形式，不退化为裸 `*`
-- **跨行跨列不再触发 `trans2img`**——成功的跨格表已由步骤 2 确定性引擎展开为规则网格、折成 `{{TABLE_k}}`；仅转换失败的表（无 `<th>` / 嵌套块级内容）可能落 `trans2img`
-
-### `trans2img` 判定
-
-> 当模块的视觉布局本身承载语义，markdown 无法表达，就需要将元素整体转换成图片：`trans2img`
-
-- **文本形态（markdown 语法）优先**：能用 Markdown 正确显示的内容，优先用 Markdown 格式展示：
-  - 当「单传祖先链」下是单个 `<table>` / `<pre>` / `<img>`，且模块容器内的其余兄弟只是纯文本段落（`p/h/blockquote` 一类，`block > p > span > text…`）时 → 拆成对应条目组合：`table` / `code` / `img` 条（`pre` 对应 `code` 条）+ `p` / `h1-h6` / `blockquote` 文本条
-  - 当「单传祖先链」下是多行文本段落（`section>div>(h1+pre+p+blockquote+button)`），且**没有多层级「块元素样式」** → `h1+code+p+blockquote` 组合（`pre` 对应 `code` 条）
-
-- 所有无法用 markdown 段落表达的元素 → 一律走 `trans2img` 兜底，常见模块：
-  - 纯文本「很少/没有」的图片组、图文拼贴；CSS 背景图同理（取不到独立 URL）
-  - 以图片为主要内容、文本较短的卡片组（以文本为主要内容、仅带小图标 → `ul/ol`）
-  - 图表、流程、图解、以空间关系表意的卡片拼贴
-  - **多层级「块元素样式」**：「单传祖先链」上有 ≥2 层元素带「块元素样式」，或模块容器内有 ≥2 个并列的带「块元素样式」子面板（对比面板、卡片格）；仅单层包装 + 单个装饰头（如带标题栏的代码块）不算。**但**子面板内容以可列表化文本为主（标题+简述等）时，按文本形态优先降级 `ul`/`ol` 或小表，不截图
-  - 包含 `canvas/iframe` 等特殊元素
-  - 在「单传祖先链」下的「子孙/兄弟」元素中，包含「绝对定位」元素
-  - 行列对齐的网格数据（非 `<table>` 标签）
-- **多面板模块算一个模块**：多个并列数据面板共享同一标题/图例/汇总句时，整组是一条 `trans2img`（单传祖先链收敛到含全部面板的容器），不逐面板出条；模块内的文本（含汇总句）按子树规则随截图吸收、不另出条目
-
-**`trans2img` ID 取值规则**
-
-- `trans2img` 取自「单传祖先链」：**截图必须整体，优先在「单传祖先链」上整体截图**，不能被单独拆开
-- 数组按**从最外层（链首，靠近分叉点一侧）到模块容器**的顺序书写（首位是最外层）
-- 「单传祖先链」至少有一个 ID，数值通常是 `+1`/`+2` 连续递增的
+- 见 `{{TABLE_k|rows×cols}}` 占位符 → 生成 `{{TABLE_k}}`，剥掉 `|rows×cols` 后缀， **不用自行转换**
+- 「段落块」内主体是「表格块（`table>…`） + 标题/说明文字」 → 格式化 `table` + `p`；「标题/说明文字」不一定存在
+  - 单元格内的脚注锚点（如 `[*](#...)`）保留链接形式，不退化为裸 `*`
+  - 单元格内长文本照常引用占位符（表格 value 中可含 `{{LONG_TEXT_k}}`）
 
 DOM 结构示例：
 ```html
 <body>
+<!-- 原始 `table>…` 表格  → 格式化的 markdown 表格 -->
+<section style="background-color: xxx; border: xxx;">
+  <div style="border-bottom: xxx">
+    <p>{{LONG_TEXT_8}}</p>
+  </div>
+  <table style="border: xxx;">
+    <thead>
+      <tr><th>指标</th><th>数值</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>营收<a href="#fn1">*</a></td><td>1.2亿</td></tr>
+      <tr><td>{{LONG_TEXT_9}}</td><td>{{LONG_TEXT_10}}</td></tr>
+    </tbody>
+  </table>
+</section>
 
-<!-- 单层「块元素样式」包装下的段落组（h1 + pre + p）→ 拆开，不判 trans2img -->
-<div style="background-color: xxx; border: xxx">
+<!-- 见 `{{TABLE_5|3×2}}` 占位符  → `{{TABLE_5}}` -->
+<section style="background-color: xxx; border: xxx;">
+  <div style="background-color: xxx;">
+    {{TABLE_5|3×2}}
+  </div>
+  <p style="border-top: xxx">{{LONG_TEXT_11}}</p>
+</section>
+</body>
+```
+
+输出示例：
+```json
+{"p": "{{LONG_TEXT_8}}"},
+{"table": "|指标|数值|\n|--|--|\n|营收[*](#fn1)|1.2亿|\n|{{LONG_TEXT_9}}|{{LONG_TEXT_10}}|"},
+{"table": "{{TABLE_5}}"},
+{"p": "{{LONG_TEXT_11}}"}
+```
+
+### 组合模式
+
+- 当「段落块」内是单个 `<table>` / `<pre>` / `<img>`，且其余兄弟只是纯文本段落（`p/h/blockquote` 一类，`block > p > span > text…`）时 → 拆成对应条目组合：`table` / `code` / `img` 条（`pre` 对应 `code` 条）+ `p` / `h1-h6` / `blockquote` 文本条
+- 当「段落块」内是**独立、多行**的文本内容（`h1` + `pre` + `p` + `blockquote` + `button` 一类元素组合，分布在 `section` / `header` / `div` / `footer` 等层级中），且**没有多层级「块元素样式」** → `h1+code+p+blockquote` 组合（`pre` 对应 `code` 条）
+- 展开器/折叠器（accordion）标题**不是** UI 控件，是内容标题——按页面内相对层级判 `h`（通常比最近的前一个结构标题低一级，嵌套展开器再低一级）
+
+DOM 结构示例（同一 `<body>` 内四个判定场景）：
+```html
+<body>
+
+<!-- 例 1：单个 <pre> 与纯文本兄弟（h2 / p）共处一个「段落块」→ 拆成 h2 + code + p -->
+<div>
+  <h2>{{LONG_TEXT_30}}</h2>
+  <pre><code data-language="js">const a = 1;</code></pre>
+  <p>{{LONG_TEXT_31}}</p>
+</div>
+
+<!-- 例 2：独立、多行文本段（h1/pre/p/blockquote/button），无多层级「块元素样式」→ h1/code/p/blockquote；「分享」按钮是 UI 控件，除非按钮是有效的文本内容，否则其文本不出条目 -->
+<section>
+  <header>
+    <h1>{{LONG_TEXT_32}}</h1>
+  </header>
   <div>
-    <div><h1>{{LONG_TEXT_1}}</h1></div>
-    <pre data-language="python">…</pre>
-    <p style="font-size: 14px;"><span>{{LONG_TEXT_2}}</span></p>
+    <pre><code>{{CODE_4|N_lines}}</code></pre>
+  </div>
+</section>
+<section>
+  <div>
+    <p>{{LONG_TEXT_33}}</p>
+  </div>
+  <blockquote><p>{{LONG_TEXT_34}}</p></blockquote>
+  <footer>
+    <button>分享</button>
+  </footer>
+</section>
+
+<!-- 例 3：展开器（accordion）标题是内容标题、不是 UI 控件——按「段落块」内相对层级判 h：前一结构标题为 h2 → 展开器标题判 h3，嵌套展开器再低一级判 h4 -->
+<div class="accordion">
+  <button class="accordion-header" aria-expanded="true">
+    <svg class="icon"></svg>
+    <h2>展开器标题 A</h2>
+  </button>
+  <div class="accordion-panel">
+    <p>{{LONG_TEXT_40}}</p>
+    <div class="accordion">
+      <button class="accordion-header" aria-expanded="false">嵌套展开器标题</button>
+      <div class="accordion-panel"><p>{{LONG_TEXT_41}}</p></div>
+    </div>
   </div>
 </div>
+</body>
+```
 
-<!-- 从 <body> 的子元素 [8] 开始 -->
-<!-- 被判定为 `trans2img`，不能被某些「段落/文本」元素（h/p/span/button）拆开 -->
-<div data-idx="8" style="background-color: xxx; border: xxx;">
-  <!-- 元素 [9] 为没有任何有效内容「文字/图标/图片」的空元素，直接忽略 -->
-  <div data-idx="9"></div>
-  <!-- 元素 [10] 虽然有兄弟，但兄弟没有效内容 -->
-  <!-- 到含有多个有效子元素的 [10] 为止 -->
-  <section data-idx="10" style="background-color: xxx; border: xxx;">
-    <div data-idx="11">
-      <h2 data-idx="12">{{LONG_TEXT_k}}</h2>
+输出示例（按文档序）：
+```json
+{"h2": "## {{LONG_TEXT_30}}"},
+{"code": {"lang": "js", "content": "const a = 1;"}},
+{"p": "{{LONG_TEXT_31}}"},
+{"h1": "# {{LONG_TEXT_32}}"},
+{"code": {"lang": "", "content": "{{CODE_4}}"}},
+{"p": "{{LONG_TEXT_33}}"},
+{"blockquote": "> {{LONG_TEXT_34}}"},
+{"h3": "## 展开器标题 A"},
+{"p": "{{LONG_TEXT_40}}"},
+{"h4": "### 嵌套展开器标题"},
+{"p": "{{LONG_TEXT_41}}"}
+```
+
+### `trans2img` 判定
+
+> `trans2img` 是将无法用 Markdown 表达的模块整体截图。
+
+- **前面的所有判定都不符合，也就是无法用「小段落」表达** →  `trans2img`
+- **反例——「文本形态优先」在图片为主时反转**：内容**以图片为主**、文本较少或没有时，即使夹杂少量可拆的文本小段落，也**优先 `trans2img` 整体截图**、不逐条拆文本；「文本形态优先」只适用于文本为主的「段落块」
+- 纯文本「很少/没有」的图片组、图文拼贴；CSS 背景图同理（取不到独立 URL） → `trans2img`
+- 图表、流程、图解、以空间关系表意的卡片拼贴 → `trans2img`
+- **多层级「块元素样式」**：「段落块」内有 ≥2 层元素带「块元素样式」的复杂布局，或有并列的带 ≥2 层「块元素样式」的子面板（对比面板、卡片格） → `trans2img`
+- 包含 `canvas/iframe` 等特殊元素 → `trans2img`
+- 以图片为主要内容、文本较短的卡片组 → `trans2img`
+- 「段落块」内的「子孙/兄弟」元素中，包含「绝对定位」元素 → `trans2img`
+- 行列对齐的网格数据（非 `<table>` 标签） → `trans2img`
+- 包含 UI 交互控件，UI 控件仅指**纯互斥选择器**：选项卡标签组、下拉/切换触发器、单选组、语言切换等（`role="group"` / `role="button"` / `role="tablist"` / `role="radiogroup"` 一类），「段落块」整体截图 → `trans2img`——**截图边界定死在「段落块」、不拆第一层的「标题/说明」**（UI 控件与内容面板是一体的，第一层文本随截图吸收、不出条目）
+
+**`trans2img` ID 取值规则**
+
+- **`trans2img` 取自「截图边界链」**的数组，按**从最外层链首（段落块或其子元素）到最内层链尾（多子元素的容器）**的顺序取值
+- 「截图边界链」至少有一个 ID，数值通常是 `+1`/`+2` 连续递增的
+- 链首本身即多子元素容器时，链上只有一个元素
+
+> **「截图边界链」**：对要走 `trans2img` 的视觉模块，链 = 从**链首**逐层下探到**链尾**途经的全部元素（含两端）——它框定该模块截图的整体边界，链上每个 `data-idx` 都是一张候选截图。链首之下的每一层都**只包裹该模块**：除链上路径外的兄弟元素均无有效内容。
+
+**链首**：通常是「段落块」元素，但当「段落块」包含作为「标题/说明」的子元素时，下移到非「标题/说明」的子元素，只能下移一次（见以下示例）；当链首下移后，意味着「标题/说明」将会独立成行（`p/h/blockquote`）。当「段落块」第一层存在**多个**复杂模块（非「标题/说明」的内容子元素 ≥2 个）时，不再下移、也不拆「标题/说明」——截图边界**定死在「段落块」整体**，链 = [段落块] 一个 ID，「标题/说明」随截图吸收。
+**标题/说明拆分只发生在第一层**：能拆出来独占一行成条目的标题/说明，只能是**「段落块」的直接子元素**，不能拆第二层之下的标题/说明；UI 控件不能算作标题/说明，标题/说明只能是文本形态（剔除小图标）。
+**链尾**：通常是「多子元素的容器」，从链首逐层下探——没有有效内容（子树内无文字/图标/图片）的空元素当它不存在（不入链）；只有一个有效子元素 → 穿过它继续下探（它仍在链上）；有多个有效子元素 → 停在该元素，它就是**链尾模块容器**
+
+DOM 结构示例（截图边界链）：
+```html
+<body>
+<!-- 普通情况，无第一层「标题/说明」，`trans2img` 取值为 `[1,2,4]` -->
+<!-- 「段落块」作为默认链首 -->
+<section data-idx="1" style="background-color: xxx; border: xxx">
+  <!-- 第一层没有「标题/说明」，继续下探 -->
+  <div data-idx="2">
+    <!-- 无效元素 [3]，从「截图边界链」剔除，继续下探 -->
+    <div data-idx="3"><span></span></div>
+    <!-- 多个有效子元素 [4]，停止下探——链尾 -->
+    <div data-idx="4">
+      <div data-idx="5"><span>…</span></div>
+      <div data-idx="6"><span>…</span></div>
     </div>
-    <div data-idx="13" style="display: flex; position: relative;">
-      <div style="border: xxx;">
-        <p>{{LONG_TEXT_k}}</p>
-      </div>
-      <div style="background-color: xxx; border: xxx;">
-        <p>{{LONG_TEXT_k}}</p>
-      </div>
+  </div>
+</section>
+
+<!-- 第一层有「标题/说明」,`trans2img` 取值为 `[9,10]` -->
+<div data-idx="7">
+  <!-- 第一层有「标题」 -->
+  <h2 data-idx="8">Title…</h2>
+  <!-- 第一层有「标题/说明」，链首从「段落块」[7] 下移到非「标题/说明」的子元素 [9] -->
+  <section data-idx="9">
+    <!-- 多个有效子元素 [10]，停止下探——链尾 -->
+    <div data-idx="10">
+      <div data-idx="11"><span>…</span></div>
+      <div data-idx="12"><span>…</span></div>
     </div>
   </section>
+  <!-- 第一层有「说明」 -->
+  <div data-idx="13"><span>{{LONG_TEXT_2}}</span></div>
 </div>
 
-<!-- 卡片组：文本为主、仅小图标 → ul -->
-<div data-idx="30" style="display: flex">
-  <div><img src="https://example.com/i/icon-1.png"><span>{{LONG_TEXT_10}}</span></div>
-  <div><img src="https://example.com/i/icon-2.png"><span>{{LONG_TEXT_11}}</span></div>
+<!-- 第一层有「标题」+ 多个复杂模块 → 不下移、不拆「标题/说明」，截图定死在「段落块」整体，取值为 `[14]` -->
+<div data-idx="14">
+  <h2 data-idx="15">Title…</h2>
+  <section data-idx="16" style="background-color: xxx; border: xxx">…图表 A…</section>
+  <section data-idx="17" style="background-color: xxx; border: xxx">…图表 B…</section>
 </div>
 
-<!-- 卡片组：图片为主、文本较短 → trans2img -->
-<div data-idx="40" style="display: grid">
-  <figure><img src="https://example.com/a/shot-1.png"><figcaption>{{LONG_TEXT_12}}</figcaption></figure>
-  <figure><img src="https://example.com/a/shot-2.png"><figcaption>{{LONG_TEXT_13}}</figcaption></figure>
+<!-- 展开器内嵌视觉模块：展开器标题是第一层「标题」（内容标题、非 UI 控件）→ 独立成 h 条；链首下移进面板，取值为 `[20,21]` -->
+<div data-idx="18">
+  <button data-idx="19">展开器标题</button>
+  <div data-idx="20">
+    <section data-idx="21" style="background-color: xxx; border: xxx">
+      <canvas></canvas>
+      <div>…图例…</div>
+    </section>
+  </div>
 </div>
 </body>
 ```
 
 输出示例：
 ```json
-{"h1": "# {{LONG_TEXT_1}}"},
-{"code": {"lang": "python", "content": "…"}},
+{"trans2img": [1, 2, 4]},
+{"h2": "## Title…"},
+{"trans2img": [9, 10]},
 {"p": "{{LONG_TEXT_2}}"},
-{"trans2img": [8, 10]},
-{"ul": "- {{LONG_TEXT_10}}\n - {{LONG_TEXT_11}}"},
-{"trans2img": [40]}
+{"trans2img": [14]},
+{"h3": "### 展开器标题"},
+{"trans2img": [20, 21]}
+```
+
+DOM 结构示例（`trans2img`判定场景）：
+```html
+<body>
+
+<!-- 例 1：图文拼贴/图片组（纯文本很少，CSS grid；多张 figure 聚成视觉整体）→ trans2img，链 [20,21]；figcaption 短文本随截图吸收、不逐张拆 img -->
+<div data-idx="20" style="display: grid;">
+  <div data-idx="21">
+    <figure data-idx="22"><img src="https://example.com/a/a.png"><figcaption>SHORT…</figcaption></figure>
+    <figure data-idx="23"><img src="https://example.com/a/b.png"><figcaption>SHORT…</figcaption></figure>
+  </div>
+</div>
+
+<!-- 例 2：CSS 背景图（取不到独立 URL）→ trans2img；链首 [24] 本身即多子元素容器，链上只有一个元素 [24] -->
+<div data-idx="24" style="background-image: url(https://example.com/a/banner.png);">
+  <div data-idx="25"><span>横幅标题</span></div>
+  <p data-idx="26">SHORT…</p>
+</div>
+
+<!-- 例 3：≥2 个并列带「块元素样式」的对比面板（卡片格、以图表/图片表意）→ trans2img，链 [30,31] -->
+<div data-idx="30">
+  <div data-idx="31" style="display: flex;">
+    <div data-idx="32" style="background-color: xxx; border: xxx;">
+      <img src="https://example.com/a/m1.png"><div>指标卡 A</div>
+    </div>
+    <div data-idx="33" style="background-color: xxx; border: xxx;">
+      <img src="https://example.com/a/m2.png"><div>指标卡 B</div>
+    </div>
+  </div>
+</div>
+
+<!-- 例 4：包含 canvas 特殊元素（图表 + 图例）→ trans2img；链首 [40] 即多子元素容器，链 [40] -->
+<div data-idx="40" style="border: xxx;">
+  <canvas data-idx="41" width="600" height="300"></canvas>
+  <div data-idx="42"><span>● 收入　● 支出</span></div>
+</div>
+
+<!-- 例 5：子孙中含「绝对定位」元素（悬浮标注）→ trans2img，链 [50,51] -->
+<div data-idx="50">
+  <div data-idx="51" style="position: relative;">
+    <img data-idx="52" src="https://example.com/a/diagram.png">
+    <div data-idx="53" style="position: absolute; top: 0; left: 0;">标注</div>
+  </div>
+</div>
+
+<!-- 例 6：行列对齐的网格数据（div 模拟表格，非 <table> 标签）→ trans2img，链 [60,61] -->
+<div data-idx="60">
+  <div data-idx="61" style="display: grid; grid-template-columns: repeat(3, 1fr);">
+    <div data-idx="62" style="border: xxx;">Q1</div><div data-idx="63" style="border: xxx;">1.2</div><div data-idx="64" style="border: xxx;">+8%</div>
+    <div data-idx="65" style="border: xxx;">Q2</div><div data-idx="66" style="border: xxx;">1.5</div><div data-idx="67" style="border: xxx;">+12%</div>
+  </div>
+</div>
+
+<!-- 例 7：多个并列数据面板共享标题/汇总句 → 整组算一个模块、一条 trans2img，链收敛到含全部面板的容器 [70,71]；标题 [72]/汇总句 [76] 在模块容器内部（非段落块第一层），随截图吸收、不另出条目 -->
+<div data-idx="70">
+  <div data-idx="71">
+    <h3 data-idx="72">季度对比</h3>
+    <div data-idx="73" style="display: flex;">
+      <div data-idx="74" style="border: xxx;"><img src="https://example.com/a/c1.png"></div>
+      <div data-idx="75" style="border: xxx;"><img src="https://example.com/a/c2.png"></div>
+    </div>
+    <p data-idx="76">汇总：全年同比增长 10%</p>
+  </div>
+</div>
+
+<!-- 例 8：纯互斥选择器（语言切换 segmented control，role="group"/"button"）→ trans2img，截图定死在段落块 [80]、[82] 的文本随截图吸收 -->
+<div data-idx="80">
+  <div data-idx="81" role="group">
+    <button role="button" aria-pressed="true">中文</button>
+    <button role="button">English</button>
+  </div>
+  <section data-idx="82">
+    <p data-idx="83">SHORT…</p>
+    <p data-idx="84">SHORT…</p>
+  </section>
+</div>
+</body>
+```
+
+输出示例（按文档序）：
+```json
+{"trans2img": [20, 21]},
+{"trans2img": [24]},
+{"trans2img": [30, 31]},
+{"trans2img": [40]},
+{"trans2img": [50, 51]},
+{"trans2img": [60, 61]},
+{"trans2img": [70, 71]},
+{"trans2img": [80]}
 ```
 
 ## 输出要求

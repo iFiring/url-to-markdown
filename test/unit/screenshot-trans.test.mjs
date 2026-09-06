@@ -44,7 +44,7 @@ test('screenshot_trans.mjs: 无参数时输出 usage_error', async () => {
 });
 
 // 步骤 1 产物：全保真快照——真实文本（占位符只存在于步骤 2 派生视图）。
-// 模块带单传祖先链：[9]（无样式外层包裹，占满 body 宽）→ [10]（带背景/
+// 模块的截图边界链：[9]（无样式外层包裹，占满 body 宽）→ [10]（带背景/
 // 边框的模块容器，被 9 的 padding 收窄）→ [11]/[12] 内部装饰。
 // 链上 9 比 10 宽 → 择优应选 9 的截图。
 // --url 指向死端口 → 步骤 8 的 live 重渲染即时失败（ECONNREFUSED），
@@ -78,7 +78,7 @@ const SNAPSHOT_TIE = `<!DOCTYPE html>
 <div data-idx="40"><div data-idx="41" style="background-color: rgb(240, 240, 240)">同宽文本</div></div>
 </body></html>`;
 
-// 新契约：value 自带行外语法；trans2img 为单传祖先链 ID 数组
+// 新契约：value 自带行外语法；trans2img 为截图边界链 ID 数组
 const SKELETON = [
   { h1: '# 标题' },
   { p: '{{LONG_TEXT_5}}' },

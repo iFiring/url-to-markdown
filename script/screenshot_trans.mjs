@@ -14,7 +14,7 @@
  *                             头注：优先 URL 文件名、冲突带编号、扩展名按
  *                             content-type、失败保留原 URL）
  *
- *   assets/trans/{id}.webp    trans2img 单传祖先链上每个 id 各一张截图
+ *   assets/trans/{id}.webp    trans2img 截图边界链上每个 id 各一张截图
  *                             （WebP，2x 分辨率，全部落盘保留）
  *
  * 用法:
@@ -268,7 +268,7 @@ async function main() {
   }
   await fsPromises.writeFile(resolvedPath, JSON.stringify(resolvedSkeleton, null, 2));
 
-  // 按文档序收集 trans2img 条目（value 应为非空正整数 ID 数组——单传祖先链）；
+  // 按文档序收集 trans2img 条目（value 应为非空正整数 ID 数组——截图边界链）；
   // 按文档序收集 img 条目括号内 URL（去重，只下 http/https）
   const transEntries = [];
   for (const entry of skeleton) {
@@ -277,7 +277,7 @@ async function main() {
     const okShape = Array.isArray(v) && v.length > 0 && v.every((id) => Number.isInteger(id) && id > 0);
     if (!okShape) {
       return emitError(
-        `trans2img 条目 value 应为非空正整数 ID 数组（单传祖先链），实际为: ${JSON.stringify(v)}——请按步骤 7 指南修正 7_skeleton.json`,
+        `trans2img 条目 value 应为非空正整数 ID 数组（截图边界链），实际为: ${JSON.stringify(v)}——请按步骤 7 指南修正 7_skeleton.json`,
         1
       );
     }
