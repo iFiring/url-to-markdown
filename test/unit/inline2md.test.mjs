@@ -4,7 +4,7 @@
 // code span 与 math 源照抄不转义（Task 3）。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { inlineRunToMarkdown } from '../../script/lib/inline2md.mjs';
+import { inlineRunToMarkdown, runTextContent } from '../../script/lib/inline2md.mjs';
 
 test('文本转义：活动字符反斜杠转义，普通字符照抄', () => {
   assert.equal(
@@ -69,4 +69,51 @@ test('链接映射：a[href] → [文本](href)；含 ) 或空白的 href 角括
 test('br 硬换行：反斜杠 + 换行；换行后行首中断符仍转义', () => {
   assert.equal(inlineRunToMarkdown('a<br>b'), 'a\\\nb');
   assert.equal(inlineRunToMarkdown('a<br>- b'), 'a\\\n\\- b');
+});
+
+test('code span：内容照抄不转义；含反引号 → 更长围栏 + 空格填充；内部换行折叠为空格', () => {
+  assert.equal(inlineRunToMarkdown('用 <code>const x = 1;</code> 声明'), '用 `const x = 1;` 声明');
+  // 反斜杠是 code span 字面字符——转义即可见损坏（spec §5.3 转义范围排除）
+  assert.equal(inlineRunToMarkdown('<code>C:\\path\\to</code>'), '`C:\\path\\to`');
+  // 内容含单反引号串 → 围栏长度 = 最长串 + 1，两端空格填充（GFM 规则）
+  assert.equal(inlineRunToMarkdown('<code>a ` b</code>'), '`` a ` b ``');
+  assert.equal(inlineRunToMarkdown('<code>``x``</code>'), '``` ``x`` ```');
+  // 内部换行折叠为空格：浏览器行内流空白语义 + 防块中断（换行后 - 会拆列表）
+  assert.equal(inlineRunToMarkdown('<code>a\n- b</code>'), '`a - b`');
+});
+
+test('math：无 display → $源$；display=block → $$源$$；源不转义、换行折叠为空格', () => {
+  assert.equal(
+    inlineRunToMarkdown('公式 <math><annotation encoding="application/x-tex">\\alpha + \\beta</annotation></math> 结束'),
+    '公式 $\\alpha + \\beta$ 结束'
+  );
+  assert.equal(
+    inlineRunToMarkdown('<math display="block"><annotation encoding="application/x-tex">E = mc^2</annotation></math>'),
+    '$$E = mc^2$$'
+  );
+  assert.equal(
+    inlineRunToMarkdown('<math><annotation encoding="application/x-tex">a\nb</annotation></math>'),
+    '$a b$'
+  );
+});
+
+test('行内同族透传：原生 HTML 标签（markdown 无对应语法，透传最保真）；wbr 解包', () => {
+  assert.equal(inlineRunToMarkdown('H<sub>2</sub>O'), 'H<sub>2</sub>O');
+  assert.equal(inlineRunToMarkdown('按 <kbd>Ctrl</kbd> 键'), '按 <kbd>Ctrl</kbd> 键');
+  assert.equal(inlineRunToMarkdown('<mark>高亮</mark>'), '<mark>高亮</mark>');
+  assert.equal(inlineRunToMarkdown('长词<wbr>断点'), '长词断点');
+  // 透传标签内部文本照常转义
+  assert.equal(inlineRunToMarkdown('<var>x_1</var>'), '<var>x\\_1</var>');
+});
+
+test('runTextContent：剥标签取纯文本（转换异常兜底）', () => {
+  assert.equal(runTextContent('<strong>a</strong> b <code>c</code>'), 'a b c');
+});
+
+test('组合端到端：典型 run 片段', () => {
+  const canonical = '这是<strong>关键结论</strong>：见<a href="https://example.com/d">文档</a>，命令为 <code>u2m --run</code>，公式 <math><annotation encoding="application/x-tex">x^2</annotation></math> 成立。';
+  assert.equal(
+    inlineRunToMarkdown(canonical),
+    '这是**关键结论**：见[文档](https://example.com/d)，命令为 `u2m --run`，公式 $x^2$ 成立。'
+  );
 });

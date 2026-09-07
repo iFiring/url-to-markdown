@@ -19,6 +19,16 @@ const ESCAPE_CHARS = new Set(['\\', '`', '*', '_', '[', ']', '<', '$', '~']);
 const LINE_START_ESCAPE = new Set(['#', '>', '-', '+', '=']);
 // 行首有序列表定界：数字串（CommonMark 上限 9 位）+ ./) + 空白或行尾
 const OL_LINE_RE = /^(\d{1,9})([.)])(\s|$)/;
+// 行内同族（u/mark/small/sub/sup/abbr/cite/q/kbd/samp/time/var）：
+// markdown 无对应语法，GFM 允许行内 raw HTML，透传最保真
+const RAW_PASS = new Set(['U', 'MARK', 'SMALL', 'SUB', 'SUP', 'ABBR', 'CITE', 'Q', 'KBD', 'SAMP', 'TIME', 'VAR']);
+
+// 内容最长反引号连续串长度（code span 围栏自适应——与步骤 9 围栏同哲学：
+// 围栏严格长于内容最长串，GFM 不可闭合）
+function longestTickRun(s) {
+  const runs = s.match(/`+/g);
+  return runs ? Math.max(...runs.map((t) => t.length)) : 0;
+}
 
 // 文本节点转义。state.lineStart 跨元素线程：换行/br 置 true，空白保持
 // true（CommonMark 允许 ≤3 前导空格的中断），任何非空白输出置 false。
@@ -67,7 +77,9 @@ function convertNode(node, state) {
   if (node.nodeType === 3) return escapeText(node.textContent, state);
   if (node.nodeType !== 1) return '';
   const inner = () => convertNodes(node.childNodes, state);
-  switch (node.tagName) {
+  // HTML 命名空间 tagName 恒大写；MathML 等外来元素保留书写形态（canonical
+  // 一律小写），统一大写化匹配
+  switch (node.tagName.toUpperCase()) {
     case 'STRONG': case 'B':
       return wrapEmphasis(inner(), '<strong>', '</strong>', '**');
     case 'EM': case 'I':
@@ -86,8 +98,33 @@ function convertNode(node, state) {
       // GFM 硬换行（比两空格尾随式抗工具链剥空白）；换行后行首中断符要转义
       state.lineStart = true;
       return '\\' + '\n';
-    default:
-      return inner();                                // 未知标签解包（Task 3 增补 code/math/同族）
+    case 'CODE': {
+      // code span 内容照抄不转义；内部换行折叠为空格——浏览器对行内流
+      // 空白的处理语义（white-space:normal 折叠），且防换行后 - / 1. 触发
+      // 块中断拆碎 code span
+      const raw = node.textContent.replace(/\r\n?/g, '\n').replace(/\n/g, ' ');
+      if (!raw.includes('`')) return '`' + raw + '`';
+      const fence = '`'.repeat(longestTickRun(raw) + 1);
+      return fence + ' ' + raw + ' ' + fence;
+    }
+    case 'MATH': {
+      // 极简形态（步骤 2 序列化保证 annotation 存在）；源照抄不转义。
+      // 换行折叠为空格：TeX 源中换行 = 空格 token，渲染等价且防 $…$ 内
+      // 换行触发块中断
+      const ann = node.querySelector('annotation');
+      const src = (ann ? ann.textContent : '').trim().replace(/\r\n?/g, '\n').replace(/\n/g, ' ');
+      return node.getAttribute('display') === 'block' ? `$$${src}$$` : `$${src}$`;
+    }
+    default: {
+      // wbr：零宽换行机会无输出，解包；同族透传；未知标签解包（只递归子节点）
+      const tag = node.tagName.toUpperCase();
+      if (tag === 'WBR') return '';
+      if (RAW_PASS.has(tag)) {
+        const lower = node.tagName.toLowerCase();
+        return `<${lower}>${inner()}</${lower}>`;
+      }
+      return inner();
+    }
   }
 }
 
@@ -97,4 +134,10 @@ export function inlineRunToMarkdown(html) {
   const doc = new JSDOM(`<!DOCTYPE html><body>${html}</body>`).window.document;
   const state = { lineStart: true };
   return convertNodes(doc.body.childNodes, state);
+}
+
+// 转换异常兜底（spec §5.4）：退回 jsdom textContent 纯文本。
+export function runTextContent(html) {
+  const doc = new JSDOM(`<!DOCTYPE html><body>${html}</body>`).window.document;
+  return doc.body.textContent || '';
 }
