@@ -1701,3 +1701,29 @@ test('run 序列化：span 样式归一——inline/class 两驱动 + 多信号�
       '多信号固定嵌套 del 最内 → em → strong 最外');
   } finally { cleanup(); }
 });
+
+test('run 折叠：math 有源整段折叠（极简形态）+ display 判定 + 无源阻断', async () => {
+  // 体量门槛（§3.2-5）对 display math 同样生效：.katex-display 独立容器只含
+  // 公式、词数过不了 >12 阈值——块级公式要折进 run，必须处在够长的段落流内
+  // （真实形态：<p>文本 <span class="katex-display">…math…</span> 文本</p>）
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <p data-idx="1">行内公式<math><semantics><mrow><mi>E</mi></mrow><annotation encoding="application/x-tex">E = mc^2</annotation></semantics></math>之后的说明文字继续补足十六个汉字的长度要求。</p>
+  <p data-idx="2">块级公式在段落流内<span class="katex-display"><math><annotation encoding="application/x-tex">\\\\int f(x)dx</annotation></math></span>之后的说明文字继续补足长度要求。</p>
+  <p data-idx="3">无源公式<math><mi>x</mi><mo>+</mo><mi>y</mi></math>之后的说明文字继续补足十六个汉字。</p>
+</body></html>`;
+  const { out, styled, cleanup } = await runClean(snapshot, 'run-math');
+  try {
+    const lt = JSON.parse(fs.readFileSync(out.longText, 'utf8'));
+    const runs = Object.values(lt.runs);
+    assert.equal(runs.length, 2, '有源两段折（行内 math + 段内 katex-display）；无源段阻断');
+    assert.ok(runs.some((r) => r.includes('<math><annotation encoding="application/x-tex">E = mc^2</annotation></math>')),
+      '行内 math 极简形态（semantics/mrow 不入库）');
+    assert.ok(runs.some((r) => r.includes('<math display="block"><annotation encoding="application/x-tex">')),
+      '.katex-display 祖先 → display="block"');
+    // 无源：run 不折——styled 保留 <math> 原树与 <mi> 结构（现状链路，
+    // 步骤 6 才是 math 消费者），散文本折叠照旧
+    assert.ok(styled.includes('<mi>x</mi>'), '无源 math 原树保留');
+  } finally { cleanup(); }
+});
