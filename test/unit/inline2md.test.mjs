@@ -117,3 +117,13 @@ test('组合端到端：典型 run 片段', () => {
     '这是**关键结论**：见[文档](https://example.com/d)，命令为 `u2m --run`，公式 $x^2$ 成立。'
   );
 });
+
+test('空强调元素产出空串（编辑器残留 <strong></strong> 不输出 ****）', () => {
+  assert.equal(inlineRunToMarkdown('前<strong></strong>后'), '前后');
+  assert.equal(inlineRunToMarkdown('<em></em>'), '');
+});
+
+test('href 含不配对括号或角括号：角括号包裹 + < > 百分号转义（CommonMark 链接目标语法）', () => {
+  assert.equal(inlineRunToMarkdown('<a href="https://x.com/a(b">t</a>'), '[t](<https://x.com/a(b>)');
+  assert.equal(inlineRunToMarkdown('<a href="https://x.com/a>b">t</a>'), '[t](<https://x.com/a%3Eb>)');
+});

@@ -344,6 +344,8 @@ function __u2mCleanSnapshot(cfg) {
   // K11 的纯性扰动（K 规则删子树会让 clean 侧容器「变纯」而 styled 不纯）。
   // 检测结果挂元素 expando（__u2mRunHtml/__u2mRunSize，非属性、不序列化），
   // fold walk 按成员资格消费。
+  // run 行内允许集（§3.2-2）＝下方 K9 的 INLINE_TAGS 剔 IMG、加 DEL/VAR/WBR
+  // ——两处手抄同族集合，改任一处须同步检视另一处
   var RUN_INLINE = { A: 1, SPAN: 1, CODE: 1, STRONG: 1, EM: 1, B: 1, I: 1, U: 1, S: 1,
     MARK: 1, SMALL: 1, SUB: 1, SUP: 1, ABBR: 1, CITE: 1, Q: 1, KBD: 1, SAMP: 1, TIME: 1,
     BR: 1, DEL: 1, VAR: 1, WBR: 1 };
@@ -362,16 +364,34 @@ function __u2mCleanSnapshot(cfg) {
   // 子树纯行内（§3.2-2/3）：只约束后代元素（根自身标签不限——p/li/h4-h6/
   // summary/div/span 等流容器均可为 run 根，由极大性覆盖）；math 整棵放行
   // 但取不到 LaTeX 源则阻断（决策 3：无源 math 留 DOM 走现状链路）。
-  // 隐藏只查子树自身（含根，见 runShapeOk）——不查祖先：FAQ [hidden] 块内的
-  // run 要照常折（styled 版编号进恢复清单，步骤 3 标记后可还原）
+  // 隐藏三层语义（§3.2-3，2026-09-07 审阅修订）：run 根自查（runShapeOk）、
+  // 后代元素逐查（含 math 根自身）、祖先不查——FAQ [hidden] 块内的 run 要
+  // 照常折（styled 版编号进恢复清单，步骤 3 标记后可还原）。
+  // 注释节点（nodeType 8）有意放行：不渲染、无语义；序列化侧静默丢弃
   function runInnerOk(node) {
     if (node.nodeType === 3 || node.nodeType === 8) return true;
     if (node.nodeType !== 1) return false;
     var tag = node.tagName.toUpperCase();
     if (tag === 'MATH') {
+      if (runHidden(node)) return false;   // hidden math 同样阻断（隐藏内容不入恢复清单）
       if (typeof __u2mLatexText !== 'function') return false;   // 未注入（单独跑本函数）→ 保守阻断
       var src = __u2mLatexText(node);
       return src !== null && src !== '';
+    }
+    // KaTeX 视觉孪生原子化（§3.3「katex-html 不入库」的兑现机制，2026-09-07
+    // 审阅修订）：span.katex = katex-mathml（clip 隐藏的 math 源，非
+    // display:none）+ katex-html（视觉孪生，可含 svg 伸展符号）。整棵视为一个
+    // math 节点、只判源——否则孪生文本随 run 双份入文（步骤 8 产出
+    // $E=mc^2$*E*=*m**c*2），或孪生内 svg 把整段 run 误阻断（KaTeX 页失去
+    // 折叠收益，spec §1 动机 3 落空）。内部免检纯性/隐藏（clip 非
+    // display:none；svg 是排版符号非图片内容）；无源 → 阻断（同决策 3）
+    if (node.classList && node.classList.contains('katex')) {
+      if (runHidden(node)) return false;
+      if (typeof __u2mLatexText !== 'function') return false;
+      var kmath = node.querySelector('math');
+      if (!kmath) return false;
+      var ksrc = __u2mLatexText(kmath);
+      return ksrc !== null && ksrc !== '';
     }
     if (RUN_INLINE[tag] !== 1) return false;
     if (runHidden(node)) return false;   // 隐藏内容不得随 run 折进恢复清单（styled 趟未剥隐藏）
@@ -408,18 +428,38 @@ function __u2mCleanSnapshot(cfg) {
     }
     return parts.join('');
   }
+  // math 极简形态序列化（与 runInnerOk 的 MATH/katex 判定同源）：只输出
+  // <math display?><annotation>源</annotation></math>，semantics/mrow/孪生
+  // 一律不入库。scopeEl = display 判定作用域（katex 原子分支传 .katex 元素，
+  // 裸 math 传 null → 用 math 自身 closest）
+  function serializeMathAtomic(mathEl, scopeEl) {
+    if (!mathEl) return null;
+    var msrc = typeof __u2mLatexText === 'function' ? __u2mLatexText(mathEl) : null;
+    if (msrc === null || msrc === '') return null;
+    var isBlock = mathEl.getAttribute('display') === 'block'
+      || !!(scopeEl || mathEl).closest('.katex-display');
+    return '<math' + (isBlock ? ' display="block"' : '') + '><annotation encoding="application/x-tex">'
+      + escHtmlText(msrc) + '</annotation></math>';
+  }
   function serializeRunNode(node) {
     if (node.nodeType === 3) return escHtmlText(node.textContent);   // 空白保真不归一
     if (node.nodeType !== 1) return '';
+    // span.katex 原子序列化（runInnerOk 同款判定）：只输出极简 math，
+    // katex-html 视觉孪生不入库——否则步骤 8 源与孪生双份输出
+    if (node.classList && node.classList.contains('katex')) {
+      return serializeMathAtomic(node.querySelector('math'), node);
+    }
     var tag = node.tagName.toUpperCase();
     var kids = function () { return serializeRunChildren(node); };
     switch (tag) {
       case 'A': {
+        var ak = kids();
+        if (ak === null) return null;   // 子树含无源 math（防御——检测已挡，与各分支一致）
         var raw = node.getAttribute('href') || '';
-        if (raw === '' || raw.charAt(0) === '#' || /^javascript:/i.test(raw)) return kids();
+        if (raw === '' || raw.charAt(0) === '#' || /^javascript:/i.test(raw)) return ak;
         var abs;
-        try { abs = new URL(raw, runBaseURI).href; } catch (e) { return kids(); }
-        return '<a href="' + escHtmlText(abs) + '">' + kids() + '</a>';
+        try { abs = new URL(raw, runBaseURI).href; } catch (e) { return ak; }
+        return '<a href="' + escHtmlText(abs) + '">' + ak + '</a>';
       }
       case 'SPAN': {
         var inner = kids();
@@ -435,20 +475,19 @@ function __u2mCleanSnapshot(cfg) {
       case 'STRONG': case 'B': { var s1 = kids(); return s1 === null ? null : '<strong>' + s1 + '</strong>'; }
       case 'EM': case 'I': { var s2 = kids(); return s2 === null ? null : '<em>' + s2 + '</em>'; }
       case 'DEL': case 'S': { var s3 = kids(); return s3 === null ? null : '<del>' + s3 + '</del>'; }
-      case 'MATH': {
-        var msrc = typeof __u2mLatexText === 'function' ? __u2mLatexText(node) : null;
-        if (msrc === null || msrc === '') return null;
-        var isBlock = node.getAttribute('display') === 'block' || !!node.closest('.katex-display');
-        return '<math' + (isBlock ? ' display="block"' : '') + '><annotation encoding="application/x-tex">'
-          + escHtmlText(msrc) + '</annotation></math>';
-      }
+      case 'MATH':
+        return serializeMathAtomic(node, null);
       default: {
         // code/br + 行内同族（u/mark/small/sub/sup/abbr/cite/q/kbd/samp/time/
         // var/wbr）：保原名、属性剥净；wbr 零宽信号在步骤 8 解包
         if (RUN_INLINE[tag] !== 1) return kids();   // 防御：允许集外透明（检测已挡）
+        var lower = node.tagName.toLowerCase();
+        // void 元素不带闭合标签：HTML5 解析规则把 `</br>` 当 `<br>` 起始标签
+        // 重建——步骤 8 jsdom 回读 `<br></br>` 得到两个 br，一个换行渲染成
+        // 两个（地址/签名/诗歌类高频形态）
+        if (tag === 'BR' || tag === 'WBR') return '<' + lower + '>';
         var s4 = kids();
         if (s4 === null) return null;
-        var lower = node.tagName.toLowerCase();
         return '<' + lower + '>' + s4 + '</' + lower + '>';
       }
     }
@@ -743,13 +782,17 @@ function __u2mCleanSnapshot(cfg) {
     }
   }
 
-  // 行内标签集（K9 用）：判行间空白是否敏感
+  // 行内标签集（K9 用）：判行间空白是否敏感——与共享段 run 检测的
+  // RUN_INLINE 是同族集合（RUN_INLINE = 本集剔 IMG、加 DEL/VAR/WBR），
+  // 改任一处须同步检视另一处
   var INLINE_TAGS = { A: 1, SPAN: 1, CODE: 1, STRONG: 1, EM: 1, B: 1, I: 1, U: 1, S: 1,
     MARK: 1, SMALL: 1, SUB: 1, SUP: 1, ABBR: 1, CITE: 1, Q: 1, KBD: 1, SAMP: 1, TIME: 1, IMG: 1, BR: 1 };
 
-  // （K8 行内 run token 化已废除——2026-08-31：run 整段折叠吞噬行内结构
-  //   （a/code 混排），步骤 3 看不到行内骨架；长文本占位已在两趟共享段
-  //   按文本节点执行，行内结构保真）
+  // （K8 行内 run token 化 2026-08-31 曾废除；2026-09-06 spec 重设计后
+  //   「极大纯行内 run 整段折叠」已在两趟共享段末尾检测、趟分支内执行——
+  //   canonical HTML 入 runs 段、步骤 8 inline2md 确定性还原行内结构，
+  //   旧废除理由（步骤 3 看不到行内骨架、行内结构保真依赖 LLM）随之作废，
+  //   见 docs/superpowers/specs/2026-09-06-long-text-inline-run-design.md）
 
   // K9. 保守空白压缩（仅清洗版）：删纯空白文本节点，当且仅当
   //     前后兄弟都不是行内文本敏感节点（非空白文本或行内元素）——行内相邻

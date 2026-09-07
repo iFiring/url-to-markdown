@@ -6,6 +6,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { runScript } from '../helpers/run-script.mjs';
 import { urlToDirName } from '../../script/lib/env.mjs';
+import { inlineRunToMarkdown } from '../../script/lib/inline2md.mjs';
 
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
 const scriptPath = path.resolve(thisDir, '../../script/lib/page-clean-snapshot.js');
@@ -1762,5 +1763,82 @@ test('run 孪生守卫：hidden 祖先 / K10 拆包 / K11 吞没——clean LT �
     const cs = suf(cleaned), ss = suf(styled);
     assert.ok(cs.every((v) => ss.includes(v)), `clean LT 后缀 ⊆ styled: clean=${cs} styled=${ss}`);
     assert.ok(out.longTextCount.runs >= 1 && out.longTextCount.total >= out.longTextCount.runs);
+  } finally { cleanup(); }
+});
+
+test('run 折叠：KaTeX 视觉孪生原子化——canonical 只入极简 math，孪生（含 svg）不入库', async () => {
+  // spec §3.3「katex-html 视觉孪生不入库」的机制钉住（2026-09-07 审阅修订）：
+  // span.katex = katex-mathml（clip 隐藏的 math 源，非 display:none）+
+  // katex-html（视觉孪生，可含 svg 伸展符号）。原子化处理：整棵视为一个
+  // math 节点、只在内部判源——否则孪生文本随 run 双份入文（$E=mc^2$ 后又
+  // 跟 *E*=*m**c*2），或孪生内 svg 把整段 run 误阻断（KaTeX 页失去折叠收益）。
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title>
+<style>
+.katex-mathml{position:absolute;clip-path:inset(50%);height:1px;overflow:hidden;width:1px}
+.katex .mathnormal{font-style:italic}
+.katex .mathbf{font-weight:700}
+</style></head>
+<body>
+  <h1 data-idx="1">标题</h1>
+  <p data-idx="2">质能方程 <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>E</mi><mo>=</mo><mi>m</mi><msup><mi>c</mi><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">E=mc^2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.683em;"></span><span class="mord mathnormal">E</span><span class="mrel">=</span><span class="mord mathnormal">m</span><span class="mord mathbf">c</span><svg width="0.26em" height="1.2em"><path d="M1 0v628H0V0h1z"/></svg></span></span></span> 之后的说明文字继续补足十六个汉字的长度要求哦。</p>
+  <p data-idx="3">块级公式在段落流内<span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>∫</mo><mi>f</mi><mi>x</mi><mi>d</mi><mi>x</mi></mrow><annotation encoding="application/x-tex">\\int f(x)dx</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="mord mathnormal">∫fxdx</span></span></span></span></span>之后的说明文字继续补足十六个汉字的长度要求哦。</p>
+</body></html>`;
+  const { out, styled, cleanup } = await runClean(snapshot, 'run-katex');
+  try {
+    const lt = JSON.parse(fs.readFileSync(out.longText, 'utf8'));
+    assert.equal(Object.keys(lt.runs).length, 2,
+      '两段都折：孪生内 svg 不再阻断（原子化免检孪生内部）');
+    assert.equal(lt.runs['1'],
+      '质能方程 <math><annotation encoding="application/x-tex">E=mc^2</annotation></math> 之后的说明文字继续补足十六个汉字的长度要求哦。',
+      'canonical 只含极简 math：孪生 span（mathnormal 斜体→em、mathbf→strong 污染）与 svg 不入库');
+    assert.ok(lt.runs['2'].includes('<math display="block"><annotation encoding="application/x-tex">\\int f(x)dx</annotation></math>'),
+      'katex-display 祖先 → display="block" 极简形态');
+    assert.ok(!/katex-html|strut|mord|<svg/.test(Object.values(lt.runs).join('')),
+      'runs 段无任何孪生痕迹');
+    assert.match(styled, /<p data-idx="2">\{\{LONG_TEXT_1\|\d+_chars\}\}<\/p>/,
+      'styled：整段占位（壳保留 data-idx）');
+    // 往返钉住：步骤 8 转换器对 canonical 产出单份 $…$，无孪生重复
+    const md = inlineRunToMarkdown(lt.runs['1']);
+    assert.equal(md, '质能方程 $E=mc^2$ 之后的说明文字继续补足十六个汉字的长度要求哦。');
+  } finally { cleanup(); }
+});
+
+test('run 序列化：void 元素 br/wbr 不带闭合标签——浏览器→jsdom 往返不产生双硬换行', async () => {
+  // HTML5 解析规则把 `</br>` 当 `<br>` 起始标签重建：canonical 若序列化为
+  // `<br></br>`，步骤 8 jsdom 回读得到两个 br → 每个换行渲染成两个（地址/
+  // 签名/诗歌类高频形态）。void 元素必须输出无闭合标签形态。
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <p data-idx="1">收件人：张三<br>地址：某省某市某区某街道某某号一百二十三室<br>邮编：100000<wbr>电话：010-12345678，请补足长度。</p>
+</body></html>`;
+  const { out, cleanup } = await runClean(snapshot, 'run-br-void');
+  try {
+    const lt = JSON.parse(fs.readFileSync(out.longText, 'utf8'));
+    const run = Object.values(lt.runs)[0];
+    assert.ok(run, 'run 已折叠');
+    assert.ok(run.includes('<br>'), 'canonical 含 br');
+    assert.ok(!run.includes('</br>'), 'br 不带闭合标签（jsdom 把 <br></br> 解析为两个 br）');
+    assert.ok(!run.includes('</wbr>'), 'wbr 同为 void，不带闭合标签');
+    // 往返钉住：两个 br → 恰好两个硬换行（`\` + 换行），不翻倍
+    const md = inlineRunToMarkdown(run);
+    assert.equal((md.match(/\\\n/g) || []).length, 2, '双 br 往返后仍是两个硬换行');
+  } finally { cleanup(); }
+});
+
+test('run 阻断：带 [hidden] 的 math 不随 run 入库（§3.2-3 隐藏三层语义含 math 根自身）', async () => {
+  // 隐藏内容不得折进恢复清单——math 根自身 [hidden]/display:none 同样阻断
+  // （KaTeX 孪生场景走原子化分支、其内部 mathml 的 clip 隐藏不受影响）。
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <p data-idx="1">说明文字开头<math hidden><annotation encoding="application/x-tex">x^2</annotation></math>之后的说明文字继续补足十六个汉字的长度要求哦。</p>
+</body></html>`;
+  const { out, styled, cleanup } = await runClean(snapshot, 'run-math-hidden');
+  try {
+    const lt = JSON.parse(fs.readFileSync(out.longText, 'utf8'));
+    assert.deepEqual(Object.keys(lt.runs), [], '含 hidden math 的 run 阻断不折');
+    assert.ok(styled.includes('<math'), 'math 原树留在 styled DOM 走现状链路');
   } finally { cleanup(); }
 });

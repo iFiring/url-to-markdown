@@ -67,8 +67,10 @@ function convertNodes(nodes, state) {
 
 // 强调边界退化（spec §5.4）：内容首/尾为空白或 */_ 时 GFM 强调不闭合，
 // 退化为原生 HTML 标签透传，保真优先。md 形态仅在边界合法时使用。
+// 空内容（编辑器残留 <strong></strong>）输出空串——`****` 是噪音
 const EMPH_DEGENERATE = /^[\s*_]|[\s*_]$/;
 function wrapEmphasis(content, openHtml, closeHtml, md) {
+  if (!content) return '';
   if (EMPH_DEGENERATE.test(content)) return openHtml + content + closeHtml;
   return md + content + md;
 }
@@ -90,8 +92,12 @@ function convertNode(node, state) {
       const href = node.getAttribute('href') || '';
       const text = inner();
       if (!href) return text;                       // canonical 已解包；防御
-      // href 含 ) / 空白时角括号包裹（CommonMark 链接目标语法），防截断
-      const dest = /[)\s]/.test(href) ? `<${href}>` : href;
+      // href 含括号（配对与否一律处理）/ 空白 / 角括号时角括号包裹
+      // （CommonMark 链接目标语法），防截断；< > 在 <…> 形态内不合法，
+      // 百分号转义（罕见 URL 形态，语义等价）
+      const dest = /[()\s<>]/.test(href)
+        ? `<${href.replace(/</g, '%3C').replace(/>/g, '%3E')}>`
+        : href;
       return `[${text}](${dest})`;
     }
     case 'BR':
