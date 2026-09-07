@@ -1,7 +1,8 @@
 # 长文本行内 run 整段折叠 + 步骤 8 确定性 Markdown 还原设计
 
 - 日期：2026-09-06
-- 状态：已与用户确认设计（分节呈现逐节批准）
+- 状态：已与用户确认设计（分节呈现逐节批准）；2026-09-07 自审修订：
+  转义范围排除 code/math、行首中断符转义、span 多信号固定嵌套顺序
 - 前例：`docs/superpowers/specs/2026-09-02-table-placeholder-design.md`、
   `docs/superpowers/specs/2026-09-02-code-block-placeholder-design.md`——本设计
   延续「浏览器侧结构化收集 + Node 侧序列化」的既有分工
@@ -96,7 +97,7 @@ clean⊆styled 破坏。共享段决策后，两趟折叠集来自同一 DOM 快
 |---|---|
 | 文本节点 | HTML 转义（`&<>`）照抄；空白保真不归一（文本与元素间的空格是内容） |
 | `a[href]` | 只留 `href`，以 `document.baseURI` 绝对化（快照已注入 `<base>`）；`#`/`javascript:`/空 href → 解包丢弃 |
-| span（按 `getComputedStyle`） | `font-weight≥600/bold` → `<strong>`；`font-style:italic` → `<em>`；`text-decoration:line-through` → `<del>`；多信号叠加则嵌套；无信号 → 透明丢弃（只递归子节点） |
+| span（按 `getComputedStyle`） | `font-weight≥600/bold` → `<strong>`；`font-style:italic` → `<em>`；`text-decoration:line-through` → `<del>`；多信号叠加按固定顺序 strong→em→del 嵌套（确定性输出，两趟/测试 golden 稳定）；无信号 → 透明丢弃（只递归子节点） |
 | `strong/b` → `<strong>`；`em/i` → `<em>`；`del/s` → `<del>` | 语义归一 |
 | `math` | 先经 `__u2mLatexText` 取源：无源 → 阻断该 run（见 3.2-3）；有源 → 极简形态 `<math display="block"?><annotation encoding="application/x-tex">源码</annotation></math>`（katex-html 视觉孪生**不入库**；display 判定 = `display="block"` 属性或 `closest('.katex-display')` 非空） |
 | `code`/`br` 及行内同族（u/mark/small/sub/sup/abbr/cite/q/kbd/samp/time/var/wbr） | 保原名，属性剥净 |
@@ -178,6 +179,16 @@ span 样式归一是本设计保真的关键：步骤 5 之前「样式驱动而
 ### 5.3 转义策略（用户已确认）
 
 文本节点对 `` \ ` * _ [ ] < $ ~ `` 一律反斜杠转义；`!` 仅在后随 `[` 时转义。
+
+- **转义范围排除 code/math**：code span 内部文本与 math 源码**照抄不转义**——
+  code span 内反斜杠/`$` 是字面字符（`C:\path` 转义成 `` `C:\\path` `` 可见损坏），
+  math 源码 `\alpha` 同理不可翻倍；包含性由 code 反引号自适应（§5.2）与 math
+  `$` 定界配对保证。
+- **行首中断符转义**：处于输出行首的字符（run 值开头、文本节点 `\n` 之后、br
+  硬换行之后）为 `#`/`>`/`-`/`+`/`=` 时直接转义，「数字 + `.`/`)` + 空白」时
+  转义该定界符——防源码换行后随文本被解析为列表/setext 标题/引用/ATX 标题
+  （§5.4 软折叠不覆盖这些块级中断构造）。
+
 GFM 转义渲染透明。确定性通道内容千奇百怪（价格 `$`、代码名 `*`、阵列 `[i]`），
 转义是廉价正确性；与 LLM 手写值（现状不转义）不一致是可接受代价——折叠 run
 本就走确定性通道。
@@ -212,9 +223,9 @@ code 条目对象，与本设计无交集。
 
 ## 7. 测试策略
 
-- **单测**（`node --test`，无浏览器）：`inline2md` 逐元素映射、嵌套组合、转义、
-  code 反引号自适应、math `$$`/`$`、br 硬换行、未知标签解包、强调边界退化、
-  a 无 href 解包；两段 schema 读写。
+- **单测**（`node --test`，无浏览器）：`inline2md` 逐元素映射、嵌套组合、转义
+  （含 code/math 排除、行首中断符）、code 反引号自适应、math `$$`/`$`、br 硬换行、
+  未知标签解包、强调边界退化、a 无 href 解包；两段 schema 读写。
 - **集成**（真 chromium + 夹具）：夹具页覆盖——长段落混排 strong/em/code/a/br/
   KaTeX math（annotation）、span 样式驱动加粗归一（inline style 与 class 两种
   驱动）、无源 math 阻断折叠、表格/pre 内不 run 折叠、混合容器散文本照旧折叠、
@@ -241,6 +252,7 @@ code 条目对象，与本设计无交集。
 - **JSON 体积**：runs 段 HTML 比 texts 段大——属性已剥净、仅语义标签，实测
   在夹具与冒烟页观察；失控则收紧序列化（同族标签映射到更短形态）。
 - **空白保真**：p 内源码缩进/换行原样保留，markdown 渲染按软换行折叠为空格
-  ——与浏览器对行内流空白的处理一致，可接受。
+  ——与浏览器对行内流空白的处理一致，可接受；行首中断构造已由 §5.3 转义中和，
+  源码换行不会改变块结构。
 - **computed style 成本**：span 归一仅对检测通过的 run 内元素执行
   （候选先过纯性判定），量级受 run 数量约束。
