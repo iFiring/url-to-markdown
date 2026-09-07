@@ -17,7 +17,8 @@
 - 共享页面脚本约定：`script/lib/page-*.js` 是普通非模块文件、恰好一个具名 `function __u2mXxx(...)`；Node 侧以**文本**读入注入：`page.evaluate(`(${src})(${JSON.stringify(cfg)})`)`
 - lib/ 阶段模块**不 emit**——抛异常（`err.reason`）或返回值，由 snapshot.mjs 统一 emit
 - 浏览器/viewer 一律在最终 emit **之前**关闭
-- 重定向门常量（spec §4）：`MIN_FRAME_TEXT=500`、`TEXT_RATIO=3`、`MIN_BOX=200`、`MAX_HOPS=2`、`DEGENERATE_RATIO=0.5`
+- 重定向门常量（spec §4）：`MIN_FRAME_TEXT=500`、`TEXT_RATIO=3`、`MIN_BOX=200`、`DEGENERATE_RATIO=0.5`
+- **iframe 判定只执行一次**（用户裁决）：仅对入口原页面判定，跳转后的目标页不再重判
 - 正文测量统一口径（唯一副本在 snapshot-redirect.mjs）：`innerText.replace(/\s+/g,' ').trim().length`
 - 测试隔离：一律用 `U2M_WORKING_ROOT` 指向 mkdtemp 临时目录；真实 URL 冒烟只在 Task 8
 
@@ -367,7 +368,6 @@ import { readSharedScript } from './placeholder.mjs';
 const MIN_FRAME_TEXT = 500;
 const TEXT_RATIO = 3;
 const MIN_BOX = 200;
-export const MAX_HOPS = 2;
 export const DEGENERATE_RATIO = 0.5;
 
 const measureTextLen = async (target) => target.evaluate(() => {
@@ -562,36 +562,29 @@ import { gotoSettled } from './browser.mjs';
 
 ```js
 /**
- * 重定向门编排：检测 → 命中则跳转目标页（snapshotLogin 内含 gotoSettled +
- * 登录检测复跑，跨域登录墙时 viewer 开在内容页）→ 退化守卫 → 重新滚动。
- * 嵌套占优 iframe 递归，总跳数上限 MAX_HOPS。
- * @returns {Promise<{redirected: boolean, to: string | null}>} to = 最终目标 URL
+ * 重定向门编排：检测（仅一次，只判入口原页面）→ 命中则跳转目标页
+ * （snapshotLogin 内含 gotoSettled + 登录检测复跑，跨域登录墙时 viewer
+ * 开在内容页）→ 退化守卫 → 重新滚动。目标页不再重判（用户裁决）。
+ * @returns {Promise<{redirected: boolean, to: string | null}>} to = 目标 URL
  */
 export async function runRedirectGate(page, url, opts = {}) {
   const { timeout, storageStatePath: ssPath, scrollRounds, log = () => {} } = opts;
-  let redirected = null;
-  let currentUrl = url;
-  for (let hop = 0; hop < MAX_HOPS; hop++) {
-    const detect = await snapshotRedirectDetect(page, { log });
-    if (!detect.redirect) break;
-    const prevUrl = currentUrl;
+  const detect = await snapshotRedirectDetect(page, { log });
+  if (!detect.redirect) return { redirected: false, to: null };
 
-    await snapshotLogin(page, detect.redirect.url, { timeout, storageStatePath: ssPath, log });
+  await snapshotLogin(page, detect.redirect.url, { timeout, storageStatePath: ssPath, log });
 
-    // 退化守卫：目标页独立打开渲染不出内容（如 window.top 检测站）→ 回上一页走现状路径
-    const targetText = await measureTextLen(page);
-    if (targetText < DEGENERATE_RATIO * detect.redirect.frameText) {
-      log(`重定向目标正文退化（${targetText} < ${Math.round(DEGENERATE_RATIO * detect.redirect.frameText)}），回退 ${prevUrl}`);
-      await gotoSettled(page, prevUrl, log);
-      await snapshotScroll(page, { scrollRounds, log });
-      break; // redirected 保持上一次成功跳转（首跳退化则为 null）
-    }
-
-    redirected = detect.redirect;
-    currentUrl = detect.redirect.url;
+  // 退化守卫：目标页独立打开渲染不出内容（如 window.top 检测站）→ 回原页走现状路径
+  const targetText = await measureTextLen(page);
+  if (targetText < DEGENERATE_RATIO * detect.redirect.frameText) {
+    log(`重定向目标正文退化（${targetText} < ${Math.round(DEGENERATE_RATIO * detect.redirect.frameText)}），回退 ${url}`);
+    await gotoSettled(page, url, log);
     await snapshotScroll(page, { scrollRounds, log });
+    return { redirected: false, to: null };
   }
-  return { redirected: !!redirected, to: redirected ? redirected.url : null };
+
+  await snapshotScroll(page, { scrollRounds, log });
+  return { redirected: true, to: detect.redirect.url };
 }
 ```
 
@@ -684,7 +677,7 @@ git commit -m "feat(snapshot): 重定向门接线——跳转/登录复跑/退�
 
 ---
 
-### Task 4: 退化守卫与嵌套上限（独立打开退化回退 + 两跳嵌套 + 跨域全管线）
+### Task 4: 退化守卫与单次判定（独立打开退化回退 + 目标页不重判 + 跨域全管线）
 
 **Files:**
 - Create: `test/fixtures/redirect-degenerate.html`、`test/fixtures/redirect-content-outer.html`
@@ -692,7 +685,7 @@ git commit -m "feat(snapshot): 重定向门接线——跳转/登录复跑/退�
 
 **Interfaces:**
 - Consumes: Task 3 的 snapshot.mjs 全管线行为（不直接调模块）
-- Produces: 无新接口——行为覆盖：退化回退（redirect:null + 原名目录 + 无 marker）、嵌套两跳（to = 最内层）、跨域全管线
+- Produces: 无新接口——行为覆盖：退化回退（redirect:null + 原名目录 + 无 marker）、单次判定（目标页自身的占优 iframe 不二次跳转）、跨域全管线
 
 - [ ] **Step 1: 建夹具**
 
@@ -715,7 +708,7 @@ git commit -m "feat(snapshot): 重定向门接线——跳转/登录复跑/退�
 </html>
 ```
 
-`test/fixtures/redirect-content-outer.html`（外层内容页：自身 ~630 字符过 hop1 门槛，又嵌 redirect-content.html ~2300 字符过 hop2 的 3× 比例）：
+`test/fixtures/redirect-content-outer.html`（外层内容页：自身 ~630 字符过跳转门槛，且自身嵌 ~2300 字符的 redirect-content.html——用于验证**单次判定**：跳转到它之后不再二次跳转）：
 
 ```html
 <!doctype html>
@@ -774,14 +767,14 @@ test('退化守卫：目标页顶层打开渲染空 → 回退原页现状路径
   assert.ok(!fs.existsSync(path.join(tmpRoot, redirectedDirName(url), 'redirect_to.yaml')));
 });
 
-test('嵌套两跳：壳 → 外层 → 内容，to = 最内层', async () => {
+test('单次判定：跳转后目标页自身的占优 iframe 不触发二次跳转', async () => {
   const url = `${serverA.url}/redirect-shell-dyn.html?to=/redirect-content-outer.html`;
   const r = await runSnapshot(url);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);
-  assert.equal(out.redirect.to, `${serverA.url}/redirect-content.html`, '两跳后应停在最内层');
+  assert.equal(out.redirect.to, `${serverA.url}/redirect-content-outer.html`, '只跳一跳，停在外层');
   const html = fs.readFileSync(path.join(tmpRoot, redirectedDirName(url), '1_snapshot.html'), 'utf8');
-  assert.ok(html.includes('内容页主标题'), '快照应是最内层内容页');
+  assert.ok(html.includes('外层内容页标题'), '快照为外层页');
 });
 
 test('跨域全管线：壳(A) → 内容(B)', async () => {
@@ -797,13 +790,13 @@ test('跨域全管线：壳(A) → 内容(B)', async () => {
 - [ ] **Step 3: 跑测试确认通过（Task 3 已实现守卫与循环——本任务是行为锁定；若失败按失败信息修 snapshot-redirect.mjs）**
 
 Run: `node --test test/integration/redirect-edge.test.mjs`
-Expected: 3 个测试全 PASS。若退化守卫测试失败，优先检查：检测时 frame 内 innerText 是否 ≥500（嵌入态）、回退后 `gotoSettled(prevUrl)` 是否被快照阶段前的 vlist 检测误杀
+Expected: 3 个测试全 PASS。若退化守卫测试失败，优先检查：检测时 frame 内 innerText 是否 ≥500（嵌入态）、回退后 `gotoSettled(url)` 是否被快照阶段前的 vlist 检测误杀
 
 - [ ] **Step 4: Commit**
 
 ```bash
 git add test/fixtures/redirect-degenerate.html test/fixtures/redirect-content-outer.html test/integration/redirect-edge.test.mjs
-git commit -m "test(redirect): 退化守卫回退 + 嵌套两跳 + 跨域全管线行为锁定"
+git commit -m "test(redirect): 退化守卫回退 + 单次判定 + 跨域全管线行为锁定"
 ```
 
 ---
@@ -976,7 +969,7 @@ bash <skill-root>/script/init.sh
 - [ ] **Step 2: CLAUDE.md**
 
 1. 「常用命令」块首行 `bash script/init.sh --url <url>` 改为 `bash script/init.sh`
-2. 「本仓库是什么」段不变；「管线顺序」步骤 0 描述改为「`init.sh` 纯环境自检（node/pnpm/chromium/字体，修复逻辑不变），不再输出核心参数」；步骤 1 描述在「登录检测 → 渐进滚动」后插入「→ **重定向门**（`snapshot-redirect.mjs`：占优内容 iframe 检测——共享 `page-detect-iframe.js` 判定规则（可导航 http(s)/可见 ≥200px/正文 ≥500 且 ≥3× 主文档，多帧取最长，嵌套 ≤2 跳）；命中则 `snapshotLogin` 跳转目标页（登录检测复跑，跨域登录墙 viewer 开在内容页）+ 退化守卫（目标页正文 <50% 回退原页）+ 重新滚动；快照成功后写 `redirected_<原名>/redirect_to.yaml` marker，未命中清 stale）」
+2. 「本仓库是什么」段不变；「管线顺序」步骤 0 描述改为「`init.sh` 纯环境自检（node/pnpm/chromium/字体，修复逻辑不变），不再输出核心参数」；步骤 1 描述在「登录检测 → 渐进滚动」后插入「→ **重定向门**（`snapshot-redirect.mjs`：占优内容 iframe 检测——共享 `page-detect-iframe.js` 判定规则（可导航 http(s)/可见 ≥200px/正文 ≥500 且 ≥3× 主文档，多帧取最长，**单次判定**：只判入口原页面、目标页不重判）；命中则 `snapshotLogin` 跳转目标页（登录检测复跑，跨域登录墙 viewer 开在内容页）+ 退化守卫（目标页正文 <50% 回退原页）+ 重新滚动；快照成功后写 `redirected_<原名>/redirect_to.yaml` marker，未命中清 stale）」
 3. 「工作目录」段补：「占优内容 iframe 页面（步骤 1 重定向门判定）的专属目录为 `redirected_<原名>`，目录内 `redirect_to.yaml`（内容 `to: <目标URL>`）是定位 marker——`urlDir()` 一次 existsSync 间接，步骤 2-9 无感知」
 4. 「snapshot.mjs 单入口 + lib/ 模块」段把「四个 lib 模块」改为「五个阶段模块」（+snapshot-redirect.mjs）
 
@@ -1039,6 +1032,6 @@ Expected: exit 0；stdout `redirect.to` = `https://mmh1.top/article/skill.html`�
 
 ## Self-Review 记录
 
-- **Spec 覆盖**：§3 时序→Task 3；§4 判定规则→Task 2（常量/跨域/多帧/嵌套上限）；§5 命名与 marker→Task 1+3（写入/删除时机、陈旧语义）；§6 契约→Task 3（emit）+Task 5（init）+Task 6（文档，含 CLAUDE.md/README）；§7 回退→Task 3（vlist 失败不写 marker）+Task 4（退化/嵌套/跨域登录墙复跑逻辑在 runRedirectGate）；§8 测试→Task 1-5 各测试 + Task 7 冒烟。无缺口
+- **Spec 覆盖**：§3 时序→Task 3；§4 判定规则→Task 2（常量/跨域/多帧/单次判定）；§5 命名与 marker→Task 1+3（写入/删除时机、陈旧语义）；§6 契约→Task 3（emit）+Task 5（init）+Task 6（文档，含 CLAUDE.md/README）；§7 回退→Task 3（vlist 失败不写 marker）+Task 4（退化/单次判定/跨域登录墙复跑逻辑在 runRedirectGate）；§8 测试→Task 1-5 各测试 + Task 7 冒烟。无缺口
 - **占位符**：无 TBD/TODO；所有代码块完整可落盘
 - **类型一致性**：`snapshotRedirectDetect` 返回 `{redirect:{url,frameText}|null, mainText}`（Task 2 定义、Task 3 的 runRedirectGate 消费一致）；`runRedirectGate` 返回 `{redirected, to}`（Task 3 定义、emit 使用一致）；`ensureUrlDirs(url, dirName)`（Task 1 定义、Task 3 调用一致）；marker 路径/内容格式两个任务一致（`to: <url>\n`）

@@ -41,18 +41,18 @@
 登录阶段（原页面；七信号本就扫全部 frames）
   → 滚动阶段（原页面。壳页高度快速稳定，成本极低；滚动后才检测，
      可捕获「滚动才插入的 iframe」，且此刻 frame 内容已加载充分）
-  → 【新】重定向检测门（lib/snapshot-redirect.mjs）：
+  → 【新】重定向检测门（lib/snapshot-redirect.mjs）——iframe 判定只此一次：
       未命中 → 虚拟列表检测 → 快照（现状不变，零行为差异）
       命中 → goto(frame URL)
-             → 登录检测复跑（同源通常 no-op；跨域登录墙时 viewer 开在
+             → 新页面登录判定（同源通常 no-op；跨域登录墙时 viewer 开在
                内容页——正确的 origin，storageState 照常积累）
              → 滚动阶段（这次滚的是真实内容页，参数复用）
-             → （若目标页自身又嵌占优 iframe：递归，深度上限 2 跳）
              → 虚拟列表检测 → 快照
 ```
 
 要点：
 
+- **iframe 判定只执行一次**——仅对入口原页面判定，跳转后的目标页不再重判（用户裁决 2026-09-07）
 - 虚拟列表检测**永远跑在最终目标页上**——虚拟列表若存在，恰恰会在内容页里；命中则现有 `virtual_list` 错误语义不变（exit 1、不写快照）
 - 跨域 frame 的 cookie 由 context 级 cookie jar 天然携带（壳页加载 iframe 时已收到 frame 域的 cookie）
 - 检测逻辑放新共享模块 `lib/snapshot-redirect.mjs`，导出判定函数；snapshot.mjs 只编排——沿用「模块不 emit、抛异常或返回值」的既有架构
@@ -69,11 +69,11 @@
 
 - **不限同源**——跨域 frame 同样是候选（理由见 §2 跨域说明）
 - 多候选取正文最长者
-- 嵌套重定向（目标页自身又嵌占优 iframe）递归处理，**总深度上限 2 跳**防环
+- **单次判定**——只对入口原页面判定，目标页不再重判。目标页自身若再嵌占优 iframe，回落现状：同源 frame 走 `page-prepare.js` 既有合并门槛、跨域 frame 保留 iframe 元素
 
 mmh1 对照：主 83 / frame 10736（比值 129×）、1280×2944 可见、http(s) 可导航——四条全过。
 
-常量集中在 `lib/snapshot-redirect.mjs` 顶部：`MIN_FRAME_TEXT=500`、`TEXT_RATIO=3`、`MIN_BOX=200`、`MAX_HOPS=2`、`DEGENERATE_RATIO=0.5`。
+常量集中在 `lib/snapshot-redirect.mjs` 顶部：`MIN_FRAME_TEXT=500`、`TEXT_RATIO=3`、`MIN_BOX=200`、`DEGENERATE_RATIO=0.5`。
 
 ## 5. 目录命名与指针
 
@@ -137,6 +137,7 @@ redirected_<原名>
 - **正向**：壳页 + 同源内容 iframe → 断言 `redirected_` 目录产出 `1_snapshot.html` 为内容页（无 iframe 元素）、emit 四字段齐、marker 存在且步骤 2（`clean_snapshot.mjs --url 原URL`）在 redirected 目录找到产物
 - **跨域**：双端口夹具，内容 iframe 指向另一端口 → 重定向生效
 - **反例三连**：主文档内容充足 + 小 iframe（不重定向，行为与现状一致）；srcdoc iframe（走现有合并路径，现状断言不变）；退化守卫（内容页顶层打开渲染空 → 回退原路径、无 marker）
+- **单次判定回归**：跳转目标页自身再嵌占优 iframe 不二次跳转（快照为第一跳目标页、`redirect.to` 为第一跳 URL）
 - **init 更新**：三字段断言删除、不再创建工作目录、传 `--url` 报 usage_error(2)
 - **回归**：现有全部测试保持绿——普通页面（无占优 iframe）全管线零行为变化
 
