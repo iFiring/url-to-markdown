@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>虚拟列表内容页</title></head>
+<body>
+<div id="list"></div>
+<script>
+  const items = Array.from({ length: 500 }, (_, i) => `VLIST 条目 ${String(i).padStart(3, '0')} ` + '窗口化内容句。'.repeat(4));
+  const list = document.getElementById('list');
+  document.body.style.height = (items.length * 50) + 'px';
+  const render = () => {
+    const top = Math.max(0, Math.floor(scrollY / 50) - 5);
+    list.innerHTML = items.slice(top, top + 30).map((t) => `<p>${t}</p>`).join('');
+  };
+  addEventListener('scroll', render);
+  render();
+</script>
+</body>
+</html>
