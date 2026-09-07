@@ -2,7 +2,9 @@
 
 - 日期：2026-09-06
 - 状态：已与用户确认设计（分节呈现逐节批准）；2026-09-07 自审修订：
-  转义范围排除 code/math、行首中断符转义、span 多信号固定嵌套顺序
+  转义范围排除 code/math、行首中断符转义、span 多信号固定嵌套顺序；
+  2026-09-07 实现后审阅修订（§10）：KaTeX 孪生原子化机制、hidden 三层
+  语义、void 元素序列化形态
 - 前例：`docs/superpowers/specs/2026-09-02-table-placeholder-design.md`、
   `docs/superpowers/specs/2026-09-02-code-block-placeholder-design.md`——本设计
   延续「浏览器侧结构化收集 + Node 侧序列化」的既有分工
@@ -256,3 +258,36 @@ code 条目对象，与本设计无交集。
   源码换行不会改变块结构。
 - **computed style 成本**：span 归一仅对检测通过的 run 内元素执行
   （候选先过纯性判定），量级受 run 数量约束。
+
+## 10. 2026-09-07 实现后审阅修订
+
+实现落地后对照审查（真 KaTeX 形态夹具 + 浏览器→jsdom 往返实测）发现三处
+spec 缺口，修订如下——均已实现并有钉住测试：
+
+1. **KaTeX 视觉孪生原子化（§3.3「katex-html 不入库」的兑现机制）**。原 spec
+   只有承诺没有机制：真实 KaTeX 的 `span.katex` = `.katex-mathml`（clip 隐藏
+   的 math 源，**非 display:none**，不触发 §3.2-3 阻断）+ `.katex-html`（视觉
+   孪生，span+text 纯行内、可含 svg 伸展符号）。按 §3.2 字面判定会两种失败：
+   孪生无 svg 时整棵通过纯性 → 孪生文本随 run 双份入文（步骤 8 产出
+   `$E=mc^2$*E*=*m**c*2`，公式重复污染）；孪生含 svg 时整段 run 误阻断
+   （KaTeX 页失去 §1 动机 3 的折叠收益）。**修订**：`span.katex` 视为**原子
+   math 节点**——检测只在子树内找 `math` 判源（免检孪生内部纯性/隐藏：clip
+   非 display:none、svg 是排版符号非图片内容），序列化只输出 §3.3 的极简
+   math 形态（display 判定作用域取 `.katex` 元素的 `closest('.katex-display')`）。
+   无源 → 阻断（同决策 3）。步骤 6 瘦身规则②对未折叠残留 katex 的既有处理
+   不变。
+2. **hidden 三层语义（§3.2-3 补全）**。「含 `[hidden]`/display:none 元素」
+   未定义到祖先/根/自身三层。**修订**：run 根自查；后代元素逐查——**含
+   math 根自身**（`<math hidden>` 阻断，原实现 math 分支先返回后查隐藏）；
+   祖先不查（FAQ `[hidden]` 块内的 run 照常折——styled 版编号进恢复清单，
+   步骤 3 标记后可还原，Task 8 测试钉住）。KaTeX 原子分支的内部 mathml
+   clip 隐藏不受影响（免检）。
+3. **void 元素序列化形态（§3.3 补全）**。canonical 若输出 `<br></br>`，
+   HTML5 解析规则把 `</br>` 当 `<br>` 起始标签重建——步骤 8 jsdom 回读得到
+   **两个** br，一个换行渲染成两个（地址/签名/诗歌类高频形态）。**修订**：
+   void 元素（br/wbr）序列化不带闭合标签；钉住测试走「浏览器产出 canonical
+   → inline2md 往返」全链路（手写 `<br>` 的单测覆盖不到该路径）。
+
+另：§7「集成（真 chromium + 夹具）」的实际落点是 `test/unit/clean-snapshot.test.mjs`
+的 runClean 基座（子进程真 CLI + 真 chromium），覆盖等价、层级名称与措辞不符；
+KaTeX 夹具须用**真实孪生结构**（裸 `<math>` 夹具测不出修订 1 的两种失败）。

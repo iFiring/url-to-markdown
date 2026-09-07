@@ -110,3 +110,18 @@ openai 页检查点（英文文档，展开器/嵌套图解/UI 控件密集）�
 - 实测（2026-09-03 槽壳传播 + 空白守卫结构化后）：`codes: {total:14, ok:14,
   failed:0}`，k=5/6（2874/3127，此前 mixed_signal_mismatch）转 ok；k=5 两格缩进
   在位、k=6 空行恢复 13 行全保真；`logs/codes/` 空
+
+## 7. 长文本行内 run 折叠（2026-09-07 新增）
+
+- URL: <含 KaTeX 行内公式 + `<br>` 混排长段的技术博客/文档页真实地址>
+- 预期：
+  - 步骤 2 `2_long_text.json` runs 段——KaTeX 段落的值只含 `<math…><annotation…>`
+    极简形态，无 katex-html/mord/strut/svg 孪生痕迹（spec §10 原子化）；公式源
+    单份不重复
+  - `<br>` 混排段的 canonical 为 `<br>` 形态（非 `<br></br>`——jsdom 会把后者
+    解析为两个 br、换行翻倍）
+  - 重跑步骤 7-9 后 `9_markdown.md`：run 段落 `$…$` 公式单份、无孪生文本污染
+    （形如 `$E=mc^2$*E*=*m**c*2` 即失败）；硬换行单个、无多余空行
+  - 混排长段的行内格式（粗体/斜体/链接/行内 code/公式）来自确定性通道：
+    同一 URL 重跑逐字一致，无字面 `{{LONG_TEXT` 残留
+- 实测：待跑
