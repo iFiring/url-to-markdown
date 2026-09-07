@@ -13,7 +13,7 @@ export function setupCodeRestore(name, skeleton) {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, '1_snapshot.html'),
     '<!DOCTYPE html><html><head><title>t</title></head><body><h1 data-idx="1">t</h1><p data-idx="2">正文</p></body></html>');
-  fs.writeFileSync(path.join(dir, '2_long_text.json'), JSON.stringify({}));
+  fs.writeFileSync(path.join(dir, '2_long_text.json'), JSON.stringify({ texts: {}, runs: {} }));
   fs.writeFileSync(path.join(dir, '2_code.json'), JSON.stringify({
     1: { dataIdx: '10', lang: 'javascript', content: 'const a = 1;\nconst b = 2;', status: 'ok', lines: 2, gutterStripped: false },
     2: { dataIdx: '20', lang: 'tsx', content: 'system: `...`', status: 'ok', lines: 1, gutterStripped: false },
