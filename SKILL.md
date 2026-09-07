@@ -102,7 +102,7 @@ node <skill-root>/script/clean_snapshot.mjs --url <url>
 <url-working-path>/
   2_clean_snapshot.html        # 结构视图
   2_clean_style_snapshot.html  # 结构视图（带样式版）
-  2_long_text.json             # 占位符原文映射
+  2_long_text.json             # 占位符原文映射（texts 散文本 + runs 行内 run 规范化 HTML）
 ``` 
 
 产物生成后，不要擅自读取内容

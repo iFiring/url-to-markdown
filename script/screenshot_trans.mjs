@@ -60,9 +60,11 @@
  *   `resolvedSkeleton` 为 resolved skeleton 路径；
  *   `count` 为截图数；`source` 为截图来源（`live` 全部来自重渲染 / `snapshot` 全部快照兜底 / `mixed` 混合——均无需处理）；
  *   `images` 为下载成功数、`failedImages` 为失败 URL（其骨架条目保留原 URL，无需处理）；
+ *   `runsResolved` 为 2_long_text.json runs 段经 inline2md 成功转 markdown 的条数
+ *   （转换失败退回纯文本 + warning，不在此计数）；
  *   `skipped: "no_trans2img"` 时无截图但图片下载照常；
  *   {"status":"ok","count":N,"screenshots":[...],"source":"live"|"snapshot"|"mixed",
- *    "images":I,"failedImages":[...],"resolvedSkeleton":"..."}   → 退出码 0
+ *    "images":I,"failedImages":[...],"runsResolved":R,"resolvedSkeleton":"..."}   → 退出码 0
  *   {"status":"ok","skipped":"no_trans2img","images":I,"failedImages":[...],
  *    "resolvedSkeleton":"..."}       无 trans2img 条目 → 退出码 0
  *   {"status":"error","reason":"..."} 前置缺失 / 非四键契约 / id 未命中 / 未定义编号 → 1
@@ -80,6 +82,7 @@ import { readSharedScript } from './lib/placeholder.mjs';
 import { proxyLaunchOptions, gotoSettled, newU2MContext } from './lib/browser.mjs';
 import { snapshotScroll } from './lib/snapshot-scroll.mjs';
 import { downloadImages } from './lib/download_images.mjs';
+import { inlineRunToMarkdown, runTextContent } from './lib/inline2md.mjs';
 
 function parseArgs(argv) {
   const out = { _: [] };
@@ -189,7 +192,26 @@ async function main() {
   debug(`key_ids: title=${titleId ?? '无'} desc=${descriptionIds.length} blocks=${blockIds.length} dump=${dumpIds.length}`);
 
   const skeleton = JSON.parse(await fsPromises.readFile(skeletonPath, 'utf8'));
-  const longText = JSON.parse(await fsPromises.readFile(longTextPath, 'utf8'));
+
+  // ── runs 段 → markdown（spec 2026-09-06 §5.1）：逐 k 经 inline2md 确定性
+  //    转换，与 texts 合并为扁平解析表——resolveSkeletonString 零改动。转换
+  //    异常退回 jsdom textContent 纯文本 + stderr warning（§5.4），对应 k
+  //    照常出值（退出码不受影响）──
+  const lt = JSON.parse(await fsPromises.readFile(longTextPath, 'utf8'));
+  const longText = { ...(lt.texts || {}) };
+  let runsResolved = 0;
+  for (const [k, html] of Object.entries(lt.runs || {})) {
+    try {
+      longText[k] = inlineRunToMarkdown(html);
+      runsResolved++;
+    } catch (e) {
+      let fallback;
+      try { fallback = runTextContent(html); }
+      catch { fallback = String(html).replace(/<[^>]*>/g, ''); }
+      longText[k] = fallback;
+      log(`[runs] LONG_TEXT_${k} 行内转换失败，退回纯文本: ${e.message}`);
+    }
+  }
 
   // ── resolved skeleton（纯 Node，不依赖 playwright）──
   const resolvedSkeleton = [];
@@ -304,7 +326,7 @@ async function main() {
     log('骨架无 trans2img 条目也无 img 条目（已写出 resolved skeleton）');
     return emit({
       status: 'ok', skipped: 'no_trans2img', resolvedSkeleton: resolvedPath,
-      tablesResolved, failedTables, codesResolved, failedCodes,
+      runsResolved, tablesResolved, failedTables, codesResolved, failedCodes,
     });
   }
 
@@ -354,6 +376,7 @@ async function main() {
         status: 'ok',
         skipped: 'no_trans2img',
         resolvedSkeleton: resolvedPath,
+        runsResolved,
         images,
         failedImages,
       });
@@ -520,6 +543,7 @@ async function main() {
       images,
       failedImages,
       resolvedSkeleton: resolvedPath,
+      runsResolved,
       tablesResolved,
       failedTables,
       codesResolved,

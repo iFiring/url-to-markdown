@@ -66,7 +66,7 @@
  *
  * stdout 输出（有且仅有一行 JSON，日志一律走 stderr）:
  *   {"status":"ok","cleanedSnapshot":"...","styledSnapshot":"...",
- *    "longText":".../2_long_text.json","longTextCount":N,
+ *    "longText":".../2_long_text.json","longTextCount":{"texts":N,"runs":N,"total":N},
  *    "tables":{"total":N,"ok":N,"failed":N},"tablesJson":".../2_tables.json",
  *    "codes":{"total":N,"ok":N,"failed":N},"codeJson":".../2_code.json",
  *    "viewText":{"count":N}}                        → 退出码 0
@@ -120,6 +120,7 @@ async function main() {
   debug(`读入快照 ${snapshotPath}（${fs.statSync(snapshotPath).size} 字节）`);
 
   const pageCleanFn = await readSharedScript('page-clean-snapshot.js');
+  const latexFn = await readSharedScript('page-latex.js');
   const collectTablesFn = await readSharedScript('page-collect-tables.js');
   const foldTablesFn = await readSharedScript('page-fold-tables.js');
   const collectCodeFn = await readSharedScript('page-collect-code.js');
@@ -134,10 +135,10 @@ async function main() {
     await page.route(/^https?:/, (route) => route.abort());
 
     // 趟 1（styled）：结构清洗 + 长文本占位 + SVG 瘦身 → 带样式版（live 表/失败代码块）
-    // __u2mCollectTables/__u2mCollectCode 源码拼在前，使 __u2mCleanSnapshot 末尾
-    // 能调用它们收集表/代码块元数据
+    // __u2mLatexText（run 检测的 math 判源）与 __u2mCollectTables/__u2mCollectCode
+    // 源码拼在前，使 __u2mCleanSnapshot 末尾能调用它们收集表/代码块元数据
     await page.goto(`file://${snapshotPath}`, { waitUntil: 'domcontentloaded' });
-    const styledEvalSrc = `${collectTablesFn}\n${collectCodeFn}\n(${pageCleanFn})(${JSON.stringify({ mode: 'styled' })})`;
+    const styledEvalSrc = `${latexFn}\n${collectTablesFn}\n${collectCodeFn}\n(${pageCleanFn})(${JSON.stringify({ mode: 'styled' })})`;
     const styled = await page.evaluate(styledEvalSrc);
 
     // ── Node 层表格转换：预展开长文本 → 引擎 → 纯结构校验 → 2_tables.json + 日志 ──
@@ -187,18 +188,27 @@ async function main() {
     const styledPath = path.join(dir, '2_clean_style_snapshot.html');
     await fsPromises.writeFile(styledPath, styledHtml, 'utf8');
 
+    // 2_long_text.json 两段 schema（spec 2026-09-06 §4）：texts 散文本纯文本 +
+    // runs 行内 run 规范化 HTML，单一计数器全局编号。table2md/code2md 的
+    // expandLongText 只消费 texts（表格/pre 子树被 run 检测位置排除、其内部
+    // 永远只有散文本占位符）
     const longTextPath = path.join(dir, '2_long_text.json');
-    await fsPromises.writeFile(longTextPath, JSON.stringify(styled.longTexts), 'utf8');
+    await fsPromises.writeFile(longTextPath,
+      JSON.stringify({ texts: styled.longTexts || {}, runs: styled.longTextRuns || {} }), 'utf8');
 
-    // 趟 2（clean）：重新加载同一快照，结构清洗 + K1-K9 → 清洗版（终端视图）
+    // 趟 2（clean）：重新加载同一快照，结构清洗 + K1-K9 → 清洗版（终端视图）。
+    // __u2mLatexText 两趟都注入——共享段 run 检测两趟都调它判 math 源，
+    // 只注入一趟会让两趟的 math 阻断判定不一致、破坏孪生守卫
     await page.goto(`file://${snapshotPath}`, { waitUntil: 'domcontentloaded' });
-    const clean = await page.evaluate(`(${pageCleanFn})(${JSON.stringify({ mode: 'clean', codeFold })})`);
+    const clean = await page.evaluate(`${latexFn}\n(${pageCleanFn})(${JSON.stringify({ mode: 'clean', codeFold })})`);
 
     const cleanedPath = path.join(dir, '2_clean_snapshot.html');
     await fsPromises.writeFile(cleanedPath, clean.html, 'utf8');
 
     debug(`[clean] hidden 折叠 ${clean.stats.hiddenCount} · 视图文本折叠 ${clean.stats.viewTextCount} · 清洗版 ${Buffer.byteLength(clean.html, 'utf8')} 字节 · 表格 ${tableCounts.ok}ok/${tableCounts.failed}fail · 代码块 ${codeCounts.ok}ok/${codeCounts.failed}fail`);
-    log(`清洗完成: ${cleanedPath} (${styled.longTextCount} 个长文本占位符, 表格 ${tableCounts.total} 个: ${tableCounts.ok} 成功 ${tableCounts.failed} 失败, 代码块 ${codeCounts.total} 个: ${codeCounts.ok} 成功 ${codeCounts.failed} 失败)`);
+    const ltTextCount = Object.keys(styled.longTexts || {}).length;
+    const ltRunCount = Object.keys(styled.longTextRuns || {}).length;
+    log(`清洗完成: ${cleanedPath} (长文本 ${styled.longTextCount} 个: 散文本 ${ltTextCount} + 行内 run ${ltRunCount}, 表格 ${tableCounts.total} 个: ${tableCounts.ok} 成功 ${tableCounts.failed} 失败, 代码块 ${codeCounts.total} 个: ${codeCounts.ok} 成功 ${codeCounts.failed} 失败)`);
 
     await context.close();
     await browser.close();
@@ -208,7 +218,7 @@ async function main() {
       cleanedSnapshot: cleanedPath,
       styledSnapshot: styledPath,
       longText: longTextPath,
-      longTextCount: styled.longTextCount,
+      longTextCount: { texts: ltTextCount, runs: ltRunCount, total: styled.longTextCount },
       tables: tableCounts,
       tablesJson: tablesJsonPath,
       codes: codeCounts,

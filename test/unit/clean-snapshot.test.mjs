@@ -6,6 +6,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { runScript } from '../helpers/run-script.mjs';
 import { urlToDirName } from '../../script/lib/env.mjs';
+import { inlineRunToMarkdown } from '../../script/lib/inline2md.mjs';
 
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
 const scriptPath = path.resolve(thisDir, '../../script/lib/page-clean-snapshot.js');
@@ -420,7 +421,7 @@ test('clean_snapshot.mjs: 纯空白文本节点（缩进）不占位', async () 
   assert.equal(out.status, 'ok');
 
   // 只有真实长文本被占位，纯空白不计入
-  assert.equal(out.longTextCount, 1, '仅真实长文本应被占位，缩进空白不应计数');
+  assert.equal(out.longTextCount.total, 1, '仅真实长文本应被占位，缩进空白不应计数');
 
   const cleaned = fs.readFileSync(out.cleanedSnapshot, 'utf8');
   const between = cleaned.match(/data-idx="1">([\s\S]*?)<div data-idx="2"/);
@@ -461,7 +462,7 @@ test('clean_snapshot.mjs: 中英文分标准占位，并生成 2_long_text.json 
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
-  assert.equal(out.longTextCount, 3, '仅中文 17 字、英文 13 词、混合 18 字三段应被占位');
+  assert.equal(out.longTextCount.total, 3, '仅中文 17 字、英文 13 词、混合 18 字三段应被占位');
 
   const cleaned = fs.readFileSync(out.cleanedSnapshot, 'utf8');
   const styled = fs.readFileSync(out.styledSnapshot, 'utf8');
@@ -472,10 +473,12 @@ test('clean_snapshot.mjs: 中英文分标准占位，并生成 2_long_text.json 
   assert.ok(cleaned.includes(enShort), '12 词英文不应占位（即使字符数 > 16）');
   assert.ok(cleaned.includes(zhShort), '16 字中文不应占位');
 
-  // 2_long_text.json：占位编号 → 原文映射
+  // 2_long_text.json：占位编号 → 原文映射（run 折叠后——纯文本段落均整段
+  // 入 runs 段，canonical 片段 = 原文本身）
   assert.ok(out.longText, 'emit 应含 longText 恢复清单路径');
   const longTexts = JSON.parse(fs.readFileSync(out.longText, 'utf8'));
-  assert.deepEqual(longTexts, { 1: zhLong, 2: enLong, 3: mixed }, '编号→原文映射应完整');
+  assert.deepEqual(Object.keys(longTexts.texts), [], '纯文本段无散文本条目');
+  assert.deepEqual(longTexts.runs, { 1: zhLong, 2: enLong, 3: mixed }, '编号→原文映射应完整');
 
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
@@ -543,9 +546,9 @@ test('clean_snapshot.mjs: 带样式快照保留样式，SVG 瘦身为壳，占�
   assert.ok(!styled.includes(htmlLong), '带样式版中 HTML 长文本同样应被占位');
 
   // 恢复清单条数 = 占位数（SVG 文本与 <style> CSS 均不参与，故仅 htmlLong 一条）
-  assert.equal(out.longTextCount, 1, '仅 HTML 长文本占位，SVG/style 文本不计入');
+  assert.equal(out.longTextCount.total, 1, '仅 HTML 长文本占位，SVG/style 文本不计入');
   const longTexts = JSON.parse(fs.readFileSync(out.longText, 'utf8'));
-  assert.deepEqual(longTexts, { 1: htmlLong }, '恢复清单应仅含 HTML 长文本');
+  assert.deepEqual(longTexts, { texts: {}, runs: { 1: htmlLong } }, '恢复清单应仅含 HTML 长文本');
 
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
@@ -675,7 +678,7 @@ test('K5: hidden 裸属性折叠为 {{HIDDEN_TAG|规模;构成}}——规模按�
     assert.ok(cleaned.includes('正文段落'), '可见正文保留');
     // attrLong 23 字 > 16：带样式版以 LONG_TEXT 占位符保留、原文进恢复清单
     assert.ok(styled.includes('{{LONG_TEXT_1|') && styled.includes('data-idx="3"'), '带样式版子树完整（长文本以占位符保留）');
-    assert.ok(JSON.parse(fs.readFileSync(out.longText, 'utf8'))[1] === attrLong, '隐藏长文本原文在恢复清单完整保留');
+    assert.ok(JSON.parse(fs.readFileSync(out.longText, 'utf8')).runs['1'] === attrLong, '隐藏长文本原文在恢复清单完整保留（runs 段，hidden 祖先不阻断）');
     assert.ok(!styled.includes('{{HIDDEN_TAG'), '守卫: 带样式版不得出现 HIDDEN_TAG token');
   } finally { cleanup(); }
 });
@@ -888,8 +891,8 @@ test('K7: 长文本占位块走 CODE 管线——纪元豁免下 ok、行数取�
     const cj = JSON.parse(fs.readFileSync(out.codeJson, 'utf8'));
     assert.equal(cj['1'].status, 'ok');
     assert.equal(cj['1'].content, preLong, '内容 = 预展开原文');
-    // 占位符条目仍在恢复清单（未被引用则无害）
-    assert.ok(JSON.parse(fs.readFileSync(out.longText, 'utf8'))['1'] === preLong);
+    // 占位符条目仍在恢复清单（pre 内散折叠进 texts 段，未被引用则无害）
+    assert.ok(JSON.parse(fs.readFileSync(out.longText, 'utf8')).texts['1'] === preLong);
   } finally { cleanup(); }
 });
 
@@ -961,13 +964,13 @@ test('守卫: 长文本占位形态分两版——styled 带编号、clean 无�
     assert.equal(phs(styled).length, 1, '带样式版保留带编号 LONG_TEXT 占位');
     assert.equal(phc(cleaned).length, 1, '清洗版保留无编号占位');
     assert.equal(phc(cleaned)[0].replace('{{LONG_TEXT|', ''), phs(styled)[0].replace(/^.*\|/, ''), '规模后缀两版一致');
-    assert.equal(out.longTextCount, 1, '恢复清单从 styled 趟占位产出');
+    assert.equal(out.longTextCount.total, 1, '恢复清单从 styled 趟占位产出');
     const src = fs.readFileSync(path.resolve(thisDir, '../../script/clean_snapshot.mjs'), 'utf8');
     assert.ok(!src.includes("from 'juice'"), '步骤 2 不再 import juice');
   } finally { cleanup(); }
 });
 
-test('长文本占位（两趟共享）——清洗版按文本节点折叠、行内结构保留、短文本原文', async () => {
+test('长文本占位（两趟共享）——run 折叠后：混排段整段占位、纯文本段照旧、短文本原文', async () => {
   const zh17 = '汉'.repeat(17);                       // 17 字 > 16 → 占位
   const zh16 = '汉'.repeat(16);                       // 16 字 → 保留
   const en13 = Array(13).fill('word').join(' ');      // 13 词 > 12 → 占位
@@ -984,20 +987,24 @@ test('长文本占位（两趟共享）——清洗版按文本节点折叠、�
     <p data-idx="8">x <a data-idx="9">链接</a> y</p>
   </div>
 </body></html>`;
-  const { cleaned, styled, cleanup } = await runClean(snapshot, 'k8-run');
+  const { out, cleaned, styled, cleanup } = await runClean(snapshot, 'k8-run');
   try {
-    assert.ok(/<p data-idx="2">\{\{LONG_TEXT\|17_chars\}\}<\/p>/.test(cleaned), '17 字文本节点清洗版同样占位（无编号）');
+    assert.ok(/<p data-idx="2">\{\{LONG_TEXT\|17_chars\}\}<\/p>/.test(cleaned), '17 字纯文本段清洗版同样占位（无编号）');
     assert.ok(cleaned.includes(zh16), '16 字文本保留原文');
-    assert.ok(/<p data-idx="4">\{\{LONG_TEXT\|13_words\}\}<\/p>/.test(cleaned), '13 词文本节点清洗版同样占位（无编号）');
+    assert.ok(/<p data-idx="4">\{\{LONG_TEXT\|13_words\}\}<\/p>/.test(cleaned), '13 词纯文本段清洗版同样占位（无编号）');
     assert.ok(cleaned.includes(en12), '12 词文本保留原文');
-    // 行内混排段（合计 14 词 > 12 阈值）不再整段折叠：各文本节点均低于阈值、
-    // 全部原文保留，<a> 结构保真——run 整段吞噬曾让步骤 3 看不到行内结构
+    // 行内混排段（合计 14 词 > 12 阈值）run 折叠后整段一个占位符——行内结构
+    // 随 canonical HTML 入 runs 段（2026-09-06 spec 重设计；旧「按文本节点
+    // 折叠、行内结构保留」的 K8 废除理由就此反转）
     const mixed = cleaned.match(/<p data-idx="6">([\s\S]*?)<\/p>/)[1];
-    assert.ok(mixed.includes('<a data-idx="7">Prompt Caching Dashboard</a>'), `行内元素结构保留: ${mixed}`);
-    assert.ok(mixed.startsWith('Use the ') && mixed.includes(' to monitor cache hit rates and usage over time.'), `行内短文本原文保留: ${mixed}`);
+    assert.equal(mixed, '{{LONG_TEXT|14_words}}', `混排段整段 run 折叠: ${mixed}`);
+    const lt = JSON.parse(fs.readFileSync(out.longText, 'utf8'));
+    assert.ok(lt.runs['3'].includes('<a href="') && lt.runs['3'].includes('>Prompt Caching Dashboard</a>'),
+      `runs 段 canonical 含链接结构（href 已绝对化）: ${lt.runs['3']}`);
+    assert.ok(/<p data-idx="6">\{\{LONG_TEXT_3\|14_words\}\}<\/p>/.test(styled), 'styled 带编号整段占位');
+    // 短文本行内段不折：结构原文保留
     const short = cleaned.match(/<p data-idx="8">([\s\S]*?)<\/p>/)[1];
     assert.ok(short.includes('x <a') && short.includes('> y'), `短文本保留原文与行内间空白: ${JSON.stringify(short)}`);
-    assert.ok(styled.includes('Prompt Caching Dashboard') && styled.includes('href="/x"'), '带样式版不受影响');
   } finally { cleanup(); }
 });
 
@@ -1084,9 +1091,9 @@ test('H1/H2/H3 整子树豁免占位——长标题原文保留作步骤 3 识�
     assert.ok(/<h4 data-idx="6">\{\{LONG_TEXT\|19_chars\}\}<\/h4>/.test(cleaned), `H4 长文本仍占位（无编号）: ${cleaned.match(/<h4[^]*?<\/h4>/)}`);
     // 普通长段落仍占位
     assert.ok(/<p data-idx="7">\{\{LONG_TEXT\|20_chars\}\}<\/p>/.test(cleaned), '普通长段落仍占位（无编号）');
-    // 标题文本不进恢复清单；H4 与段落文本进清单
+    // 标题文本不进恢复清单；H4 与段落文本进清单（run 折叠后两段合一取值）
     const longTexts = JSON.parse(fs.readFileSync(out.longText, 'utf8'));
-    const vals = Object.values(longTexts);
+    const vals = [...Object.values(longTexts.texts), ...Object.values(longTexts.runs)];
     assert.ok(!vals.includes(zhH2) && !vals.includes(zhH3) && !vals.includes(zhSubA), 'H1/H2/H3 标题文本不应进恢复清单');
     assert.ok(vals.includes(zhH4) && vals.includes(zhP), 'H4 与段落长文本应进恢复清单');
     // 带样式版同样豁免
@@ -1127,12 +1134,15 @@ test('K10: 空壳 span 拆包（仅 clean）——仅 data-idx 的 span 解包�
     const p9 = cleaned.match(/<p data-idx="9">([\s\S]*?)<\/p>/)[1];
     assert.ok(/\{\{LONG_TEXT\|\d+_chars\}\}/.test(p9), `占位符应落到 <p>: ${p9}`);
     assert.ok(!/<span/.test(p9), '包占位符的裸 span 应拆包');
-    // 带样式版保留全部 span（含 style，供步骤 5-7）
-    assert.ok(styled.includes('data-idx="3"') && styled.includes('data-idx="7"') && styled.includes('data-idx="10"'), '带样式版应保留这些 span');
+    // 带样式版保留短文本段落内的 span（其 style 供步骤 5-7）；长文本段（p9）
+    // run 折叠后整段占位、内部 span 随折消失（canonical HTML 入 runs 段）
+    assert.ok(styled.includes('data-idx="3"') && styled.includes('data-idx="7"'), '带样式版应保留短文本段的 span');
+    assert.ok(!styled.includes('data-idx="10"') && /<p data-idx="9">\{\{LONG_TEXT_1\|19_chars\}\}<\/p>/.test(styled),
+      `长文本段 run 折叠（span 随折消失）: ${styled.match(/<p data-idx="9">[\s\S]*?<\/p>/)?.[0]}`);
     // 孪生守卫（clean LT 无编号形态）：规模后缀集合两版一致（拆包只挪位置）
     const suf = (h) => (h.match(/\{\{LONG_TEXT(?:_\d+)?\|\d+_[a-z]+\}\}/g) || []).map((s) => s.replace(/^.*\|/, '')).sort();
     assert.deepEqual(suf(cleaned), suf(styled), '占位规模后缀两版应一致');
-    assert.equal(out.longTextCount, 1, '恢复清单条数不变');
+    assert.equal(out.longTextCount.total, 1, '恢复清单条数不变');
   } finally { cleanup(); }
 });
 
@@ -1165,7 +1175,7 @@ test('S1: astro- 前缀解包提升至两趟——带样式版同样解包，LON
     assert.ok(!styled.includes('component-url') && !styled.includes('props='), 'astro 脚手架属性随包装消失');
     // 岛内长文本仍正常占位、编号从 1 起（解包不增删文本节点、文档序不变）
     assert.ok(styled.includes('{{LONG_TEXT_1|'), '岛内长文本占位编号从 1 起');
-    assert.equal(JSON.parse(fs.readFileSync(out.longText, 'utf8'))[1], longZh, '恢复清单内容完整');
+    assert.equal(JSON.parse(fs.readFileSync(out.longText, 'utf8')).runs['1'], longZh, '恢复清单内容完整');
   } finally { cleanup(); }
 });
 
@@ -1498,7 +1508,7 @@ test('K11: 含 LT 模块整棵折叠——LT 随折吞没（clean ⊆ styled）�
     assert.equal(cleanLT.length, 1, `clean 恰一处 LT（模块内长文本随 K11 吞没）: ${cleanLT.join()}`);
     assert.ok(!/\{\{LONG_TEXT_\d/.test(cleaned), 'clean LT 无编号形态');
     assert.ok(styled.includes('{{LONG_TEXT_1|') && styled.includes('{{LONG_TEXT_2|'), 'styled 两 LT 编号保真');
-    assert.equal(out.longTextCount, 2, 'LT 计数（styled 收集）不受 K11 影响');
+    assert.equal(out.longTextCount.total, 2, 'LT 计数（styled 收集）不受 K11 影响');
     assert.ok(styled.includes('95% 命中') && styled.includes('观察'), 'styled 模块内容保真');
     assert.equal(out.viewText.count, 2, 'emit viewText 计数 = 2（模块 3 + chart 13）');
   } finally { cleanup(); }
@@ -1617,5 +1627,218 @@ test('CODE 占位符：失败块 styled 保 live + 标记、clean 恒折叠、�
     const logs = fs.readdirSync(path.join(path.dirname(out.codeJson), 'logs', 'codes'));
     assert.equal(logs.length, 1);
     assert.ok(fs.readFileSync(path.join(path.dirname(out.codeJson), 'logs', 'codes', logs[0]), 'utf8').includes('reason: non_textual'));
+  } finally { cleanup(); }
+});
+
+test('run 折叠：混排长段落整段折叠——styled 单占位符 + runs 段 canonical + clean 无编号', async () => {
+  // spec 2026-09-06 §3：折叠单位升级为「极大纯行内 run」。混排段落整段一
+  // 个 {{LONG_TEXT_1|N_chars}}，行内结构随 canonical HTML 入 runs 段；散文本
+  // 段为空；clean 版无编号整段形态。
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title><base data-u2m-base="1" href="https://example.com/page/"></head>
+<body>
+  <h1 data-idx="1">标题</h1>
+  <p data-idx="2">这是一段<strong>加粗强调</strong>的长文本，含<em>斜体</em>与<a href="/docs">链接文本</a>及<code>inline_code()</code>混排，用于验证整段 run 折叠行为。</p>
+</body></html>`;
+  const { out, cleaned, styled, cleanup } = await runClean(snapshot, 'run-basic');
+  try {
+    assert.match(styled, /<p data-idx="2">\{\{LONG_TEXT_1\|\d+_chars\}\}<\/p>/,
+      'styled：整段一个占位符（壳保留 data-idx）');
+    const lt = JSON.parse(fs.readFileSync(out.longText, 'utf8'));
+    assert.deepEqual(Object.keys(lt.texts), [], '散文本段为空');
+    assert.equal(lt.runs['1'],
+      '这是一段<strong>加粗强调</strong>的长文本，含<em>斜体</em>与<a href="https://example.com/docs">链接文本</a>及<code>inline_code()</code>混排，用于验证整段 run 折叠行为。',
+      'runs 段：语义归一 + href 绝对化 + 属性剥净');
+    assert.match(cleaned, /<p data-idx="2">\{\{LONG_TEXT\|\d+_chars\}\}<\/p>/, 'clean：无编号整段形态');
+    assert.deepEqual(out.longTextCount, { texts: 0, runs: 1, total: 1 }, 'emit 计数对象');
+  } finally { cleanup(); }
+});
+
+test('run 检测边界：table/pre 内不 run 折叠（散文本照旧）；阈值下不折；嵌套容器不双折', async () => {
+  const longZh = '这是一段超过十六个汉字的长文本用于验证折叠';
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <table data-idx="1"><tbody><tr><td>单元格里${longZh}与<strong>加粗</strong>混排内容继续加长一些。</td></tr></tbody></table>
+  <div data-idx="2"><p data-idx="3"><span data-idx="4">${longZh}外层</span></p></div>
+  <p data-idx="5">短文本不折叠</p>
+</body></html>`;
+  const { out, cleaned, styled, cleanup } = await runClean(snapshot, 'run-edge');
+  try {
+    const lt = JSON.parse(fs.readFileSync(out.longText, 'utf8'));
+    // 表格子树被位置条件排除：单元格长文本走散折叠进 texts（k=1）；p 的整段
+    // run 是唯一的 runs 条目（k=2）——单一计数器文档序
+    assert.deepEqual(Object.keys(lt.runs), ['2'], 'table 内不产生 run（runs 仅 p 整段折叠）');
+    assert.deepEqual(Object.keys(lt.texts), ['1'], 'table 内长文本照旧散折叠进 texts');
+    assert.ok(styled.includes('{{LONG_TEXT_1|'), 'styled 表内散文本占位带编号（expandLongText 依赖）');
+    // div>p>span：div 子树含 p（p 不在行内允许集）→ div 形状不合格 → p 是
+    // 极大容器；span 在 p 内、p 形状合格 → span 非极大不单折，随 p 整段折入
+    // （innerHTML 整体替换，span 及其 data-idx 随之消失——「壳保留」指 run
+    // 容器 E 自身，不是内部结构）
+    assert.match(styled, /<p data-idx="3">\{\{LONG_TEXT_\d+\|\d+_chars\}\}<\/p>/, 'p 整段折叠（极大）');
+    assert.ok(!styled.includes('data-idx="4"'), 'p 内 span 随整段折叠消失');
+    // 短文本原样
+    assert.ok(styled.includes('短文本不折叠'));
+  } finally { cleanup(); }
+});
+
+test('run 序列化：span 样式归一——inline/class 两驱动 + 多信号固定嵌套 strong>em>del', async () => {
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title>
+<style>.b{font-weight:700}.i{font-style:italic}.s{text-decoration:line-through}</style></head>
+<body>
+  <p data-idx="1">前缀<span style="font-weight:700">样式驱动加粗</span>中间<span class="b">class 驱动加粗</span>后缀，继续补足十六个汉字的长度要求。</p>
+  <p data-idx="2">无信号 span<span>透明丢弃</span>保留文本，继续补足十六个汉字的长度要求哦。</p>
+  <p data-idx="3">三信号<span class="b i s" style="font-weight:700">叠加</span>验证嵌套顺序，继续补足十六个汉字的长度要求。</p>
+</body></html>`;
+  const { out, cleanup } = await runClean(snapshot, 'run-span-norm');
+  try {
+    const lt = JSON.parse(fs.readFileSync(out.longText, 'utf8'));
+    const runs = Object.values(lt.runs).join('\n');
+    assert.ok(runs.includes('<strong>样式驱动加粗</strong>'), `inline style 驱动: ${runs}`);
+    assert.ok(runs.includes('<strong>class 驱动加粗</strong>'), `class 驱动（<style> 规则）: ${runs}`);
+    assert.ok(!/<span>/.test(runs) && runs.includes('透明丢弃'), '无信号 span 透明、文本保留');
+    assert.ok(runs.includes('<strong><em><del>叠加</del></em></strong>'),
+      '多信号固定嵌套 del 最内 → em → strong 最外');
+  } finally { cleanup(); }
+});
+
+test('run 折叠：math 有源整段折叠（极简形态）+ display 判定 + 无源阻断', async () => {
+  // 体量门槛（§3.2-5）对 display math 同样生效：.katex-display 独立容器只含
+  // 公式、词数过不了 >12 阈值——块级公式要折进 run，必须处在够长的段落流内
+  // （真实形态：<p>文本 <span class="katex-display">…math…</span> 文本</p>）
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <p data-idx="1">行内公式<math><semantics><mrow><mi>E</mi></mrow><annotation encoding="application/x-tex">E = mc^2</annotation></semantics></math>之后的说明文字继续补足十六个汉字的长度要求。</p>
+  <p data-idx="2">块级公式在段落流内<span class="katex-display"><math><annotation encoding="application/x-tex">\\\\int f(x)dx</annotation></math></span>之后的说明文字继续补足长度要求。</p>
+  <p data-idx="3">无源公式<math><mi>x</mi><mo>+</mo><mi>y</mi></math>之后的说明文字继续补足十六个汉字。</p>
+</body></html>`;
+  const { out, styled, cleanup } = await runClean(snapshot, 'run-math');
+  try {
+    const lt = JSON.parse(fs.readFileSync(out.longText, 'utf8'));
+    const runs = Object.values(lt.runs);
+    assert.equal(runs.length, 2, '有源两段折（行内 math + 段内 katex-display）；无源段阻断');
+    assert.ok(runs.some((r) => r.includes('<math><annotation encoding="application/x-tex">E = mc^2</annotation></math>')),
+      '行内 math 极简形态（semantics/mrow 不入库）');
+    assert.ok(runs.some((r) => r.includes('<math display="block"><annotation encoding="application/x-tex">')),
+      '.katex-display 祖先 → display="block"');
+    // 无源：run 不折——styled 保留 <math> 原树与 <mi> 结构（现状链路，
+    // 步骤 6 才是 math 消费者），散文本折叠照旧
+    assert.ok(styled.includes('<mi>x</mi>'), '无源 math 原树保留');
+  } finally { cleanup(); }
+});
+
+test('run 孪生守卫：hidden 祖先 / K10 拆包 / K11 吞没——clean LT 后缀 ⊆ styled', async () => {
+  const longZh = '这是一段超过十六个汉字的长文本用于验证折叠行为。';
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-idx="1" hidden><p data-idx="2">${longZh}<strong>隐藏 FAQ 答案</strong>继续长度。</p></div>
+  <div data-idx="3"><img data-idx="30" src="x.png" alt="x"><span data-idx="4" style="color:red">${longZh}拆包场景</span></div>
+  <div class="chart" data-idx="5">
+    <div data-idx="6">${longZh}</div><div data-idx="7">step two</div>
+    <div data-idx="8">step three</div><div data-idx="9">step four</div>
+    <div data-idx="10">step five</div><div data-idx="11">step six</div>
+    <div data-idx="12">step seven</div>
+  </div>
+</body></html>`;
+  const { cleaned, styled, out, cleanup } = await runClean(snapshot, 'run-twin');
+  try {
+    // hidden 祖先：styled 照折（编号进恢复清单——FAQ 还原路径），clean 被 K5
+    // 吞没（HIDDEN_TAG 内无 LT）
+    assert.ok(/<div data-idx="1" hidden(?:="")?>\{\{HIDDEN_TAG\|/.test(cleaned), 'clean：hidden 块 K5 折叠');
+    const hiddenBlock = styled.match(/<div data-idx="1" hidden(?:="")?>[\s\S]*?<\/div>/)[0];
+    assert.ok(/\{\{LONG_TEXT_1\|/.test(hiddenBlock), 'styled：hidden 内 run 照折（带编号）');
+    // K10：run 根是仅 data-idx 的 span（父容器因 img 不纯、span 极大）——
+    // styled 保留 span 整段 run；clean 趟 K2 剥 style 后 K10 拆包、文本上提
+    // 为父容器的散文本节点再散折叠——两趟粒度不同、规模后缀保持一致
+    assert.match(styled, /<span data-idx="4"[^>]*>\{\{LONG_TEXT_2\|\d+_chars\}\}<\/span>/, 'styled：span 整段 run 占位');
+    assert.ok(!cleaned.includes('data-idx="4"') && cleaned.includes('{{LONG_TEXT|'), 'clean：span 拆包后散文本占位');
+    // K11：chart 模块（div 树 >6）整棵 VIEW_TEXT——模块内的 run 记录随折吞没
+    assert.match(cleaned, /<div class="chart" data-idx="5">\{\{VIEW_TEXT\|\d+_chars\}\}<\/div>/);
+    // 孪生守卫：clean LT 后缀集合 ⊆ styled（多场景合并断言）
+    const suf = (h) => (h.match(/\{\{LONG_TEXT(?:_\d+)?\|(\d+_[a-z]+)\}\}/g) || [])
+      .map((s) => s.replace(/^.*\|/, '')).sort();
+    const cs = suf(cleaned), ss = suf(styled);
+    assert.ok(cs.every((v) => ss.includes(v)), `clean LT 后缀 ⊆ styled: clean=${cs} styled=${ss}`);
+    assert.ok(out.longTextCount.runs >= 1 && out.longTextCount.total >= out.longTextCount.runs);
+  } finally { cleanup(); }
+});
+
+test('run 折叠：KaTeX 视觉孪生原子化——canonical 只入极简 math，孪生（含 svg）不入库', async () => {
+  // spec §3.3「katex-html 视觉孪生不入库」的机制钉住（2026-09-07 审阅修订）：
+  // span.katex = katex-mathml（clip 隐藏的 math 源，非 display:none）+
+  // katex-html（视觉孪生，可含 svg 伸展符号）。原子化处理：整棵视为一个
+  // math 节点、只在内部判源——否则孪生文本随 run 双份入文（$E=mc^2$ 后又
+  // 跟 *E*=*m**c*2），或孪生内 svg 把整段 run 误阻断（KaTeX 页失去折叠收益）。
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title>
+<style>
+.katex-mathml{position:absolute;clip-path:inset(50%);height:1px;overflow:hidden;width:1px}
+.katex .mathnormal{font-style:italic}
+.katex .mathbf{font-weight:700}
+</style></head>
+<body>
+  <h1 data-idx="1">标题</h1>
+  <p data-idx="2">质能方程 <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>E</mi><mo>=</mo><mi>m</mi><msup><mi>c</mi><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">E=mc^2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.683em;"></span><span class="mord mathnormal">E</span><span class="mrel">=</span><span class="mord mathnormal">m</span><span class="mord mathbf">c</span><svg width="0.26em" height="1.2em"><path d="M1 0v628H0V0h1z"/></svg></span></span></span> 之后的说明文字继续补足十六个汉字的长度要求哦。</p>
+  <p data-idx="3">块级公式在段落流内<span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>∫</mo><mi>f</mi><mi>x</mi><mi>d</mi><mi>x</mi></mrow><annotation encoding="application/x-tex">\\int f(x)dx</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="mord mathnormal">∫fxdx</span></span></span></span></span>之后的说明文字继续补足十六个汉字的长度要求哦。</p>
+</body></html>`;
+  const { out, styled, cleanup } = await runClean(snapshot, 'run-katex');
+  try {
+    const lt = JSON.parse(fs.readFileSync(out.longText, 'utf8'));
+    assert.equal(Object.keys(lt.runs).length, 2,
+      '两段都折：孪生内 svg 不再阻断（原子化免检孪生内部）');
+    assert.equal(lt.runs['1'],
+      '质能方程 <math><annotation encoding="application/x-tex">E=mc^2</annotation></math> 之后的说明文字继续补足十六个汉字的长度要求哦。',
+      'canonical 只含极简 math：孪生 span（mathnormal 斜体→em、mathbf→strong 污染）与 svg 不入库');
+    assert.ok(lt.runs['2'].includes('<math display="block"><annotation encoding="application/x-tex">\\int f(x)dx</annotation></math>'),
+      'katex-display 祖先 → display="block" 极简形态');
+    assert.ok(!/katex-html|strut|mord|<svg/.test(Object.values(lt.runs).join('')),
+      'runs 段无任何孪生痕迹');
+    assert.match(styled, /<p data-idx="2">\{\{LONG_TEXT_1\|\d+_chars\}\}<\/p>/,
+      'styled：整段占位（壳保留 data-idx）');
+    // 往返钉住：步骤 8 转换器对 canonical 产出单份 $…$，无孪生重复
+    const md = inlineRunToMarkdown(lt.runs['1']);
+    assert.equal(md, '质能方程 $E=mc^2$ 之后的说明文字继续补足十六个汉字的长度要求哦。');
+  } finally { cleanup(); }
+});
+
+test('run 序列化：void 元素 br/wbr 不带闭合标签——浏览器→jsdom 往返不产生双硬换行', async () => {
+  // HTML5 解析规则把 `</br>` 当 `<br>` 起始标签重建：canonical 若序列化为
+  // `<br></br>`，步骤 8 jsdom 回读得到两个 br → 每个换行渲染成两个（地址/
+  // 签名/诗歌类高频形态）。void 元素必须输出无闭合标签形态。
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <p data-idx="1">收件人：张三<br>地址：某省某市某区某街道某某号一百二十三室<br>邮编：100000<wbr>电话：010-12345678，请补足长度。</p>
+</body></html>`;
+  const { out, cleanup } = await runClean(snapshot, 'run-br-void');
+  try {
+    const lt = JSON.parse(fs.readFileSync(out.longText, 'utf8'));
+    const run = Object.values(lt.runs)[0];
+    assert.ok(run, 'run 已折叠');
+    assert.ok(run.includes('<br>'), 'canonical 含 br');
+    assert.ok(!run.includes('</br>'), 'br 不带闭合标签（jsdom 把 <br></br> 解析为两个 br）');
+    assert.ok(!run.includes('</wbr>'), 'wbr 同为 void，不带闭合标签');
+    // 往返钉住：两个 br → 恰好两个硬换行（`\` + 换行），不翻倍
+    const md = inlineRunToMarkdown(run);
+    assert.equal((md.match(/\\\n/g) || []).length, 2, '双 br 往返后仍是两个硬换行');
+  } finally { cleanup(); }
+});
+
+test('run 阻断：带 [hidden] 的 math 不随 run 入库（§3.2-3 隐藏三层语义含 math 根自身）', async () => {
+  // 隐藏内容不得折进恢复清单——math 根自身 [hidden]/display:none 同样阻断
+  // （KaTeX 孪生场景走原子化分支、其内部 mathml 的 clip 隐藏不受影响）。
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <p data-idx="1">说明文字开头<math hidden><annotation encoding="application/x-tex">x^2</annotation></math>之后的说明文字继续补足十六个汉字的长度要求哦。</p>
+</body></html>`;
+  const { out, styled, cleanup } = await runClean(snapshot, 'run-math-hidden');
+  try {
+    const lt = JSON.parse(fs.readFileSync(out.longText, 'utf8'));
+    assert.deepEqual(Object.keys(lt.runs), [], '含 hidden math 的 run 阻断不折');
+    assert.ok(styled.includes('<math'), 'math 原树留在 styled DOM 走现状链路');
   } finally { cleanup(); }
 });

@@ -87,9 +87,8 @@ const SKELETON = [
 ];
 
 const LONG_TEXT = {
-  '5': '段落一文本内容',
-  '6': '重要内容',
-  '8': '段落二文本内容',
+  texts: { '5': '段落一文本内容', '6': '重要内容', '8': '段落二文本内容' },
+  runs: {},
 };
 
 // 死端口 URL：live 重渲染即时失败；其派生目录名与测试预置目录一致
@@ -564,7 +563,7 @@ test('screenshot_trans.mjs: code 条目 content 内的占位符同样还原', as
 test('screenshot_trans.mjs: code 条目引用未定义编号时报 error', async () => {
   const { tmpRoot } = setupTmp('coderef', {
     skeleton: [{ code: { content: '{{LONG_TEXT_999}}' } }],
-    longText: { '5': '其他文本' },
+    longText: { texts: { '5': '其他文本' }, runs: {} },
   });
   const script = path.resolve('script/screenshot_trans.mjs');
   const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
@@ -792,4 +791,47 @@ test('screenshot_trans: {{CODE_k}} 字符串引用整体物化为 {lang, content
     assert.equal(resolved[4].code, '{{CODE_9}}', '未定义 k 保留字面');
     assert.equal(resolved[5].code.content, 'const x = "{{CODE_1}} inline"', '中段子串不替换（精确匹配语义）');
   } finally { fs.rmSync(tmpRoot, { recursive: true, force: true }); }
+});
+
+test('screenshot_trans: runs 段经 inline2md 转 markdown 合并还原 + runsResolved + 步骤 9 端到端', async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-st-runs-'));
+  const url = 'https://example.com/run-restore';
+  const dir = path.join(tmpRoot, urlToDirName(url));
+  fs.mkdirSync(path.join(dir, 'assets'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '1_snapshot.html'),
+    '<!DOCTYPE html><html><body><h1 data-idx="1">t</h1><p data-idx="2">body</p></body></html>');
+  fs.writeFileSync(path.join(dir, '2_long_text.json'), JSON.stringify({
+    texts: { '2': '散文本原文' },
+    runs: {
+      '1': '这是<strong>关键</strong>：见<a href="https://example.com/d">文档</a>，命令 <code>u2m --run</code>。',
+      '3': '公式 <math><annotation encoding="application/x-tex">x^2</annotation></math> 成立。',
+    },
+  }));
+  fs.writeFileSync(path.join(dir, '3_key_ids.json'),
+    JSON.stringify({ titleId: 1, descriptionIds: [], paragraphIds: [2], dumpIds: [] }));
+  fs.writeFileSync(path.join(dir, '7_skeleton.json'), JSON.stringify([
+    { p: '{{LONG_TEXT_1}}' },
+    { p: '{{LONG_TEXT_2}}' },
+    { p: '{{LONG_TEXT_3}}' },
+  ], null, 2));
+  try {
+    const r = await runScript(process.execPath, [path.resolve('script/screenshot_trans.mjs'), '--url', url],
+      { env: { U2M_WORKING_ROOT: tmpRoot }, timeoutMs: 60000 });
+    assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+    const out = JSON.parse(r.stdout);
+    assert.equal(out.runsResolved, 2);
+    const resolved = JSON.parse(fs.readFileSync(out.resolvedSkeleton, 'utf8'));
+    assert.equal(resolved[0].p, '这是**关键**：见[文档](https://example.com/d)，命令 `u2m --run`。');
+    assert.equal(resolved[1].p, '散文本原文');
+    assert.equal(resolved[2].p, '公式 $x^2$ 成立。');
+    // 步骤 8→9 端到端（spec §7）：p 值透传落盘，行内语法原样到达 markdown
+    const r9 = await runScript(process.execPath, [path.resolve('script/render_skeleton.mjs'), '--url', url],
+      { env: { U2M_WORKING_ROOT: tmpRoot }, timeoutMs: 60000 });
+    assert.equal(r9.code, 0, `stderr: ${r9.stderr}`);
+    const md = fs.readFileSync(path.join(dir, '9_markdown.md'), 'utf8');
+    assert.ok(md.includes('这是**关键**：见[文档](https://example.com/d)，命令 `u2m --run`。'), md);
+    assert.ok(md.includes('公式 $x^2$ 成立。'), md);
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
 });
