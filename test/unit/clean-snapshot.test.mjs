@@ -1680,3 +1680,24 @@ test('run 检测边界：table/pre 内不 run 折叠（散文本照旧）；阈�
     assert.ok(styled.includes('短文本不折叠'));
   } finally { cleanup(); }
 });
+
+test('run 序列化：span 样式归一——inline/class 两驱动 + 多信号固定嵌套 strong>em>del', async () => {
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title>
+<style>.b{font-weight:700}.i{font-style:italic}.s{text-decoration:line-through}</style></head>
+<body>
+  <p data-idx="1">前缀<span style="font-weight:700">样式驱动加粗</span>中间<span class="b">class 驱动加粗</span>后缀，继续补足十六个汉字的长度要求。</p>
+  <p data-idx="2">无信号 span<span>透明丢弃</span>保留文本，继续补足十六个汉字的长度要求哦。</p>
+  <p data-idx="3">三信号<span class="b i s" style="font-weight:700">叠加</span>验证嵌套顺序，继续补足十六个汉字的长度要求。</p>
+</body></html>`;
+  const { out, cleanup } = await runClean(snapshot, 'run-span-norm');
+  try {
+    const lt = JSON.parse(fs.readFileSync(out.longText, 'utf8'));
+    const runs = Object.values(lt.runs).join('\n');
+    assert.ok(runs.includes('<strong>样式驱动加粗</strong>'), `inline style 驱动: ${runs}`);
+    assert.ok(runs.includes('<strong>class 驱动加粗</strong>'), `class 驱动（<style> 规则）: ${runs}`);
+    assert.ok(!/<span>/.test(runs) && runs.includes('透明丢弃'), '无信号 span 透明、文本保留');
+    assert.ok(runs.includes('<strong><em><del>叠加</del></em></strong>'),
+      '多信号固定嵌套 del 最内 → em → strong 最外');
+  } finally { cleanup(); }
+});
