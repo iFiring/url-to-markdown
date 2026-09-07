@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>会员中心</title></head>
+<body>
+<main>
+<h1>会员中心</h1>
+<p>中性正文页面：标题、URL、正文都不含任何检测关键词，也没有可见的登录入口。GATE_PURE_PARA。</p>
+<!-- 隐藏密码框：password 信号遍历命中（iframe 登录表单收起形态的同款路径），
+     但 spa 等待窗的「可见密码框」不命中——构造纯强信号零弱票页面 -->
+<form style="display:none"><input type="password" name="pwd"><button type="submit">提交</button></form>
+</main>
+</body>
+</html>

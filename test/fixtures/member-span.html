@@ -8,5 +8,10 @@
 <p>未登录可试读的部分正文。SPAN_PREVIEW_PARA。</p>
 <p>文中提及的<span>注册</span>一词没有指针光标，不是交互入口，不应触发登录信号。SPAN_NOTE。</p>
 </main>
+<script>
+// 极客时间形态：span 登录入口，点击跳转独立登录页（探测的「跳转确认」路径）
+document.getElementById('login-entry').addEventListener('click', () => { location.href = '/login-wall.html'; });
+document.getElementById('reg-entry').addEventListener('click', () => { location.href = '/login-wall.html'; });
+</script>
 </body>
 </html>

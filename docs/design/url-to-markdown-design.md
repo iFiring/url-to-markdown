@@ -33,7 +33,7 @@ script/
     contract.mjs             # 输出契约：单行 JSON→stdout、日志→stderr、退出码
     env.mjs                  # URL→工作目录名、路径解析
     browser.mjs              # Playwright 上下文 + storageState 注入 + 媒体拦截
-    detector.mjs             # 登录态七信号两级制检测（移植 .temp/is_login_page.py；强信号单票 + 弱信号 ≥2）
+    detector.mjs             # 登录态六信号两级制检测（2026-09-07 v2：强信号 = 密码框/登录入口点击探测确认，弱信号 ≥2 合议）
     placeholder.mjs          # 特殊元素类型判定/分派、占位符协议、manifest 生成
   pylib/                     # Python 对应模块
     env.py / browser.py / placeholder.py
@@ -65,7 +65,7 @@ Agent 按 stdout JSON 的 `status` 字段分支决策。
 working/
   cookies/
     storage_state.json         # 单一全局登录态（cookie + localStorage 同文件）
-    login_decisions.json       # 强信号裁决记忆 {hostname: {信号: "login"|"skip"}}
+    login_decisions_skips.json # 跳过记忆 {hostname: [信号,...]}（仅弱信号入档；旧 login_decisions.json 已废弃）
   <url-dir>/                   # URL 特殊字符→下划线
     node_workflow/
       assets/
@@ -131,11 +131,11 @@ render_markdown.mjs <url-dir> → 双 Tab 渲染两份 result.md，人工选择
 CLI：`login_url.mjs <url> [--timeout 300000] [--port 0]`（port 0 = 随机可用端口，实际地址回显 stderr 并自动打开）
 
 1. 无头 + 注入全局 storageState 打开 URL（`domcontentloaded` 完成导航 + networkidle 尽力等待封顶 8s，等不到不失败——networkidle 作 goto 门条件会被长连接/轮询站点确定性卡死）
-2. 七信号两级制检测（`lib/detector.mjs`）：密码框 / URL 特征 / 内容关键词 / 认证 cookie 反查 / 重定向 / SPA 等待 / 登录注册按钮（主 frame 元素级精确匹配——交互元素看子树文本，Vue/React 站的 span/div 入口看自身文本 + cursor:pointer；检测时刻一次 + 未定论时 spa 等待窗内轮询防迟水合扑空；排除「退出登录」）。**`password`/`loginButton` 为强信号单独成立；其余 ≥2 项命中判定需登录**；遍历全部 frames 检测 iframe 内登录表单；被用户裁决过 skip 的强信号按 `(hostname, 信号)` 从 `working/cookies/login_decisions.json` 降级——在该域名视为不存在（不单票、不计票）
+2. 六信号两级制检测（`lib/detector.mjs`，2026-09-07 v2 修订——原七信号中「认证 cookie 反查」已删除：现代站点给匿名会话也种 session/csrf 类 cookie，假阴性/恒真两头无区分度）：密码框 / URL 特征 / 内容关键词 / 重定向 / SPA 等待 / 登录入口点击探测。登录入口候选（主 frame 元素级精确匹配——交互元素看子树文本，Vue/React 站的 span/div 入口看自身文本 + cursor:pointer；未定论时 spa 等待窗内轮询防迟水合扑空；排除「退出登录」；≤3 个、每候选至多点击一次）先记 `loginButton` 弱信号，再**点击探测**：原生 el.click() 后 ≤1.5s 内出现 URL 跳转或全屏登录弹窗（fixed/absolute 或 role=dialog、≥50% 视口、内含表单+按钮、排除含 main/h1 的布局容器）→ `loginConfirmed` 强信号；无反应/小 dropdown → 仅保留 loginButton 一票。探测只在判定未定论且未被跳过记忆豁免时执行（password 定论零扰动）。**`password`/`loginConfirmed` 为强信号单独成立；弱信号 ≥2 项命中判定需登录**；遍历全部 frames 检测 iframe 内登录表单。跳过记忆 `working/cookies/login_decisions_skips.json`（`{hostname: [弱信号名,...]}`）：命中信号全部在记忆内才整体豁免（dismissed，emit `loginSkippedByMemory` 通报），有新信号时记忆内信号照常计票；强信号永不入档（跳过=一次性）
 3. 已登录 → 刷新合并 storageState（续期）→ `{"status":"logged_in"}` 退出 0
 4. 未登录 → Screencast 登录模式（复用 `.temp/login.mjs` 架构）：
    - 无头 chromium + CDP Screencast → 本地 HTTP+WS viewer 页面（自动 `open` 打开用户默认浏览器），用户在 viewer 中以鼠标/键盘/滚轮操控远程页面完成登录
-   - viewer 提供 **"✅ 登录完成"** 与 **"⏭️ 跳过登录"** 两个按钮兼作强信号用户确认（工具栏显示触发原因）：登录完成 → 脚本重新检测：通过 → 保存合并 storageState、触发的强信号按域名记 `login` → `{"status":"login_done"}` 退出 0；不通过 → viewer 提示"仍未检测到登录态"，继续等待；跳过登录 → 刷新合并 storageState（recheck 永败场景下不丢已登录会话）+ 强信号记 `skip`（该域名该信号此后视为不存在）→ 直接继续管线
+   - viewer 提供 **"✅ 登录完成"** 与 **"⏭️ 跳过登录"** 两个按钮（工具栏显示判定详情：强信号形态 + 票数 n/6 + 命中清单含记忆内标注；跳过按钮带确认框，文案如实说明将记住哪些弱信号）：登录完成 → 脚本重新检测：通过 → 保存合并 storageState（不写任何记忆）→ 继续管线；不通过 → viewer 提示"仍未检测到登录态"，继续等待；跳过登录 → 确认框确认 → 刷新合并 storageState（recheck 永败场景下不丢已登录会话）+ 本次命中弱信号入档 + **探测状态还原**（gotoSettled 原 URL——快照抓干净页而非探测点开的弹窗/登录页）→ 直接继续管线。viewer 回调一律 settled 守卫（finish 关 viewer 触发 WS close → 无守卫则 recheck 探测点击重新点开弹窗污染快照）
    - 整体超时 → `{"status":"timeout"}` 退出 1
    - 用户关闭 viewer（WS 断开）→ 复检一次，未登录则 `{"status":"aborted"}` 退出 1
 

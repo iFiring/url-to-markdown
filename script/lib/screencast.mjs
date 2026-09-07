@@ -12,7 +12,13 @@ export function openViewerCommand(platform, url) {
   return { cmd: 'xdg-open', args: [url] };
 }
 
-export function loginViewerHtml({ width = 1280, height = 800, reason = '' } = {}) {
+/** JS 字符串安全注入：< 转义防 </script> 提前闭合标签（JSON.stringify 不处理 HTML 上下文）。 */
+const safeJsString = (s) => JSON.stringify(String(s)).replace(/</g, '\\u003c');
+
+const DEFAULT_SKIP_CONFIRM = '确认跳过登录？将不打开登录流程、直接继续转换本次页面。';
+
+export function loginViewerHtml({ width = 1280, height = 800, reason = '', skipConfirmText = '' } = {}) {
+  const skipConfirm = safeJsString(skipConfirmText || DEFAULT_SKIP_CONFIRM);
   return `<!doctype html>
 <html lang="zh">
 <head>
@@ -88,7 +94,10 @@ ${reason ? `<p class="info reason">📍 ${escapeHtml(reason)}。若无需登录�
     send({type:'keyup', key: e.key, code: e.code, keyCode: e.keyCode}); } });
   document.getElementById('done').onclick = () => { send({type:'login_done'});
     statusEl.textContent = '检测登录态中…'; statusEl.className = ''; };
-  document.getElementById('skip').onclick = () => { send({type:'skip_login'});
+  const SKIP_CONFIRM = ${skipConfirm};
+  document.getElementById('skip').onclick = () => {
+    if (!window.confirm(SKIP_CONFIRM)) return; // 确认框门控：跳过可能写入持久记忆，误点不可接受
+    send({type:'skip_login'});
     statusEl.textContent = '跳过登录，继续转换…'; statusEl.className = ''; };
 </script>
 </body>
@@ -108,13 +117,13 @@ async function relayInput(cdp, msg) {
 
 /** 起 HTTP(viewer 页)+WS 服务，把 page 的 CDP Screencast 转发给 WS 客户端并转发输入。 */
 export async function startScreencastViewer({
-  page, port = 0, width = 1280, height = 800, quality = 80, reason = '',
+  page, port = 0, width = 1280, height = 800, quality = 80, reason = '', skipConfirmText = '',
   onLoginDone, onSkipLogin, onClientClose, log = () => {},
 }) {
   const server = http.createServer((req, res) => {
     if (req.url === '/' || req.url === '') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-      res.end(loginViewerHtml({ width, height, reason }));
+      res.end(loginViewerHtml({ width, height, reason, skipConfirmText }));
     } else { res.writeHead(404); res.end(); }
   });
   const wss = new WebSocketServer({ server });

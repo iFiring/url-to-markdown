@@ -53,7 +53,7 @@ export async function runRedirectGate(page, url, opts = {}) {
   const detect = await snapshotRedirectDetect(page, { log });
   if (!detect.redirect) return { redirected: false, to: null };
 
-  await snapshotLogin(page, detect.redirect.url, { timeout, storageStatePath: ssPath, log });
+  const login = await snapshotLogin(page, detect.redirect.url, { timeout, storageStatePath: ssPath, log });
 
   // 退化守卫：目标页独立打开渲染不出内容（如 window.top 检测站）→ 回原页走现状路径
   const targetText = await measureTextLen(page);
@@ -61,9 +61,9 @@ export async function runRedirectGate(page, url, opts = {}) {
     log(`重定向目标正文退化（${targetText} < ${Math.round(DEGENERATE_RATIO * detect.redirect.frameText)}），回退 ${url}`);
     await gotoSettled(page, url, log);
     await snapshotScroll(page, { scrollRounds, log });
-    return { redirected: false, to: null };
+    return { redirected: false, to: null, loginSkippedByMemory: login?.loginSkippedByMemory };
   }
 
   await snapshotScroll(page, { scrollRounds, log });
-  return { redirected: true, to: detect.redirect.url };
+  return { redirected: true, to: detect.redirect.url, loginSkippedByMemory: login?.loginSkippedByMemory };
 }
