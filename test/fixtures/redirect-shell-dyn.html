@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>动态壳页</title></head>
+<body>
+<div id="shell">Loading…</div>
+<iframe id="frame" width="800" height="600"></iframe>
+<script>
+  const to = new URLSearchParams(location.search).get('to');
+  if (to) document.getElementById('frame').src = to;
+</script>
+</body>
+</html>

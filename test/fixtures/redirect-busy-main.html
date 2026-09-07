@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>主文档充实页</title></head>
+<body>
+<main>
+  <h1>主文档自身内容充足</h1>
+  <p id="fill"></p>
+</main>
+<iframe src="/iframe-body.html" width="800" height="600"></iframe>
+<iframe srcdoc="<p>srcdoc 内容</p>" width="800" height="600"></iframe>
+<script>document.getElementById('fill').textContent = '主文档充实页的正文句子，用于撑起主文档文本量。'.repeat(40);</script>
+</body>
+</html>
