@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>外层内容页</title></head>
+<body>
+<main>
+  <h1>外层内容页标题</h1>
+  <p id="fill"></p>
+</main>
+<iframe src="/redirect-content.html" width="800" height="600"></iframe>
+<script>document.getElementById('fill').textContent = '外层内容页正文句子，撑起跳转所需的文本量。'.repeat(30);</script>
+</body>
+</html>

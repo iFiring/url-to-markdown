@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>仅嵌入可见</title></head>
+<body>
+<div id="app">
+  <h1>嵌入态内容标题</h1>
+  <p id="fill"></p>
+</div>
+<script>
+  document.getElementById('fill').textContent = '嵌入态正文句子，撑起检测所需的文本量。'.repeat(60);
+  if (window.self === window.top) document.getElementById('app').style.display = 'none';
+</script>
+</body>
+</html>
