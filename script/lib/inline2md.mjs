@@ -55,11 +55,40 @@ function convertNodes(nodes, state) {
   return out;
 }
 
+// 强调边界退化（spec §5.4）：内容首/尾为空白或 */_ 时 GFM 强调不闭合，
+// 退化为原生 HTML 标签透传，保真优先。md 形态仅在边界合法时使用。
+const EMPH_DEGENERATE = /^[\s*_]|[\s*_]$/;
+function wrapEmphasis(content, openHtml, closeHtml, md) {
+  if (EMPH_DEGENERATE.test(content)) return openHtml + content + closeHtml;
+  return md + content + md;
+}
+
 function convertNode(node, state) {
   if (node.nodeType === 3) return escapeText(node.textContent, state);
   if (node.nodeType !== 1) return '';
-  // 元素映射在后续任务增量补齐；未映射标签一律解包（只递归子节点）
-  return convertNodes(node.childNodes, state);
+  const inner = () => convertNodes(node.childNodes, state);
+  switch (node.tagName) {
+    case 'STRONG': case 'B':
+      return wrapEmphasis(inner(), '<strong>', '</strong>', '**');
+    case 'EM': case 'I':
+      return wrapEmphasis(inner(), '<em>', '</em>', '*');
+    case 'DEL': case 'S':
+      return wrapEmphasis(inner(), '<del>', '</del>', '~~');
+    case 'A': {
+      const href = node.getAttribute('href') || '';
+      const text = inner();
+      if (!href) return text;                       // canonical 已解包；防御
+      // href 含 ) / 空白时角括号包裹（CommonMark 链接目标语法），防截断
+      const dest = /[)\s]/.test(href) ? `<${href}>` : href;
+      return `[${text}](${dest})`;
+    }
+    case 'BR':
+      // GFM 硬换行（比两空格尾随式抗工具链剥空白）；换行后行首中断符要转义
+      state.lineStart = true;
+      return '\\' + '\n';
+    default:
+      return inner();                                // 未知标签解包（Task 3 增补 code/math/同族）
+  }
 }
 
 // canonical 片段 → markdown。解析失败抛错，调用方（screenshot_trans）
