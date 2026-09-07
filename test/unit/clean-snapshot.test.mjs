@@ -1727,3 +1727,40 @@ test('run 折叠：math 有源整段折叠（极简形态）+ display 判定 + �
     assert.ok(styled.includes('<mi>x</mi>'), '无源 math 原树保留');
   } finally { cleanup(); }
 });
+
+test('run 孪生守卫：hidden 祖先 / K10 拆包 / K11 吞没——clean LT 后缀 ⊆ styled', async () => {
+  const longZh = '这是一段超过十六个汉字的长文本用于验证折叠行为。';
+  const snapshot = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
+<body>
+  <div data-idx="1" hidden><p data-idx="2">${longZh}<strong>隐藏 FAQ 答案</strong>继续长度。</p></div>
+  <div data-idx="3"><img data-idx="30" src="x.png" alt="x"><span data-idx="4" style="color:red">${longZh}拆包场景</span></div>
+  <div class="chart" data-idx="5">
+    <div data-idx="6">${longZh}</div><div data-idx="7">step two</div>
+    <div data-idx="8">step three</div><div data-idx="9">step four</div>
+    <div data-idx="10">step five</div><div data-idx="11">step six</div>
+    <div data-idx="12">step seven</div>
+  </div>
+</body></html>`;
+  const { cleaned, styled, out, cleanup } = await runClean(snapshot, 'run-twin');
+  try {
+    // hidden 祖先：styled 照折（编号进恢复清单——FAQ 还原路径），clean 被 K5
+    // 吞没（HIDDEN_TAG 内无 LT）
+    assert.ok(/<div data-idx="1" hidden(?:="")?>\{\{HIDDEN_TAG\|/.test(cleaned), 'clean：hidden 块 K5 折叠');
+    const hiddenBlock = styled.match(/<div data-idx="1" hidden(?:="")?>[\s\S]*?<\/div>/)[0];
+    assert.ok(/\{\{LONG_TEXT_1\|/.test(hiddenBlock), 'styled：hidden 内 run 照折（带编号）');
+    // K10：run 根是仅 data-idx 的 span（父容器因 img 不纯、span 极大）——
+    // styled 保留 span 整段 run；clean 趟 K2 剥 style 后 K10 拆包、文本上提
+    // 为父容器的散文本节点再散折叠——两趟粒度不同、规模后缀保持一致
+    assert.match(styled, /<span data-idx="4"[^>]*>\{\{LONG_TEXT_2\|\d+_chars\}\}<\/span>/, 'styled：span 整段 run 占位');
+    assert.ok(!cleaned.includes('data-idx="4"') && cleaned.includes('{{LONG_TEXT|'), 'clean：span 拆包后散文本占位');
+    // K11：chart 模块（div 树 >6）整棵 VIEW_TEXT——模块内的 run 记录随折吞没
+    assert.match(cleaned, /<div class="chart" data-idx="5">\{\{VIEW_TEXT\|\d+_chars\}\}<\/div>/);
+    // 孪生守卫：clean LT 后缀集合 ⊆ styled（多场景合并断言）
+    const suf = (h) => (h.match(/\{\{LONG_TEXT(?:_\d+)?\|(\d+_[a-z]+)\}\}/g) || [])
+      .map((s) => s.replace(/^.*\|/, '')).sort();
+    const cs = suf(cleaned), ss = suf(styled);
+    assert.ok(cs.every((v) => ss.includes(v)), `clean LT 后缀 ⊆ styled: clean=${cs} styled=${ss}`);
+    assert.ok(out.longTextCount.runs >= 1 && out.longTextCount.total >= out.longTextCount.runs);
+  } finally { cleanup(); }
+});
