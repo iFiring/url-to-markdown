@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
-# init.sh —— 步骤 0：初始化执行环境与核心参数。
-# 用法: bash init.sh --url <url>
-# stdout 有且仅有一行 JSON（含 skill-root / url-name / url-working-path
-# 三个核心参数）；日志/警告走 stderr。
-# url-name 与步骤 1 同一生成逻辑：lib/env.mjs 的 urlToDirName（唯一事实源，
-# 经 node 调用，避免两套实现漂移）。
+# init.sh —— 步骤 0：初始化执行环境（node/pnpm/chromium/字体）。纯环境自检，
+# 不产出任何 URL 相关参数（skill-root/url-name/url-working-path 由步骤 1 的
+# snapshot.mjs 输出）。stdout 有且仅有一行 JSON；日志/警告走 stderr。
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -13,17 +10,10 @@ warn() { log "⚠ 警告（不阻断）: $*"; }
 die()  { printf '{"status":"error","reason":"%s"}\n' "$1"; exit 1; }
 die_usage() { printf '{"status":"usage_error","reason":"%s"}\n' "$1"; exit 2; }
 
-# ── 0. 参数：--url 必填 ─────────────────────────────────────────
-URL=""
-while [ $# -gt 0 ]; do
-  case "$1" in
-    --url)
-      [ $# -ge 2 ] || die_usage "--url 需要一个值"
-      URL="$2"; shift 2 ;;
-    *) die_usage "未知参数: $1（用法: init.sh --url <url>）" ;;
-  esac
-done
-[ -n "$URL" ] || die_usage "缺少必填参数 --url <url>"
+# ── 0. 参数：不接受任何参数 ─────────────────────────────────────
+if [ $# -gt 0 ]; then
+  die_usage "未知参数: $1（用法: init.sh，无参数）"
+fi
 
 # ── 1. Node ≥ 20 ────────────────────────────────────────────
 node_major() { node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0; }
@@ -139,17 +129,6 @@ if [ "$(uname -s)" = "Linux" ] && [ -z "${FONTCONFIG_FILE:-}" ] && [ -z "${FONTC
   fi
 fi
 
-# ── 5. 核心参数：url-name / url-working-path ─────────────────
-# 命名规则唯一事实源：lib/env.mjs urlToDirName（与步骤 1 的目录派生一致）
-URL_NAME="$(U2M_ROOT="$ROOT" node --input-type=module -e '
-import { pathToFileURL } from "node:url";
-const m = await import(pathToFileURL(`${process.env.U2M_ROOT}/script/lib/env.mjs`).href);
-console.log(m.urlToDirName(process.argv[1]));
-' "$URL")" || die "url-name 推导失败"
-WORKING_ROOT="${U2M_WORKING_ROOT:-$ROOT/working}"
-URL_WORKING_PATH="$WORKING_ROOT/$URL_NAME"
-mkdir -p "$URL_WORKING_PATH" || die "无法创建工作目录: $URL_WORKING_PATH"
-
 # ── 输出 ─────────────────────────────────────────────────────
-printf '{"status":"ok","skill-root":"%s","url-name":"%s","url-working-path":"%s","node":"%s","pm":"%s","chromium":%s}\n' \
-  "$ROOT" "$URL_NAME" "$URL_WORKING_PATH" "$NODE_VER" "$PM" "$CHROMIUM_OK"
+printf '{"status":"ok","skill-root":"%s","node":"%s","pm":"%s","chromium":%s}\n' \
+  "$ROOT" "$NODE_VER" "$PM" "$CHROMIUM_OK"

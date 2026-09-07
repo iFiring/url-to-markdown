@@ -9,9 +9,6 @@ import { runScript } from '../helpers/run-script.mjs';
 
 const HAS_PNPM = spawnSync('pnpm', ['--version']).status === 0;
 
-const URL = 'https://example.com/a?b=1';
-// 与 lib/env.mjs urlToDirName 一致：剥 http(s):// 前缀，非 [A-Za-z0-9.-] → _
-const URL_NAME = 'example.com_a_b_1';
 let tmpRoot;
 
 before(() => {
@@ -22,8 +19,8 @@ after(() => {
   if (tmpRoot) fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('init.sh: --url 输出 ok JSON（核心参数 + 环境信息）并创建工作目录', { timeout: 300000 }, async () => {
-  const r = await runScript('bash', [path.resolve('script/init.sh'), '--url', URL], {
+test('init.sh: 无参数输出 ok JSON（环境信息）且不创建工作目录', { timeout: 300000 }, async () => {
+  const r = await runScript('bash', [path.resolve('script/init.sh')], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 280000,
   });
@@ -32,19 +29,17 @@ test('init.sh: --url 输出 ok JSON（核心参数 + 环境信息）并创建工
   assert.equal(lines.length, 1, 'stdout 恰一行');
   const json = JSON.parse(lines[0]);
   assert.equal(json.status, 'ok');
-  // 核心参数
   assert.equal(json['skill-root'], path.resolve('.'));
-  assert.equal(json['url-name'], URL_NAME, 'url-name 须与步骤 1 的目录派生逻辑一致');
-  assert.equal(json['url-working-path'], path.join(tmpRoot, URL_NAME));
-  assert.ok(fs.existsSync(json['url-working-path']), '步骤 0 应创建工作目录');
-  // 环境信息
+  assert.ok(!('url-name' in json), 'url-name 改由步骤 1 产出');
+  assert.ok(!('url-working-path' in json), 'url-working-path 改由步骤 1 产出');
   assert.ok(json.node);
   assert.ok(['pnpm', 'yarn', 'npm'].includes(json.pm));
   assert.equal(json.chromium, true);
+  assert.deepEqual(fs.readdirSync(tmpRoot), [], 'init 不再创建任何 URL 目录');
 });
 
 test('init.sh: 幂等——二次运行依旧 ok', { timeout: 300000 }, async () => {
-  const r = await runScript('bash', [path.resolve('script/init.sh'), '--url', URL], {
+  const r = await runScript('bash', [path.resolve('script/init.sh')], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 280000,
   });
@@ -71,7 +66,7 @@ test('init.sh: node_modules 由异版 pnpm 生成时非交互自愈（无 TTY �
     );
     fs.writeFileSync(path.join(projRoot, 'node_modules/.modules.yaml'), tampered);
     workRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-init-work-'));
-    const r = await runScript('bash', [path.join(projRoot, 'script/init.sh'), '--url', URL], {
+    const r = await runScript('bash', [path.join(projRoot, 'script/init.sh')], {
       env: { U2M_WORKING_ROOT: workRoot },
       timeoutMs: 280000,
     });
@@ -84,8 +79,8 @@ test('init.sh: node_modules 由异版 pnpm 生成时非交互自愈（无 TTY �
   }
 });
 
-test('init.sh: 缺 --url 时输出 usage_error 退出 2', async () => {
-  const r = await runScript('bash', [path.resolve('script/init.sh')]);
+test('init.sh: 传任何参数（含 --url）输出 usage_error 退出 2', async () => {
+  const r = await runScript('bash', [path.resolve('script/init.sh'), '--url', 'https://example.com/']);
   assert.equal(r.code, 2);
   assert.equal(JSON.parse(r.stdout).status, 'usage_error');
 });
@@ -136,7 +131,7 @@ test('init.sh(Linux): fontconfig 配置/字体缺失时自动修复后 ok', { ti
   try {
     const { aptLog } = makeFontShims(path.join(projState, 'bin'), 'fix');
     workRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-init-work-'));
-    const r = await runScript('bash', [path.resolve('script/init.sh'), '--url', URL], {
+    const r = await runScript('bash', [path.resolve('script/init.sh')], {
       env: fontEnv(path.join(projState, 'bin'), projState, workRoot),
       timeoutMs: 280000,
     });
@@ -162,7 +157,7 @@ test('init.sh(Linux): 中西文字体齐全时不重复安装', { timeout: 30000
     const binDir = path.join(projState, 'bin');
     const { aptLog } = makeFontShims(binDir, 'observe', { zh: true });
     workRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-init-work-'));
-    const r = await runScript('bash', [path.resolve('script/init.sh'), '--url', URL], {
+    const r = await runScript('bash', [path.resolve('script/init.sh')], {
       env: fontEnv(binDir, projState, workRoot),
       timeoutMs: 280000,
     });
@@ -187,7 +182,7 @@ test('init.sh(Linux): 无 fc-list 时按文件名判中西文齐全、不重装'
     fs.writeFileSync(path.join(projState, 'fonts', 'LiberationSans-Regular.ttf'), '');
     fs.writeFileSync(path.join(projState, 'fonts', 'NotoSansCJKsc-Regular.otf'), '');
     workRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-init-work-'));
-    const r = await runScript('bash', [path.resolve('script/init.sh'), '--url', URL], {
+    const r = await runScript('bash', [path.resolve('script/init.sh')], {
       env: fontEnv(binDir, projState, workRoot),
       timeoutMs: 280000,
     });
@@ -211,7 +206,7 @@ test('init.sh(Linux): 西文健康但缺 CJK 时补装；补装失败仅警告�
     fs.mkdirSync(path.join(projState, 'fonts'));
     fs.writeFileSync(path.join(projState, 'fonts', 'Dummy.ttf'), '');
     workRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-init-work-'));
-    const r = await runScript('bash', [path.resolve('script/init.sh'), '--url', URL], {
+    const r = await runScript('bash', [path.resolve('script/init.sh')], {
       env: fontEnv(binDir, projState, workRoot),
       timeoutMs: 280000,
     });
@@ -231,7 +226,7 @@ test('init.sh(Linux): 修复失败时输出 error 并退出 1', { timeout: 30000
   try {
     makeFontShims(path.join(projState, 'bin'), 'fail');
     workRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-init-work-'));
-    const r = await runScript('bash', [path.resolve('script/init.sh'), '--url', URL], {
+    const r = await runScript('bash', [path.resolve('script/init.sh')], {
       env: fontEnv(path.join(projState, 'bin'), projState, workRoot),
       timeoutMs: 280000,
     });
