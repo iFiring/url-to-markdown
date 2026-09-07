@@ -18,10 +18,10 @@ description: "将 URL（网页）的主体内容转换成 Markdown；在需要�
 
 ## 核心参数
 
-- `<url>`：指用户给定的完整 URL；步骤 0 的必填参数
-- `<skill-root>`：本技能 SKILL.md 所在目录（**绝对路径**）；由步骤 0 生成
-- `<url-name>`：由步骤 0 通过 `replace(/[^A-Za-z0-9.-]/g, '_')` 生成（剥去 `http(s)://` 前缀）
-- `<url-working-path>`：当前 URL 的专属目录 `<skill-root>/working/<url-name>`；由步骤 0 生成；步骤 0 之后的产物都存放在此目录下
+- `<url>`：指用户给定的完整 URL；所有 CLI 的必填参数
+- `<skill-root>`：本技能 SKILL.md 所在目录（**绝对路径**）；由步骤 1 输出（规范化）
+- `<url-name>`：当前 URL 的专属目录名，由步骤 1 输出；`replace(/[^A-Za-z0-9.-]/g, '_')` 生成（剥去 `http(s)://` 前缀）。**内嵌占优内容 iframe 的页面为特殊名 `redirected_<原名>`**（管线已自动重定向到 frame 真实 URL 转换）
+- `<url-working-path>`：当前 URL 的专属目录 `<skill-root>/working/<url-name>`；由步骤 1 输出；其后产物都存放在此目录下
 
 本技能目录结构：
 
@@ -34,6 +34,7 @@ package.json
 working/                 # 工作目录
   cookies/               # 所有访问过 URL 的 cookie 公共存储目录；由步骤 1 生成
   <url-name>/            # 当前 URL 的专属目录 `<skill-root>/working/<url-name>`
+  redirected_<url-name>/ # iframe 重定向页的专属目录（内含 redirect_to.yaml 标记）
     assets/
       images/
       trans/
@@ -44,25 +45,20 @@ working/                 # 工作目录
 
 ## 操作手册（步骤 0-9）
 
-### 步骤 0 · 初始化执行环境和参数
+### 步骤 0 · 初始化执行环境
 
 ```bash
-bash <skill-root>/script/init.sh --url <url>
+bash <skill-root>/script/init.sh
 ```
 
 | stdout.status | 动作 |
 |---|---|
-| `ok` | 拿到 `stdout`的 `skill-root` / `url-name` / `<url-working-path>`，作为**核心参数**，进入步骤 1 |
+| `ok` | 环境就绪，进入步骤 1 |
 | `error` | **终止全部流程**，把 `stdout.reason` 反馈给用户 |
 
-**stdout.status=ok 结构示例**
+纯环境自检（node/pnpm/chromium/字体），不产出 URL 相关参数。**stdout.status=ok 结构示例**
 ```json
-{
-  "status": "ok",
-  "skill-root": "/root/path/to/skill",
-  "url-name": "_name_",
-  "url-working-path": "/root/path/to/skill/working/_name_"
-}
+{ "status": "ok", "skill-root": "/root/path/to/skill", "node": "20.x", "pm": "pnpm", "chromium": true }
 ```
 
 ### 步骤 1 · 快照下载
@@ -71,16 +67,29 @@ bash <skill-root>/script/init.sh --url <url>
 node <skill-root>/script/snapshot.mjs --url <url> [--timeout 300000] [--scroll-rounds 60]
 ```
 
-单条命令依次完成登录检测（需要时自动打开浏览器弹出 Screencast viewer 供人工登录）、渐进滚动、虚拟列表检测、全保真快照抓取。
+单条命令依次完成登录检测（需要时自动打开浏览器弹出 Screencast viewer 供人工登录）、渐进滚动、**重定向门**（占优内容 iframe → 自动跳转 frame 真实 URL 续跑）、虚拟列表检测、全保真快照抓取。
 
 产物：`<url-working-path>/1_snapshot.html`（产物生成后，不要擅自读取内容）
 
 | stdout.status | 动作 |
 |---|---|
-| `ok` | 把 stdout 反馈给用户，进入步骤 2 |
+| `ok` | 把 stdout 反馈给用户，进入步骤 2。`redirect` 字段仅信息通报（管线内部已消化），步骤 2 起仍以原始 `<url>` 调用各脚本；`<url-name>`/`<url-working-path>` 以本行 stdout 为准（重定向页是特殊名） |
 | `error`（reason=`virtual_list`） | 告知用户"该页面为虚拟列表，仅渲染部分内容，无法全文转化为 Markdown"，**终止** |
 | `error`（reason=`login_timeout`/`login_aborted`） | 询问用户是否重试登录；重试则再次运行本命令 |
 | `error`（其他） | 把 `stdout.reason` 反馈给用户并终止 |
+
+**stdout.status=ok 结构示例**
+```json
+{
+  "status": "ok",
+  "snapshot": "/path/1_snapshot.html",
+  "elements": 123,
+  "skill-root": "/root/path/to/skill",
+  "url-name": "redirected_mmh1.top_article__ai-article_skill",
+  "url-working-path": "/root/path/to/skill/working/redirected_mmh1.top_article__ai-article_skill",
+  "redirect": { "to": "https://mmh1.top/article/skill.html", "urlName": "redirected_mmh1.top_article__ai-article_skill" }
+}
+```
 
 ### 步骤 2 · 用脚本清洗结构
 
@@ -111,7 +120,7 @@ node <skill-root>/script/clean_snapshot.mjs --url <url>
 
 - 必须严格按照手册 `<skill-root>/references/analyze_html_guide.md` 的要求完成任务
 - 当前任务期间你只能使用 "Read/Write" 工具（**完整读取** `2_clean_snapshot.html`，写入 `3_key_ids.json`），其他文件和你完全无关
-- 当前工作路径(<url-working-path>): `/path/to/XXX`
+- 当前工作路径(<url-working-path>): `/path/to/XXX`（取步骤 1 stdout 的 `url-working-path`；重定向页为 `redirected_` 特殊名目录）
 - 不要总结报告，只需产出 `3_key_ids.json` 即可
 
 #### 后续
@@ -165,7 +174,7 @@ node <skill-root>/script/extract_article.mjs --url <url>
 
 - 必须严格按照手册 `<skill-root>/references/markdown_skeleton_guide.md` 的要求完成任务
 - 当前任务期间你只能使用 "Read/Write/Edit" 工具（**完整读取** `6_article.html`，一次性写入 `7_skeleton.json`），其他文件和你完全无关
-- 当前工作路径(<url-working-path>): `/path/to/XXX`
+- 当前工作路径(<url-working-path>): `/path/to/XXX`（取步骤 1 stdout 的 `url-working-path`；重定向页为 `redirected_` 特殊名目录）
 - 不要总结报告，只需产出 `7_skeleton.json` 即可
 
 #### 后续

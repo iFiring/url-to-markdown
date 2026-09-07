@@ -1,6 +1,6 @@
 # 真实 URL 手动冒烟清单（不入自动测试）
 
-前置：`bash script/init.sh --url <文章URL>` 输出 ok（含核心参数 skill-root / url-name / url-working-path）。
+前置：`bash script/init.sh` 输出 ok（纯环境自检；核心参数 skill-root / url-name / url-working-path 由步骤 1 输出）。
 
 ## 1. 真实静态文章页
 
@@ -110,3 +110,10 @@ openai 页检查点（英文文档，展开器/嵌套图解/UI 控件密集）�
 - 实测（2026-09-03 槽壳传播 + 空白守卫结构化后）：`codes: {total:14, ok:14,
   failed:0}`，k=5/6（2874/3127，此前 mixed_signal_mismatch）转 ok；k=5 两格缩进
   在位、k=6 空行恢复 13 行全保真；`logs/codes/` 空
+
+## 7. 内嵌 iframe 壳页（重定向门，2026-09-07 新增）
+
+- URL 1: https://mmh1.top/article#/ai-article/skill
+- URL 2: https://mmh1.top/article#/ai-article/prompt-cache
+- 预期：步骤 1 emit `redirect.to` 为 …/article/{skill,prompt-cache}.html；工作目录为 `redirected_` 前缀名（内含 `redirect_to.yaml`）；步骤 2 起仍以原始 URL 调用、产物落在 redirected 目录；`9_markdown.md` 为完整文章
+- 注意：按记忆规约，收尾前用最终代码重跑全管线再记录结论

@@ -44,6 +44,7 @@ pnpm-lock.yaml
 working/                 # 运行时工作目录（gitignore，仅保留骨架）
   cookies/               # 所有访问过 URL 的登录态公共存储（storage_state.json + login_decisions.json）
   <url-path>/            # 该 URL 步骤 1-9 的全部产物
+  redirected_<url-path>/ # iframe 重定向页的专属目录（内含 redirect_to.yaml 标记）
     assets/
       images/            # 步骤 8 下载的正文图片
       trans/             # 步骤 8 的 trans2img 截图（WebP，2x 分辨率）
@@ -58,7 +59,7 @@ working/                 # 运行时工作目录（gitignore，仅保留骨架�
     9_markdown.md        # 最终产物
 ```
 
-`<url-path>` 由 URL 净化生成：先剥 `http(s)://` 前缀（目录名从域名开始），其余非 `[A-Za-z0-9.-]` 替换为 `_`，超 120 字符截断 + sha256(URL) 前 8 位十六进制后缀。同域名的 http/https 两版派生同一目录。
+`<url-path>` 由 URL 净化生成：先剥 `http(s)://` 前缀（目录名从域名开始），其余非 `[A-Za-z0-9.-]` 替换为 `_`，超 120 字符截断 + sha256(URL) 前 8 位十六进制后缀。同域名的 http/https 两版派生同一目录。内嵌占优内容 iframe 的页面（步骤 1 重定向门命中）目录名为 `redirected_<原名>`——目录内 `redirect_to.yaml` marker 供步骤 2-9 定位，调用方式不变。
 
 ## 核心流程（步骤 0-9）
 
@@ -66,8 +67,8 @@ working/                 # 运行时工作目录（gitignore，仅保留骨架�
 
 | 步骤 | 执行者 | 命令 | 产物 |
 |---|---|---|---|
-| 0 环境初始化 | 脚本 | `bash script/init.sh --url <url>` | 环境就绪；输出核心参数 `skill-root`/`url-name`/`url-working-path` 并创建工作目录 |
-| 1 快照下载 | 脚本 | `node script/snapshot.mjs --url <url>` | `1_snapshot.html` |
+| 0 环境初始化 | 脚本 | `bash script/init.sh` | 环境就绪（node/pnpm/chromium/字体；纯环境自检，无参数） |
+| 1 快照下载 | 脚本 | `node script/snapshot.mjs --url <url>` | `1_snapshot.html`；输出核心参数 `skill-root`/`url-name`/`url-working-path`（重定向页为 `redirected_` 特殊名）+ `redirect` 通报 |
 | 2 结构清洗 | 脚本 | `node script/clean_snapshot.mjs --url <url>` | `2_clean_snapshot.html`、`2_clean_style_snapshot.html`、`2_long_text.json` |
 | 3 关键 ID 识别 | **agent** | 读 `2_clean_snapshot.html` | `3_key_ids.json` |
 | 4 样式视图裁剪 | 脚本 | `node script/extract_styled.mjs --url <url>` | `4_styled_extract.html` |
@@ -88,7 +89,8 @@ working/                 # 运行时工作目录（gitignore，仅保留骨架�
 - **虚拟列表检测**：仅渲染可见窗口的页面无法全文转化，步骤 1 命中即终止（`reason=virtual_list`），不写快照。
 - **长文本占位**：步骤 2 把长文本（超阈值 16 汉字/12 词的单个文本节点）替换为 `{{LONG_TEXT_k|n_chars}}` / `{{LONG_TEXT_k|n_words}}`，agent 只见结构不见内容，步骤 8 机械还原——语义判断不携带全文，token 可控。占位分两趟执行：带样式版带编号（还原链消费），清洗版无编号 `{{LONG_TEXT|n_chars}}`（唯一消费者步骤 3 只看结构+体量）；原文进 `2_long_text.json` 恢复清单，还原链只走带样式版路径。
 - **trans2img live 重渲染截图**：`data-idx` 按文档序编号是 prepare 后 DOM 的纯函数——步骤 8 按 `--url` 参数重渲染原页面并重注入同一套标记脚本，两次渲染结构一致则 id 精确对位；与快照侧逐 id 签名严校验（假阴性偏向，宁降级不出错图），失配或重渲染失败自动降级快照渲染兜底，`source` 字段如实标注来源。
-- **核心参数单一事实源**：`<url-name>` 由 `lib/env.mjs urlToDirName(url)` 派生（非 `[A-Za-z0-9.-]` → `_`，超 120 字符截断 + sha256 前 8 位后缀）——步骤 0 的 init.sh 与步骤 1-9 的工作目录派生共用同一实现，保证两处目录名恒一致。
+- **核心参数单一事实源**：`<url-name>` 由 `lib/env.mjs urlToDirName(url)` 派生（非 `[A-Za-z0-9.-]` → `_`，超 120 字符截断 + sha256 前 8 位后缀）——步骤 1 的 emit 与步骤 2-9 的工作目录派生共用同一实现，保证目录名恒一致；重定向门命中的页面目录名为 `redirected_<原名>`（marker 定位）。
+- **iframe 重定向门（步骤 1）**：「壳页 + 占优内容 iframe」页面在滚动后检测每个 iframe（可导航 http(s)/可见 ≥200px/正文 ≥500 且 ≥3× 主文档、多帧取最长，同源跨域皆可），命中则跳转 frame 真实 URL 原生续跑登录检测/滚动/虚拟列表/快照——样式保真与内部滚动天然成立；目标页独立打开退化（<50% 正文）自动回退原页。判定单次执行（只判入口原页面），marker 落盘、步骤 2-9 读盘定位。
 - **清洗版瘦身**：步骤 2 对 `2_clean_snapshot.html` 走「单页两趟 + 机械规则」（K1 class 语义过滤、K2 属性白名单——URL/aria 清空、hidden 裸属性折叠 `{{HIDDEN_TAG|n_chars;构成}}`、table/pre 折叠、空白压缩、空壳 span 拆包、**K11 纯视图折叠**——可视模块内部「div+行内元素+文本」极大子树与 p>行内 段落整棵折为 `{{VIEW_TEXT|n_chars/n_words}}`、壳保留，行内允许集 = a/strong/em/code/br/MathML 等行内文本类元素、img/块级标签仍阻断），零样式计算、无检测管线；清洗版唯一消费者是步骤 3（携带无编号 LONG_TEXT 占位与 VIEW_TEXT 折叠），一切还原走带样式版——正文与带样式版零丢失
 - **astro 解包两趟共享 + 带样式版属性白名单**：`astro-` 前缀脚手架标签（astro-island/slot 等，携带巨量序列化 props）两趟都解包——脚手架不再流进步骤 4-7（曾实测 `6_article.html` 残留 59 个 astro 标签、27KB 属性噪音）；带样式版另有属性白名单（22 静态属性 = clean K2 八属性 + style/href/src/width/height + 内容信号 colspan/rowspan/start/aria-label/data-src/srcset/datetime/open/lang，`<style>` 标签豁免）+ **`<style>` 选择器引用属性的动态保留集**（删属性即断 juice 级联——曾实测 article-1 丢 45 条 border/background/display 声明）。主流框架中仅 Astro 在 SSR 产物留持久化自定义标签（Vue/Nuxt/Qwik 等走属性或 script，由白名单/步骤 1 覆盖），解包集钉在 `astro-` 前缀、永不外溢到真实 web component（GitHub/YouTube 的内容型自定义标签）
 - **@layer 级联层解包（步骤 5 前置）**：Tailwind v4 站点把工具类规则全包在 `@layer utilities` 里而 juice 不进层——不解包则卡片边框/圆角/背景等工具类样式零内联（实测某站点 56% 的 CSS 在层内、带样式元素仅 579 个）。步骤 5 内联前先在浏览器侧解包（块形层体原位递归提升、`@layer a, b;` 层序声明丢弃，DOM 圈选不误伤正文代码示例），`:root` 变量定义随层提升后 juice 把已定义 var() 解析为具体值——实测同站点带样式元素 579 → 2632
@@ -122,7 +124,7 @@ pnpm test:all             # 全量
 | 阶段 | 内容 | 进度 |
 |------|------|------|
 | 项目结构 | 目录 / package / `init.sh` 环境自检 | 已完成 |
-| 步骤 1 `snapshot.mjs` | 登录检测 + 渐进滚动 + 虚拟列表检测 + 全保真快照（单 chromium 贯穿） | 已完成 |
+| 步骤 1 `snapshot.mjs` | 登录检测 + 渐进滚动 + 重定向门 + 虚拟列表检测 + 全保真快照（单 chromium 贯穿）；emit 核心参数 | 已完成 |
 | 步骤 2 `clean_snapshot.mjs` | 结构清洗（单页两趟：astro 解包共享 + 带样式版属性白名单 + 清洗版 K1-K9 极致瘦身） | 已完成 |
 | 步骤 3 / 7 agent 语义操作 | key_ids 识别 / markdown 骨架生成（SKILL.md 手册） | 已完成 |
 | 步骤 4-6 | 样式裁剪 → juice 内联 → 文章视图 | 已完成 |
@@ -131,3 +133,4 @@ pnpm test:all             # 全量
 | 测试 | 单测 + 集成 167 项 | 已完成 |
 | 真实 URL 冒烟 | 手动清单 `test/smoke/SMOKE.md` | 场景 1 已记录通过（产生于旧双稿管线，新 9 步管线待重验）；场景 2/3 待人工 |
 | 2026-08-29 | 步骤 5/6 文章视图瘦身（零值过滤 + 六条结构规则） | ✅ |
+| 2026-09-07 | iframe 重定向转换（占优内容 iframe → frame 真实 URL；`redirected_` 目录 + marker；步骤 0 瘦身、核心参数移交步骤 1） | ✅ |
