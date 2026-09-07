@@ -25,9 +25,12 @@
  * 空壳 span 拆包 K10 → 纯视图文本折叠 K11（{{VIEW_TEXT|n_chars}}，两道
  * 门槛：文本量 ≥8 汉字/≥6 词、结构量纯 div 树内部 div>6 / 含 span 树
  * 合计>4（p 根只含 text/span、同 span 档），含 LT 模块整棵折，见 K11 段
- * 注释）；K8 行内 run token
- * 化已废除（2026-08-31：run 整段折叠吞噬行内结构，按文本节点的共享占位
- * 保真行内骨架）。详见各步骤注释与 spec 修订记录。
+ * 注释）；K8 行内 run 折叠已按 2026-09-06 spec 重设计（见
+ *   docs/superpowers/specs/2026-09-06-long-text-inline-run-design.md）：
+ *   折叠单位 = 极大纯行内 run，检测/规范化序列化在两趟共享段末尾执行，
+ *   canonical HTML 入 2_long_text.json 的 runs 段，步骤 8 inline2md
+ *   确定性转 markdown——行内结构不再依赖 LLM 转录。详见各步骤注释与
+ *   spec 修订记录。
  *
  * 带样式版简化（2026-08-28）：astro 解包两趟共享 + styled 属性白名单——
  * 带样式版是步骤 4-7 的输入源，脚手架标签与属性（astro props、data-v-*、
@@ -53,6 +56,11 @@ function __u2mCleanSnapshot(cfg) {
   for (var i = metas.length - 1; i >= 0; i--) {
     metas[i].parentNode.removeChild(metas[i]);
   }
+
+  // run 序列化的 URL 绝对化基准（spec 2026-09-06 §3.3）：快照已注入 <base>，
+  // 但下方步骤 3 会删除它——先捕获 document.baseURI，检测/序列化在共享段
+  // 末尾执行时基准已不可得
+  var runBaseURI = document.baseURI;
 
   // 3. 删除 <base> 标签
   var bases = document.querySelectorAll('base');
@@ -221,13 +229,18 @@ function __u2mCleanSnapshot(cfg) {
     prePre[i].__u2mPreLines = countPreLines(prePre[i]);
   }
 
-  // 9. 长文本占位（foldLongText；中英文分标准）：含汉字（CJK）→ 中文标准
-  //    字符数 > MIN_CHARS；不含汉字 → 英文标准单词数 > MIN_WORDS。
-  //    numbered=true（styled 趟，分支开头调用）：占位 {{LONG_TEXT_k|n_unit}}、
-  //    原文按编号收集进 longTexts 由 CLI 写 2_long_text.json 供后续恢复；
-  //    numbered=false（clean 趟，K11 之后调用）：占位 {{LONG_TEXT|n_unit}}、
-  //    不收集——清洗版唯一消费者是步骤 3（结构+体量信号），编号无意义，
-  //    恢复清单只来自带样式版。
+  // 9. 长文本占位（foldLongText；中英文分标准）：run+散文本统一 walk。
+  //    numbered=true（styled 趟，分支开头调用）：run 命中（共享段末尾检测挂
+  //    的 __u2mRunHtml expando）→ 整段占位 {{LONG_TEXT_k|n_unit}}、canonical
+  //    片段按编号收集进 runs；散文本节点超阈值 → 现状逐节点占位、原文收集
+  //    进 texts。k 全文档序连续单计数器（run 与散文本共用）。
+  //    numbered=false（clean 趟，K11 之后调用）：同一套 walk 按记录成员资格
+  //    执行（记录元素被 K5/K10/K11 删除或吞没则 walk 不可达、自然跳过），
+  //    无编号、不收集——清洗版唯一消费者是步骤 3（结构+体量信号），恢复清单
+  //    只来自带样式版。散文本折叠不受 table/pre 排除影响（run 检测的位置
+  //    排除只限整段折叠）：表格/pre 内部长文本节点照旧逐节点折叠——
+  //    table2md/code2md 的 expandLongText 预展开依赖这一形态（styled 趟先
+  //    占位、收集在分支末尾）。
   //    纯空白文本节点（源码缩进/换行）不含语义内容，不占位——否则会在
   //    父子元素之间凭空捏造"长文本"，误导步骤 3 的结构识别。
   //    svg/style 子树内的文本不占位——两趟随后都会删 SVG 内容（styled 瘦身
@@ -247,42 +260,56 @@ function __u2mCleanSnapshot(cfg) {
   }
   function foldLongText(numbered) {
     var k = 0;
-    var longTexts = {};
-    var walker = document.createTreeWalker(
-      document.body,
-      NodeFilter.SHOW_TEXT,
-      null,
-      false
-    );
-    var textNodes = [];
-    var node;
-    while ((node = walker.nextNode())) {
-      textNodes.push(node);
-    }
-    for (var i = 0; i < textNodes.length; i++) {
-      var tn = textNodes[i];
-      if (skipPlaceholder(tn)) continue;
+    var texts = {};
+    var runs = {};
+    function foldTextNode(tn) {
+      if (skipPlaceholder(tn)) return;
       var text = tn.textContent;
-      if (text.trim() === '') continue;
+      if (text.trim() === '') return;
       var n, unit;
       if (CJK_RE.test(text)) {
-        if (text.length <= MIN_CHARS) continue;
+        if (text.length <= MIN_CHARS) return;
         n = text.length;
         unit = 'chars';
       } else {
         n = text.trim().split(/\s+/).length;
-        if (n <= MIN_WORDS) continue;
+        if (n <= MIN_WORDS) return;
         unit = 'words';
       }
       if (numbered) {
         k++;
-        longTexts[String(k)] = text;
+        texts[String(k)] = text;
         tn.textContent = '{{LONG_TEXT_' + k + '|' + n + '_' + unit + '}}';
       } else {
         tn.textContent = '{{LONG_TEXT|' + n + '_' + unit + '}}';
       }
     }
-    return { count: k, texts: longTexts };
+    function walk(node) {
+      var kids = node.childNodes;
+      for (var i = 0; i < kids.length; i++) {
+        var c = kids[i];
+        if (c.nodeType === 3) { foldTextNode(c); continue; }
+        if (c.nodeType !== 1) continue;
+        var frag = c.__u2mRunHtml;
+        if (frag !== undefined) {
+          // 命中 run 记录：整段替换 innerHTML 为占位符（文本节点形态），
+          // 不递归——行内结构已随 canonical 片段入库；壳（本元素）保留
+          // data-idx/class/aria-label（机制同 K11 VIEW_TEXT）
+          var sz = c.__u2mRunSize;
+          if (numbered) {
+            k++;
+            runs[String(k)] = frag;
+            c.textContent = '{{LONG_TEXT_' + k + '|' + sz.n + '_' + sz.unit + '}}';
+          } else {
+            c.textContent = '{{LONG_TEXT|' + sz.n + '_' + sz.unit + '}}';
+          }
+          continue;
+        }
+        walk(c);
+      }
+    }
+    walk(document.body);
+    return { count: k, texts: texts, runs: runs };
   }
 
   // 9b. aria-label 值截断（两趟共享）：保留首句+末句，中间省略为 …。
@@ -306,6 +333,140 @@ function __u2mCleanSnapshot(cfg) {
     var al = ariaEls[i].getAttribute('aria-label');
     var tl = truncateAriaLabel(al);
     if (tl !== al) ariaEls[i].setAttribute('aria-label', tl);
+  }
+
+  // ---- run 检测 + 规范化序列化（两趟共享段末尾；spec 2026-09-06 §3）----
+  // 长文本折叠单位升级为「极大纯行内 run」：流容器内 text 与行内元素混排的
+  // 整段内容折成一个 {{LONG_TEXT_k}}（两趟折叠执行见 foldLongText），原文以
+  // 规范化 HTML 片段入库（runs 段），步骤 8 inline2md 确定性转 markdown。
+  // 检测放共享段末尾：两趟 DOM 完全一致（空元素级联 + astro 解包已完），
+  // 决策天然一致——孪生守卫 clean⊆styled 由构造保证，免疫 clean 趟 K5/K10/
+  // K11 的纯性扰动（K 规则删子树会让 clean 侧容器「变纯」而 styled 不纯）。
+  // 检测结果挂元素 expando（__u2mRunHtml/__u2mRunSize，非属性、不序列化），
+  // fold walk 按成员资格消费。
+  var RUN_INLINE = { A: 1, SPAN: 1, CODE: 1, STRONG: 1, EM: 1, B: 1, I: 1, U: 1, S: 1,
+    MARK: 1, SMALL: 1, SUB: 1, SUP: 1, ABBR: 1, CITE: 1, Q: 1, KBD: 1, SAMP: 1, TIME: 1,
+    BR: 1, DEL: 1, VAR: 1, WBR: 1 };
+  // 位置排除（§3.2-1）：table/pre 已有各自占位符体系；svg/style 随后删除；
+  // h1-h3 整子树豁免沿用 skipPlaceholder 语义（标题是层级锚点）
+  var RUN_SKIP_CLOSEST = 'table, pre, svg, style, h1, h2, h3';
+  // computed display 记忆化：检测对每个候选的子树逐元素查 gCS，跨候选共享
+  var runDisplayCache = new Map();
+  function runHidden(el) {
+    if (el.hasAttribute('hidden')) return true;
+    if (!runDisplayCache.has(el)) {
+      runDisplayCache.set(el, getComputedStyle(el).display === 'none');
+    }
+    return runDisplayCache.get(el);
+  }
+  // 子树纯行内（§3.2-2/3）：只约束后代元素（根自身标签不限——p/li/h4-h6/
+  // summary/div/span 等流容器均可为 run 根，由极大性覆盖）；math 整棵放行
+  // 但取不到 LaTeX 源则阻断（决策 3：无源 math 留 DOM 走现状链路）。
+  // 隐藏只查子树自身（含根，见 runShapeOk）——不查祖先：FAQ [hidden] 块内的
+  // run 要照常折（styled 版编号进恢复清单，步骤 3 标记后可还原）
+  function runInnerOk(node) {
+    if (node.nodeType === 3 || node.nodeType === 8) return true;
+    if (node.nodeType !== 1) return false;
+    var tag = node.tagName.toUpperCase();
+    if (tag === 'MATH') {
+      if (typeof __u2mLatexText !== 'function') return false;   // 未注入（单独跑本函数）→ 保守阻断
+      var src = __u2mLatexText(node);
+      return src !== null && src !== '';
+    }
+    if (RUN_INLINE[tag] !== 1) return false;
+    if (runHidden(node)) return false;   // 隐藏内容不得随 run 折进恢复清单（styled 趟未剥隐藏）
+    var kids = node.childNodes;
+    for (var ri = 0; ri < kids.length; ri++) {
+      if (!runInnerOk(kids[ri])) return false;
+    }
+    return true;
+  }
+  // 形状合格（§3.2-1/2/3，不含阈值）：候选与极大性判定共用
+  function runShapeOk(el) {
+    if (el.closest(RUN_SKIP_CLOSEST)) return false;
+    if (runHidden(el)) return false;
+    var kids = el.childNodes;
+    for (var ri = 0; ri < kids.length; ri++) {
+      if (!runInnerOk(kids[ri])) return false;
+    }
+    return true;
+  }
+  function escHtmlText(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  // 规范化序列化（§3.3，检测通过当场执行）：canonical HTML 片段。span 按
+  // computed style 归一（浏览器里不做，Node 侧永远无法补——class 驱动的强调
+  // jsdom 无级联）；math 压成仅含 annotation 的极简形态（katex-html 视觉孪生
+  // 不入库）；返回 null = 阻断信号（无源 math，防御分支——检测已挡）
+  function serializeRunChildren(el) {
+    var parts = [];
+    var kids = el.childNodes;
+    for (var i = 0; i < kids.length; i++) {
+      var r = serializeRunNode(kids[i]);
+      if (r === null) return null;
+      parts.push(r);
+    }
+    return parts.join('');
+  }
+  function serializeRunNode(node) {
+    if (node.nodeType === 3) return escHtmlText(node.textContent);   // 空白保真不归一
+    if (node.nodeType !== 1) return '';
+    var tag = node.tagName.toUpperCase();
+    var kids = function () { return serializeRunChildren(node); };
+    switch (tag) {
+      case 'A': {
+        var raw = node.getAttribute('href') || '';
+        if (raw === '' || raw.charAt(0) === '#' || /^javascript:/i.test(raw)) return kids();
+        var abs;
+        try { abs = new URL(raw, runBaseURI).href; } catch (e) { return kids(); }
+        return '<a href="' + escHtmlText(abs) + '">' + kids() + '</a>';
+      }
+      case 'SPAN': {
+        var inner = kids();
+        if (inner === null) return null;
+        var cs = getComputedStyle(node);
+        // 多信号固定嵌套（自审修订）：del 最内 → em → strong 最外，两趟/测试
+        // golden 确定性
+        if (String(cs.textDecorationLine || '').indexOf('line-through') !== -1) inner = '<del>' + inner + '</del>';
+        if (cs.fontStyle === 'italic') inner = '<em>' + inner + '</em>';
+        if (cs.fontWeight === 'bold' || parseInt(cs.fontWeight, 10) >= 600) inner = '<strong>' + inner + '</strong>';
+        return inner;
+      }
+      case 'STRONG': case 'B': { var s1 = kids(); return s1 === null ? null : '<strong>' + s1 + '</strong>'; }
+      case 'EM': case 'I': { var s2 = kids(); return s2 === null ? null : '<em>' + s2 + '</em>'; }
+      case 'DEL': case 'S': { var s3 = kids(); return s3 === null ? null : '<del>' + s3 + '</del>'; }
+      case 'MATH': {
+        var msrc = typeof __u2mLatexText === 'function' ? __u2mLatexText(node) : null;
+        if (msrc === null || msrc === '') return null;
+        var isBlock = node.getAttribute('display') === 'block' || !!node.closest('.katex-display');
+        return '<math' + (isBlock ? ' display="block"' : '') + '><annotation encoding="application/x-tex">'
+          + escHtmlText(msrc) + '</annotation></math>';
+      }
+      default: {
+        // code/br + 行内同族（u/mark/small/sub/sup/abbr/cite/q/kbd/samp/time/
+        // var/wbr）：保原名、属性剥净；wbr 零宽信号在步骤 8 解包
+        if (RUN_INLINE[tag] !== 1) return kids();   // 防御：允许集外透明（检测已挡）
+        var s4 = kids();
+        if (s4 === null) return null;
+        var lower = node.tagName.toLowerCase();
+        return '<' + lower + '>' + s4 + '</' + lower + '>';
+      }
+    }
+  }
+  // 检测主循环：形状 → 极大性（父形状合格则随父折，不单折）→ 阈值 → 序列化。
+  // 顺序先形状后阈值：形状不合格（块级混排）的大多数容器零文本计量成本
+  var runDetectAll = document.body.querySelectorAll('*');
+  for (var i = 0; i < runDetectAll.length; i++) {
+    var E = runDetectAll[i];
+    if (!runShapeOk(E)) continue;
+    var par = E.parentElement;
+    if (par && runShapeOk(par)) continue;                       // 非极大——内部元素随父整段折
+    var sz = sizeSuffix(E.textContent);
+    if (sz.n <= (sz.unit === 'chars' ? MIN_CHARS : MIN_WORDS)) continue;
+    var frag = serializeRunChildren(E);
+    if (frag === null) continue;
+    E.__u2mRunHtml = frag;
+    E.__u2mRunSize = sz;
   }
 
   // ---- mode 分叉：styled 趟 SVG 瘦身 + 属性白名单后返回；clean 趟继续剥样式 ----
@@ -388,6 +549,7 @@ function __u2mCleanSnapshot(cfg) {
       html: '<!DOCTYPE html>\n' + document.documentElement.outerHTML,
       longTextCount: ltStyled.count,
       longTexts: ltStyled.texts,
+      longTextRuns: ltStyled.runs,
       tables: tablesCollected,
       codes: codesCollected
     };
