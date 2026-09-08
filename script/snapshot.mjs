@@ -133,7 +133,7 @@ async function main() {
       'skill-root': projectRoot(),
       'url-name': dirName,
       'url-working-path': dirs.urlDir,
-      redirect: gate.redirected ? { to: gate.to, urlName: dirName } : null,
+      redirect: gate.redirected ? { to: gate.to } : null,
       // 记忆豁免如实通报（入口页或重定向目标页任一命中即报）——「已登录」结论
       // 其实来自跳过记忆压制时，agent/用户必须看得到
       loginSkippedByMemory: login?.loginSkippedByMemory || gate.loginSkippedByMemory || null,

@@ -40,7 +40,6 @@ test('壳页+占优 iframe → redirected_ 目录快照 + emit 四字段 + marke
   assert.equal(out['url-working-path'], path.join(tmpRoot, redirectedDirName(url)));
   assert.equal(path.resolve(out['skill-root']), path.resolve('.'));
   assert.equal(out.redirect.to, `${server.url}/redirect-content.html`);
-  assert.equal(out.redirect.urlName, redirectedDirName(url));
 
   const snapFile = path.join(tmpRoot, redirectedDirName(url), '1_snapshot.html');
   assert.ok(fs.existsSync(snapFile), '快照应在 redirected_ 目录');

@@ -19,9 +19,11 @@ description: "将 URL（网页）的主体内容转换成 Markdown；在需要�
 ## 核心参数
 
 - `<url>`：指用户给定的完整 URL；所有 CLI 的必填参数
-- `<skill-root>`：本技能 SKILL.md 所在目录（**绝对路径**）；由步骤 1 输出（规范化）
-- `<url-name>`：当前 URL 的专属目录名，由步骤 1 输出；`replace(/[^A-Za-z0-9.-]/g, '_')` 生成（剥去 `http(s)://` 前缀）。**内嵌占优内容 iframe 的页面为特殊名 `redirected_<原名>`**（管线已自动重定向到 frame 真实 URL 转换）
-- `<url-working-path>`：当前 URL 的专属目录 `<skill-root>/working/<url-name>`；由步骤 1 输出；其后产物都存放在此目录下
+
+> 以下参数由步骤 1 输出，全局使用
+- `<skill-root>`：本技能 SKILL.md 所在目录（**绝对路径**）
+- `<url-name>`：当前 URL 的专属目录名；`replace(/[^A-Za-z0-9.-]/g, '_')` 生成（剥去 `http(s)://` 前缀）。**内嵌占优内容 iframe 的页面为特殊名 `redirected_<原名>`**（管线已自动重定向到 frame 真实 URL 转换）
+- `<url-working-path>`：当前 URL 的专属目录 `<skill-root>/working/<url-name>`；其后产物都存放在此目录下
 
 本技能目录结构：
 
@@ -85,9 +87,9 @@ node <skill-root>/script/snapshot.mjs --url <url> [--timeout 300000] [--scroll-r
   "snapshot": "/path/1_snapshot.html",
   "elements": 123,
   "skill-root": "/root/path/to/skill",
-  "url-name": "redirected_mmh1.top_article__ai-article_skill",
-  "url-working-path": "/root/path/to/skill/working/redirected_mmh1.top_article__ai-article_skill",
-  "redirect": { "to": "https://mmh1.top/article/skill.html", "urlName": "redirected_mmh1.top_article__ai-article_skill" }
+  "url-name": "redirected_www.example.com_article__ai-article_skill",
+  "url-working-path": "/root/path/to/skill/working/redirected_www.example.com_article__ai-article_skill",
+  "redirect": { "to": "https://www.example.com/article/skill.html" }
 }
 ```
 
