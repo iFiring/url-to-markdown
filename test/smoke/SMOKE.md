@@ -131,3 +131,21 @@ openai 页检查点（英文文档，展开器/嵌套图解/UI 控件密集）�
   - 混排长段的行内格式（粗体/斜体/链接/行内 code/公式）来自确定性通道：
     同一 URL 重跑逐字一致，无字面 `{{LONG_TEXT` 残留
 - 实测：待跑
+
+## 9. 登录检测 v2：点击探测 + 跳过记忆（2026-09-07 新增）
+
+- URL: https://www.zhihu.com/question/2071375581464343126/answer/2072161669128655948
+- 背景：旧版误判「已登录」的双根因——①`login_decisions.json` 里历史 skip 把
+  loginButton 强信号永久致盲；②知乎给匿名用户种 SESSIONID，`cookieMissing`
+  假阴性。v2 删除 cookieMissing、旧记忆文件废弃不读、登录入口改点击探测确认。
+- 预期：检测判定需要登录（强信号 loginConfirmed·modal——点击页头「登录/注册」
+  后 SignFlow 全屏弹窗命中 ≥50% 视口+表单+按钮判定）；viewer 打开且画面停在
+  弹窗态；旧 `login_decisions.json` 的知乎 skip 条目不再生效
+- 实测（2026-09-07，--timeout 20000 无人值守冒烟）：stderr `登录检测:
+  loginConfirmed+loginButton 命中（2/6），强信号 loginConfirmed（modal）→
+  需要登录`；viewer 正常启动；超时如实 emit `{"status":"error",
+  "reason":"login_timeout"}`；`working/cookies/` 未生成 skips 文件（未点跳过）
+- 待人工全链路验证：viewer 内真实登录知乎 → 「✅ 登录完成」recheck 通过 →
+  快照抓到登录态页面；或「⏭️ 跳过登录」确认框 → `login_decisions_skips.json`
+  写入 `{"www.zhihu.com":["loginButton"]}` → 快照抓干净页（无 SignFlow 弹窗）→
+  二次运行豁免不弹 viewer 且 emit `loginSkippedByMemory:["loginButton"]`

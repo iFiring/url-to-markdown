@@ -7,10 +7,11 @@
  *   node snapshot.mjs --url <url> [--timeout 300000] [--scroll-rounds 60]
  *
  * 五阶段（依次执行，共享同一浏览器上下文，避免重复启动开销）:
- *   1. 登录阶段（lib/snapshot-login.mjs）—— 七信号两级制检测是否需要登录：
- *      密码框 / 登录注册按钮为强信号单票成立，其余（URL 特征 / 标题与正文
- *      关键词 / 认证 cookie 反查 / 重定向 / SPA 等待）≥2 命中判定需登录；
- *      此时弹出 CDP Screencast
+ *   1. 登录阶段（lib/snapshot-login.mjs）—— 六信号两级制检测是否需要登录：
+ *      密码框 / 登录入口点击探测确认（全屏弹窗或跳转）为强信号单票成立，
+ *      弱信号（URL 特征 / 标题与正文关键词 / 重定向 / SPA 等待 / 登录按钮
+ *      可见但点击无确认）≥2 命中判定需登录；命中全在跳过记忆
+ *      （login_decisions_skips.json）内则整体豁免；需登录时弹出 CDP Screencast
  *      viewer（地址记到 stderr）供人工登录，登录态写入全局唯一的
  *      working/cookies/storage_state.json（后续脚本只读）
  *   2. 滚动阶段（lib/snapshot-scroll.mjs）—— 渐进滚动到底再回顶，触发
@@ -34,7 +35,8 @@
  *
  * stdout 输出（有且仅有一行 JSON，日志一律走 stderr）:
  *   {"status":"ok","snapshot":"...","elements":N,"skill-root":"...",
- *    "url-name":"...","url-working-path":"...","redirect":{...}|null} → 退出码 0
+ *    "url-name":"...","url-working-path":"...","redirect":{...}|null,
+ *    "loginSkippedByMemory":[...]|null} → 退出码 0
  *   {"status":"error","reason":"virtual_list"}  虚拟列表，未写快照 → 1
  *   {"status":"error","reason":"login_timeout"|"login_aborted"|...} → 1
  *
@@ -104,7 +106,7 @@ async function main() {
     });
     const page = await context.newPage();
 
-    await timed('登录阶段', () => snapshotLogin(page, url, { timeout, storageStatePath: ssPath, log }));
+    const login = await timed('登录阶段', () => snapshotLogin(page, url, { timeout, storageStatePath: ssPath, log }));
     await timed('滚动阶段', () => snapshotScroll(page, { scrollRounds, log: debug }));
     const gate = await timed('重定向门', () =>
       runRedirectGate(page, url, { timeout, storageStatePath: ssPath, scrollRounds, log: debug }));
@@ -132,6 +134,9 @@ async function main() {
       'url-name': dirName,
       'url-working-path': dirs.urlDir,
       redirect: gate.redirected ? { to: gate.to, urlName: dirName } : null,
+      // 记忆豁免如实通报（入口页或重定向目标页任一命中即报）——「已登录」结论
+      // 其实来自跳过记忆压制时，agent/用户必须看得到
+      loginSkippedByMemory: login?.loginSkippedByMemory || gate.loginSkippedByMemory || null,
     });
   } catch (e) {
     await context?.close().catch(() => {});

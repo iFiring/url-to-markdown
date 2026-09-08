@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>专栏试读 - 下拉菜单</title></head>
+<body>
+<header><strong>某专栏</strong><nav><button id="dd-login-btn">登录</button></nav></header>
+<main>
+<h1>专栏试读标题</h1>
+<p>点击登录按钮只弹出一个很小的下拉面板（远小于 50% 视口）——
+不构成全屏登录弹窗，不应被点击探测确认。DROPDOWN_PARA。</p>
+</main>
+<script>
+// 小尺寸下拉：即使内含 form+button，面积门槛（≥50% 视口）也应把它挡在确认之外
+document.getElementById('dd-login-btn').addEventListener('click', () => {
+  if (document.getElementById('dd-panel')) return;
+  const panel = document.createElement('div');
+  panel.id = 'dd-panel';
+  panel.style.cssText = 'position:fixed;top:40px;right:20px;width:200px;height:120px;background:#fff;border:1px solid #ccc;z-index:999';
+  panel.innerHTML = '<form><input name="q" placeholder="站内搜索"><button type="submit">搜索</button></form>';
+  document.body.appendChild(panel);
+});
+</script>
+</body>
+</html>

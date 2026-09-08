@@ -9,12 +9,13 @@
 </main>
 <script>
 // 模拟 SPA 迟水合：登录入口 800ms 后才注入 DOM（真实站实测：极客时间偶发
-// networkidle 提前达成、检测跑在头部水合之前）
+// networkidle 提前达成、检测跑在头部水合之前）；点击跳转登录页（探测确认路径）
 setTimeout(() => {
   const s = document.createElement('span');
   s.id = 'login-entry';
   s.style.cursor = 'pointer';
   s.textContent = '登录';
+  s.addEventListener('click', () => { location.href = '/login-wall.html'; });
   document.getElementById('nav').appendChild(s);
 }, 800);
 </script>

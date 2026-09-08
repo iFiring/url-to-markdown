@@ -8,5 +8,20 @@
 <p>这是正文的开头部分，未登录状态下可以免费预览。PREVIEW_PARA_ONE。</p>
 <p>登录后可以阅读全文，本文其余部分为付费内容。PREVIEW_PARA_TWO。</p>
 </main>
+<div id="modal-root"></div>
+<script>
+// 知乎 SignFlow 形态：点击登录按钮注入全屏遮罩弹窗（表单+按钮，无 password 输入——短信登录）
+document.getElementById('login-btn').addEventListener('click', () => {
+  if (document.getElementById('signin-modal')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'signin-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:999;display:flex;align-items:center;justify-content:center';
+  overlay.innerHTML = '<form id="signin-form" style="background:#fff;padding:24px;width:320px;display:flex;flex-direction:column;gap:8px">'
+    + '<input name="phone" placeholder="手机号">'
+    + '<button type="submit" id="signin-submit">登录/注册</button></form>';
+  document.getElementById('modal-root').appendChild(overlay);
+  document.getElementById('signin-form').addEventListener('submit', (e) => e.preventDefault());
+});
+</script>
 </body>
 </html>
