@@ -121,8 +121,8 @@ node <skill-root>/script/clean_snapshot.mjs --url <url>
 #### 任务（提示词/Prompt）
 
 - 必须严格按照手册 `<skill-root>/references/analyze_html_guide.md` 的要求完成任务
-- 当前任务期间你只能使用 "Read/Write" 工具（**完整读取** `2_clean_snapshot.html`，写入 `3_key_ids.json`），其他文件和你完全无关
-- 当前工作路径(<url-working-path>): `/path/to/XXX`（取步骤 1 stdout 的 `url-working-path`；重定向页为 `redirected_` 特殊名目录）
+- 当前任务期间你只能使用 "Read/Write/Edit" 工具（**完整读取** `2_clean_snapshot.html`，写入 `3_key_ids.json`），其他文件和你完全无关
+- 当前工作路径: `/path/to/xxx`（取步骤 1 stdout 的 `url-working-path`）
 - 不要总结报告，只需产出 `3_key_ids.json` 即可
 
 #### 后续
@@ -176,7 +176,7 @@ node <skill-root>/script/extract_article.mjs --url <url>
 
 - 必须严格按照手册 `<skill-root>/references/markdown_skeleton_guide.md` 的要求完成任务
 - 当前任务期间你只能使用 "Read/Write/Edit" 工具（**完整读取** `6_article.html`，一次性写入 `7_skeleton.json`），其他文件和你完全无关
-- 当前工作路径(<url-working-path>): `/path/to/XXX`（取步骤 1 stdout 的 `url-working-path`；重定向页为 `redirected_` 特殊名目录）
+- 当前工作路径: `/path/to/xxx`（取步骤 1 stdout 的 `url-working-path`）
 - 不要总结报告，只需产出 `7_skeleton.json` 即可
 
 #### 后续
