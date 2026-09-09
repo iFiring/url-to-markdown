@@ -161,27 +161,50 @@ node <skill-root>/script/compute_styles.mjs --url <url>
 node <skill-root>/script/extract_article.mjs --url <url>
 ```
 
-产物：`<url-working-path>/6_article.html`（你自己不要去读脚本的产物内容，确认有即可）
+产物：`<url-working-path>/6_article.html`（始终产出）；超过 80KB 时另产出分块 `6_article_chunk_X_of_N.html`（每块 ≤50KB，第 2 块起带只读上下文与 ✅/❌ 转换边界标记）（你自己不要去读脚本的产物内容，确认有即可）
 
 | stdout.status | 动作 |
 |---|---|
-| `ok` | 把 stdout 反馈给用户，进入步骤 7。|
+| `ok` | 把 stdout 反馈给用户，进入步骤 7——`chunks.split=true` 时步骤 7 按 `chunks.files` 并行派发子代理；`false` 时单子代理照旧 |
 | `error` | 把 `stdout.reason` 反馈给用户并终止 |
+
+**stdout.status=ok 结构示例**
+```json
+{
+  "status": "ok",
+  "article": "/path/6_article.html",
+  "elementCount": 509,
+  "slim": {},
+  "chunks": { "split": true, "count": 8, "files": ["/path/6_article_chunk_1_of_8.html"] }
+}
+```
 
 ### 步骤 7 · 你负责 markdown 骨架生成
 
 > **可调用子智能体时，优先把任务交给子智能体**
 
-#### 任务（提示词/Prompt）
+#### 未分割（步骤 6 stdout `chunks.split=false`）
+
+单个子代理，任务提示词：
 
 - 必须严格按照手册 `<skill-root>/references/markdown_skeleton_guide.md` 的要求完成任务
 - 当前任务期间你只能使用 "Read/Write/Edit" 工具（**完整读取** `6_article.html`，一次性写入 `7_skeleton.json`），其他文件和你完全无关
 - 当前工作路径: `/path/to/xxx`（取步骤 1 stdout 的 `url-working-path`）
 - 不要总结报告，只需产出 `7_skeleton.json` 即可
 
+#### 已分割（步骤 6 stdout `chunks.split=true`）
+
+**单条消息并行派发 `chunks.count` 个子代理**，每个子代理的任务提示词按各自分块文件定制（X 为分块号、N 为总块数）：
+
+- 必须严格按照手册 `<skill-root>/references/markdown_skeleton_guide.md` 的要求完成任务
+- 当前任务期间你只能使用 "Read/Write/Edit" 工具（**完整读取** `6_article_chunk_X_of_N.html`，一次性写入 `7_skeleton_chunk_X_of_N.json`），其他文件和你完全无关
+- 当前工作路径: `/path/to/xxx`（取步骤 1 stdout 的 `url-working-path`）
+- 不要总结报告，只需产出 `7_skeleton_chunk_X_of_N.json` 即可
+
 #### 后续
 
-当产物 `<url-working-path>/7_skeleton.json` 完成后，进入步骤 8
+- 未分割：产物 `<url-working-path>/7_skeleton.json` 完成后进入步骤 8
+- 已分割：**全部 `chunks.count` 个分片文件都存在**后进入步骤 8（步骤 8 会自动检测并合并分片）；个别分片失败/缺失时重新派发该分片一次，仍失败则把缺失清单反馈用户并终止
 
 ### 步骤 8 · 用脚本还原占位符 + 图片下载
 
