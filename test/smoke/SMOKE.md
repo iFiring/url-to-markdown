@@ -157,3 +157,43 @@ URL：微信长文（复用 `working/mp.weixin.qq.com_s_lspwTyzxUnpbw1eHIoqluw/`
 - [ ] 重跑步骤 6 → 预期 emit `chunks.split=true`、约 8 块、主内容 ≤50KB（上下文侧不计）、分块含 📌/⚠️/✅/❌ 标记
 - [ ] 步骤 7 并行派发子代理 → 全部分片落盘
 - [ ] 步骤 8 → `chunksMerged` 与块数一致；步骤 9 的 9_markdown.md 与不分块基线对比内容一致（标题层级、列表延续无跨块断裂）
+
+## 11. 边界 chrome 清除与折叠（2026-09-09 新增）
+
+spec: `docs/superpowers/specs/2026-09-09-body-spine-chrome-removal-design.md`；plan: `docs/superpowers/plans/2026-09-09-body-spine-chrome-removal.md` Task 8
+
+### 执行记录（2026-09-09，五样本隔离协议，通过）
+
+协议：`mktemp -d` 隔离目录只读复制 `working/` 五样本的 `1_snapshot.html`，`U2M_WORKING_ROOT` 指向隔离目录重跑步骤 2——`working/` 零写入。mmh1 重定向样本以 `redirect_to.yaml` 给出的目标 URL（`https://mmh1.top/article/skill.html`）派生普通目录跑——负控制只考察内容，重定向定位机制不参与步骤 2 行为。
+
+**chrome 统计实测（emit `chrome` 对象）**：
+
+| 样本 | removed | cssHidden | dialog | overlay | comments | clean 字节（旧→新） | 净瘦 |
+|---|---|---|---|---|---|---|---|
+| 微信长文 | 20 | 26 | 3 | 1 | 48 | 66954 → 48201 | **-28.0%** |
+| OpenAI prompt-caching | 5 | 1 | 0 | 0 | 46 | 41261 → 25614 | **-37.9%** |
+| 极客时间 983111 | 2 | 0 | 0 | 0 | 161 | 29975* → 29265 | -2.4% |
+| 知乎回答（登录墙） | 0 | 1 | 0 | 2 | 0 | 45467* → 43082 | -5.2% |
+| mmh1 skill（负控制） | **0** | **0** | **0** | **0** | 1 | 17195 → 17122 | 仅注释差 |
+
+\* 极客/知乎旧字节取自 spec §13 探针记录（working/ 无旧清洗版产物）。
+
+与预期偏差（均已核查为良性）：
+- 微信 folds 合计 30 > 预期 8-14——逐项核对全部 chrome：wx_bottom_modal_wrp（DIALOG）、js_article_bottom_bar（OVERLAY）、js_profile_ban、隐藏 iframe、**24 个 weui-a11y_ref 读屏隐藏 span**（模拟探针漏计该类，1-9 字脚手架文本）
+- 微信 removed=20（预期 ≈24，±20% 带内）；OpenAI removed=5（预期 ≈7）、字节 -37.9% 优于 spec ≈27%——D1 kill 明细全部 chrome：文档横幅 div、fixed 顶栏 header（探针 v2 增量核算 bug 曾漏计的那个）、搜索浮层、Ask AI 挂件（vocab 命中）
+- mmh1 负控制完美成立：三规则全零命中，新旧 diff 仅 head 主题字体注释一行（-73B）
+
+**k 对齐实证（微信）**：`{{CODE_k}}` 编号集合旧 vs 新逐字一致（k=1-39 全集）；TABLE 无（该页无表）；正文区（data-idx<4378）p 元素 400→400 零丢失，消失的 7 个 p 与 3 个 LONG_TEXT 全在 chrome 区（随折叠壳/D1 删除吞没）。
+
+**OpenAI 正文完整性**：正文 11 个标题（h1 Prompt caching + 10 个 h2 章节）全保留；消失的 10 个标题全为 chrome——搜索浮层 h2「Search the API docs」+「Suggested」×2、导航抽屉（`div#drawer` 折为 `{{HIDDEN_TAG|1145_words;49_li/49_a…}}`，即 spec 预期 H1-C 接住的 26% 文本量侧栏）分组 h3×6、Ask AI 挂件 h2「Docs agent」。
+
+**知乎登录横幅**：`Modal-wrapper Modal-enter-done`（28_div/7_button/6_svg）折为 `{{OVERLAY_TAG|110_chars}}`——spec §7 预期形态命中。
+
+**步骤 3 选择质量对比（微信，子代理按 analyze_html_guide.md 全文判读）**：PASS——
+- titleId=18、descriptionIds=[20,51,55] 与旧版一致（20 现为 VIEW_TEXT 壳，壳可引用性验证通过）
+- paragraphIds：旧 507 块**零缺失**（全部仍是 js_content 直接子块）；新增 1 块（486，旧版漏标的正常正文段落——改进非误伤）；39 个 CODE 占位全选
+- chrome 零误选：新四键最大 id 4360，≥4378 区段（DIALOG/OVERLAY/HIDDEN 壳、评论区、工具条、a11y span、iframe）无一入键；dumpIds=[] 与 guide「流外不标」一致
+
+**实现期发现并修复（TDD 红阶段）**：①深度上限测试夹具裸文本独子链被既有 K11 整链折叠——BIG 裹 `<p>` 排除干扰；②**run 覆写 bug**——LT run 检测先于 K5x 消费，可见 overlay/dialog 壳内文本 ≥16 汉字被记录 run（expando 挂壳），clean 趟 foldLongText 把 chrome token 覆写为 `{{LONG_TEXT}}`；修复 = K5x 折叠时删除壳上 `__u2mRunHtml/__u2mRunSize`（hidden 种因 run 根自查 display:none 天然免疫）。两修复详见对应 commit（`7225b4c`/`bffab5e`）。
+
+全量验证：`pnpm test:all` 441/441 绿（单测 374 + 集成 67）；golden 逐字节钉住（article-1 重建仅 head 注释行漂移、clean-simplify 零漂移、longtext.json 零漂移）。
