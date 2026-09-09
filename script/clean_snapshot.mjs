@@ -71,7 +71,9 @@
  *    "longText":".../2_long_text.json","longTextCount":{"texts":N,"runs":N,"total":N},
  *    "tables":{"total":N,"ok":N,"failed":N},"tablesJson":".../2_tables.json",
  *    "codes":{"total":N,"ok":N,"failed":N},"codeJson":".../2_code.json",
- *    "viewText":{"count":N}}                        → 退出码 0
+ *    "viewText":{"count":N},
+ *    "chrome":{"removed":N,"cssHiddenFolded":N,"dialogFolded":N,"overlayFolded":N,"commentsRemoved":N}}
+ *                                                 → 退出码 0
  *   {"status":"error","reason":"..."}                        → 1
  *
  * 退出码: 0 成功；1 失败；2 参数错误。
@@ -208,6 +210,10 @@ async function main() {
     await fsPromises.writeFile(cleanedPath, clean.html, 'utf8');
 
     debug(`[clean] hidden 折叠 ${clean.stats.hiddenCount} · 视图文本折叠 ${clean.stats.viewTextCount} · 清洗版 ${Buffer.byteLength(clean.html, 'utf8')} 字节 · 表格 ${tableCounts.ok}ok/${tableCounts.failed}fail · 代码块 ${codeCounts.ok}ok/${codeCounts.failed}fail`);
+    for (const kill of clean.stats.chromeKills || []) {
+      debug(`[chrome-d1] ${kill.at} <${kill.tag}${kill.idx ? ' idx=' + kill.idx : ''}> ratio=${kill.ratio} ${kill.sig} "${kill.txt}"`);
+    }
+    debug(`[clean] chrome: 删除 ${clean.stats.chromeRemoved || 0} · css-hidden 折 ${clean.stats.cssHiddenFolded || 0} · dialog 折 ${clean.stats.dialogFolded || 0} · overlay 折 ${clean.stats.overlayFolded || 0} · 注释剥 ${clean.stats.commentsRemoved || 0}`);
     const ltTextCount = Object.keys(styled.longTexts || {}).length;
     const ltRunCount = Object.keys(styled.longTextRuns || {}).length;
     log(`清洗完成: ${cleanedPath} (长文本 ${styled.longTextCount} 个: 散文本 ${ltTextCount} + 行内 run ${ltRunCount}, 表格 ${tableCounts.total} 个: ${tableCounts.ok} 成功 ${tableCounts.failed} 失败, 代码块 ${codeCounts.total} 个: ${codeCounts.ok} 成功 ${codeCounts.failed} 失败)`);
@@ -226,6 +232,13 @@ async function main() {
       codes: codeCounts,
       codeJson: codeJsonPath,
       viewText: { count: clean.stats.viewTextCount },
+      chrome: {
+        removed: clean.stats.chromeRemoved || 0,
+        cssHiddenFolded: clean.stats.cssHiddenFolded || 0,
+        dialogFolded: clean.stats.dialogFolded || 0,
+        overlayFolded: clean.stats.overlayFolded || 0,
+        commentsRemoved: clean.stats.commentsRemoved || 0,
+      },
     });
   } catch (e) {
     await browser?.close().catch(() => {});
