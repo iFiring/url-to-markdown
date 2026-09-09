@@ -393,3 +393,92 @@ test('extract_article.mjs: 瘦身规则⑥——空壳 span 塌缩为纯文本�
   assert.equal(out.slim.spansUnwrapped, 3, '应解包 3 层（32/33/34）');
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
+
+// ── 大产物分块（spec 2026-09-09）──
+
+// 40 个 ~1.85KB 段落块 + h1 ≈ 74KB；阈值调 60KB 触发分割
+const BIG_PARAS = Array.from({ length: 40 }, (_, i) =>
+  `<p style="font-size: 16px" data-idx="${100 + i}">${'段'.repeat(600)}</p>`);
+const BIG_JUICED = `<!DOCTYPE html>
+<html lang="zh-CN"><head><title>大文章</title></head><body><h1 style="font-size: 32px" data-idx="1">标题</h1>${BIG_PARAS.join('')}</body></html>`;
+const BIG_KEY_IDS = {
+  titleId: 1,
+  descriptionIds: [],
+  paragraphIds: Array.from({ length: 40 }, (_, i) => 100 + i),
+  dumpIds: [],
+};
+
+async function runArticleEnv(tmpRoot, env) {
+  const script = path.resolve('script/extract_article.mjs');
+  return runScript(process.execPath, [script, '--url', URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot, ...env },
+    timeoutMs: 30000,
+  });
+}
+
+test('extract_article.mjs: 超阈值分割——分块文件落盘 + emit chunks 契约', async () => {
+  const { tmpRoot, urlDir } = setupTmp('chunk-split', BIG_KEY_IDS);
+  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), BIG_JUICED);
+  const r = await runArticleEnv(tmpRoot, { U2M_ARTICLE_SPLIT_THRESHOLD: '60000' });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+  assert.equal(out.chunks.split, true);
+  assert.ok(out.chunks.count >= 2, `应至少分 2 块: ${out.chunks.count}`);
+  assert.equal(out.chunks.files.length, out.chunks.count);
+  assert.ok(/6_article_chunk_1_of_\d+\.html$/.test(out.chunks.files[0]), 'files 应按块序（首文件为第 1 块）');
+  // 6_article.html 照写（调试对照）；每块是完整独立文档
+  assert.ok(fs.existsSync(path.join(urlDir, '6_article.html')));
+  for (const f of out.chunks.files) {
+    const html = fs.readFileSync(f, 'utf8');
+    assert.ok(html.startsWith('<!DOCTYPE html>'), `${f} 应为完整文档`);
+    assert.ok(html.includes('<title>大文章</title>'));
+    assert.ok(html.includes('<html lang="zh-CN">'));
+    assert.ok(html.endsWith('</body></html>'));
+  }
+  // 全部段落块 id 恰出现一次于 own 区（各分块 own 并集 = 全集、互不重叠：
+  // 以「每个 id 在所有文件中出现总次数 ≥1」宽松校验 + ✅/❌ 标记存在性）
+  const all = out.chunks.files.map((f) => fs.readFileSync(f, 'utf8')).join('');
+  for (const id of [1, 100, 139]) {
+    assert.ok(all.includes(`data-idx="${id}"`), `id ${id} 应在某分块中`);
+  }
+  // 均质块场景：own ≈ chunkMax − 1 块 → 开头/上文恒被削减、✅ 不稳定出现；
+  // 稳定出现的是下文豁免产物 ❌/⚠️下文（非末块）——断言这个
+  assert.ok(all.includes('❌ 待转换内容自此结束'), '非末块应保留下文侧（豁免）');
+  assert.ok(all.includes('⚠️ 下文上下文'));
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test('extract_article.mjs: 未分割——emit chunks 恒定形状 + 清另一模式旧分块', async () => {
+  const { tmpRoot, urlDir } = setupTmp('chunk-nosplit', {
+    titleId: 1, descriptionIds: [], paragraphIds: [5, 6], dumpIds: [],
+  });
+  // 预置另一模式残留
+  fs.writeFileSync(path.join(urlDir, '6_article_chunk_9_of_9.html'), '<html></html>');
+  fs.writeFileSync(path.join(urlDir, '7_skeleton.json'), '[]');
+  fs.writeFileSync(path.join(urlDir, '7_skeleton_chunk_1_of_2.json'), '[]');
+  const r = await runArticleEnv(tmpRoot, {});
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.deepEqual(out.chunks, { split: false, count: 1, files: [out.article] });
+  // stale 清理：旧骨架（两种形态）与旧分块 html 全清
+  assert.ok(!fs.existsSync(path.join(urlDir, '7_skeleton.json')), '应清 stale 7_skeleton.json');
+  assert.ok(!fs.existsSync(path.join(urlDir, '7_skeleton_chunk_1_of_2.json')), '应清 stale 分片骨架');
+  assert.ok(!fs.existsSync(path.join(urlDir, '6_article_chunk_9_of_9.html')), '未分割应清旧分块 html');
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test('extract_article.mjs: 分割时清 stale 骨架与越界旧分块（X>N）', async () => {
+  const { tmpRoot, urlDir } = setupTmp('chunk-stale', BIG_KEY_IDS);
+  fs.writeFileSync(path.join(urlDir, '5_juice_styles.html'), BIG_JUICED);
+  fs.writeFileSync(path.join(urlDir, '7_skeleton.json'), '[]');
+  fs.writeFileSync(path.join(urlDir, '6_article_chunk_9_of_9.html'), '<html></html>');
+  const r = await runArticleEnv(tmpRoot, { U2M_ARTICLE_SPLIT_THRESHOLD: '60000' });
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.ok(out.chunks.split);
+  assert.ok(!fs.existsSync(path.join(urlDir, '7_skeleton.json')), '分割也应清 stale 单文件骨架');
+  assert.ok(!fs.existsSync(path.join(urlDir, '6_article_chunk_9_of_9.html')), 'X>N 旧分块应清');
+  for (const f of out.chunks.files) assert.ok(fs.existsSync(f));
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});

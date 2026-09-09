@@ -4,6 +4,9 @@
  * 3_key_ids.json（四键契约 titleId/descriptionIds/paragraphIds/dumpIds，
  * 校验与 paragraphIds 嵌套展开共享 lib/key-ids.mjs），新建一份只含文章
  * 主体的 html，产出 6_article.html（写入该 URL 的工作目录）。
+ * 超过 U2M_ARTICLE_SPLIT_THRESHOLD（默认 80KB）时另产出分块
+ * 6_article_chunk_X_of_N.html（lib/chunk-article.mjs 纯函数分块，spec
+ * 2026-09-09——第 2 块起带只读上下文与 ✅/❌ 转换边界标记）。
  *
  * 用法:
  *   node extract_article.mjs --url <url>
@@ -45,6 +48,7 @@ import { urlDir } from './lib/env.mjs';
 import { parseKeyIds } from './lib/key-ids.mjs';
 import { readSharedScript } from './lib/placeholder.mjs';
 import { proxyLaunchOptions, newU2MContext } from './lib/browser.mjs';
+import { chunkArticle } from './lib/chunk-article.mjs';
 
 function parseArgs(argv) {
   const out = { _: [] };
@@ -58,6 +62,12 @@ function parseArgs(argv) {
     } else out._.push(a);
   }
   return out;
+}
+
+// 正整数 env 覆盖（字节单位）；未设/非法取默认值
+function posIntEnv(name, dflt) {
+  const v = Number.parseInt(process.env[name] ?? '', 10);
+  return Number.isFinite(v) && v > 0 ? v : dflt;
 }
 
 async function main() {
@@ -124,6 +134,12 @@ async function main() {
       `(function(){ ${latexFn} return (${pageSlimFn})(${JSON.stringify(protectedIds)}); })()`
     );
 
+    // 分块收集：与 slimHtml 同一 DOM 同一序列化器——每块 markup 与
+    // 6_article.html 逐字节一致（spec 2026-09-09 §3.2）
+    const children = await page.evaluate(
+      '(() => [...document.body.children].map((el) => el.outerHTML))()'
+    );
+
     const articlePath = path.join(dir, '6_article.html');
     await fsPromises.writeFile(articlePath, slimHtml, 'utf8');
     log(`文章视图提取完成: ${articlePath} (${result.count} 个元素, 瘦身 ${JSON.stringify(slimStats)})`);
@@ -132,11 +148,39 @@ async function main() {
     await context.close();
     await browser.close();
 
+    // ── stale 清理（spec §3.6）：重跑步骤 6 后任何已存在的步骤 7 骨架必然
+    //    失效；另一模式的旧分块 html 一并清理 ──
+    for (const f of fs.readdirSync(dir)) {
+      if (f === '7_skeleton.json' || /^7_skeleton_chunk_\d+_of_\d+\.json$/.test(f)) {
+        fs.rmSync(path.join(dir, f));
+      }
+    }
+    const splitThreshold = posIntEnv('U2M_ARTICLE_SPLIT_THRESHOLD', 80 * 1024);
+    const chunkMax = posIntEnv('U2M_ARTICLE_CHUNK_MAX', 50 * 1024);
+    const { split, chunks: chunkFiles } = chunkArticle(slimHtml, children, { splitThreshold, chunkMax });
+    const CHUNK_HTML_RE = /^6_article_chunk_(\d+)_of_(\d+)\.html$/;
+    for (const f of fs.readdirSync(dir)) {
+      const cm = CHUNK_HTML_RE.exec(f);
+      if (cm && (!split || Number(cm[1]) > chunkFiles.length)) fs.rmSync(path.join(dir, f));
+    }
+    const chunkPaths = [];
+    if (split) {
+      for (const c of chunkFiles) {
+        const p = path.join(dir, `6_article_chunk_${c.x}_of_${c.n}.html`);
+        await fsPromises.writeFile(p, c.html, 'utf8');
+        chunkPaths.push(p);
+      }
+      log(`文章分块: ${chunkPaths.length} 块（阈值 ${splitThreshold}B / 上限 ${chunkMax}B）`);
+    }
+
     emit({
       status: 'ok',
       article: articlePath,
       elementCount: result.count,
       slim: slimStats,
+      chunks: split
+        ? { split: true, count: chunkPaths.length, files: chunkPaths }
+        : { split: false, count: 1, files: [articlePath] },
     });
   } catch (e) {
     await browser?.close().catch(() => {});
