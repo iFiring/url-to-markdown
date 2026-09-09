@@ -4,7 +4,7 @@
  * 3_key_ids.json（四键契约 titleId/descriptionIds/paragraphIds/dumpIds，
  * 校验与 paragraphIds 嵌套展开共享 lib/key-ids.mjs），新建一份只含文章
  * 主体的 html，产出 6_article.html（写入该 URL 的工作目录）。
- * 超过 U2M_ARTICLE_SPLIT_THRESHOLD（默认 80KB）时另产出分块
+ * 超过 U2M_ARTICLE_SPLIT_THRESHOLD（默认 60KB）时另产出分块
  * 6_article_chunk_X_of_N.html（lib/chunk-article.mjs 纯函数分块，spec
  * 2026-09-09——第 2 块起带只读上下文与 ✅/❌ 转换边界标记）。
  *
@@ -49,6 +49,11 @@ import { parseKeyIds } from './lib/key-ids.mjs';
 import { readSharedScript } from './lib/placeholder.mjs';
 import { proxyLaunchOptions, newU2MContext } from './lib/browser.mjs';
 import { chunkArticle } from './lib/chunk-article.mjs';
+
+// 大产物分块阈值默认值（字节单位，正整数 env 覆盖）：
+// U2M_ARTICLE_SPLIT_THRESHOLD 触发分割、U2M_ARTICLE_CHUNK_MAX 每块主内容上限
+const DEFAULT_SPLIT_THRESHOLD = 60 * 1024; // 60KB
+const DEFAULT_CHUNK_MAX = 40 * 1024; // 40KB
 
 function parseArgs(argv) {
   const out = { _: [] };
@@ -155,8 +160,8 @@ async function main() {
         fs.rmSync(path.join(dir, f));
       }
     }
-    const splitThreshold = posIntEnv('U2M_ARTICLE_SPLIT_THRESHOLD', 80 * 1024);
-    const chunkMax = posIntEnv('U2M_ARTICLE_CHUNK_MAX', 50 * 1024);
+    const splitThreshold = posIntEnv('U2M_ARTICLE_SPLIT_THRESHOLD', DEFAULT_SPLIT_THRESHOLD);
+    const chunkMax = posIntEnv('U2M_ARTICLE_CHUNK_MAX', DEFAULT_CHUNK_MAX);
     const { split, chunks: chunkFiles } = chunkArticle(slimHtml, children, { splitThreshold, chunkMax });
     const CHUNK_HTML_RE = /^6_article_chunk_(\d+)_of_(\d+)\.html$/;
     for (const f of fs.readdirSync(dir)) {

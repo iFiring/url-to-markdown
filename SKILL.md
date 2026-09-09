@@ -161,7 +161,7 @@ node <skill-root>/script/compute_styles.mjs --url <url>
 node <skill-root>/script/extract_article.mjs --url <url>
 ```
 
-产物：`<url-working-path>/6_article.html`（始终产出）；超过 80KB 时另产出分块 `6_article_chunk_X_of_N.html`（主内容 ≤50KB、只读上下文侧不计，第 2 块起带 ✅/❌ 转换边界标记）（你自己不要去读脚本的产物内容，确认有即可）
+产物：`<url-working-path>/6_article.html`（始终产出）；超过 60KB 时另产出分块 `6_article_chunk_X_of_N.html`（主内容 ≤40KB、只读上下文侧不计，第 2 块起带 ✅/❌ 转换边界标记）（你自己不要去读脚本的产物内容，确认有即可）
 
 | stdout.status | 动作 |
 |---|---|

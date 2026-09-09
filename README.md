@@ -73,7 +73,7 @@ working/                 # 运行时工作目录（gitignore，仅保留骨架�
 | 3 关键 ID 识别 | **agent** | 读 `2_clean_snapshot.html` | `3_key_ids.json` |
 | 4 样式视图裁剪 | 脚本 | `node script/extract_styled.mjs --url <url>` | `4_styled_extract.html` |
 | 5 样式内联 | 脚本 | `node script/compute_styles.mjs --url <url>` | `5_juice_styles.html` |
-| 6 文章视图提取 | 脚本 | `node script/extract_article.mjs --url <url>` | `6_article.html`（>80KB 时另产出分块 `6_article_chunk_X_of_N.html`，emit `chunks` 驱动步骤 7 派发模式） |
+| 6 文章视图提取 | 脚本 | `node script/extract_article.mjs --url <url>` | `6_article.html`（>60KB 时另产出分块 `6_article_chunk_X_of_N.html`，emit `chunks` 驱动步骤 7 派发模式） |
 | 7 markdown 骨架 | **agent** | 读 `6_article.html`（分割时按 `chunks.files` 并行派发子代理、各写 `7_skeleton_chunk_X_of_N.json`） | `7_skeleton.json` / `7_skeleton_chunk_X_of_N.json` |
 | 8 还原 + 下载 + 截图 | 脚本 | `node script/screenshot_trans.mjs --url <url>` | `8_resolved_skeleton.json`、`assets/images/`、`assets/trans/`（入口自动检测并合并分片骨架） |
 | 9 骨架回填 | 脚本 | `node script/render_skeleton.mjs --url <url>` | `9_markdown.md` |
@@ -107,8 +107,8 @@ working/                 # 运行时工作目录（gitignore，仅保留骨架�
 | `U2M_PROXY` | 代理控制：不设则继承系统代理 / `direct` 绕过 / URL 显式钉住 |
 | `U2M_DEBUG` | 非空时各 CLI 向 stderr 输出 `[dbg +N.NNs]` 调试行（阶段耗时、输入输出字节数、登录检测信号、滚动轮次、逐图下载、`[net]` 打开页面（document 导航，含重定向/登录跳转）的请求头与响应头（裸行无前缀，子资源不记），反爬诊断用） |
 | `U2M_FONTCONFIG_CONF` / `U2M_FONT_DIR` | 覆盖 init.sh（仅 Linux）fontconfig 配置与字体目录的探测路径；测试在任意宿主模拟 Linux 环境用 |
-| `U2M_ARTICLE_SPLIT_THRESHOLD` | 文章视图超过该字节数（默认 81920）时物理分块，步骤 7 并行派发子代理 |
-| `U2M_ARTICLE_CHUNK_MAX` | 分块主内容字节上限（默认 51200，上下文侧不计；巨段落块独立成块、尾块 <5 块合并为例外） |
+| `U2M_ARTICLE_SPLIT_THRESHOLD` | 文章视图超过该字节数（默认 61440）时物理分块，步骤 7 并行派发子代理 |
+| `U2M_ARTICLE_CHUNK_MAX` | 分块主内容字节上限（默认 40960，上下文侧不计；巨段落块独立成块、尾块 <5 块合并为例外） |
 
 ## 测试
 
@@ -136,4 +136,4 @@ pnpm test:all             # 全量
 | 真实 URL 冒烟 | 手动清单 `test/smoke/SMOKE.md` | 场景 1 已记录通过（产生于旧双稿管线，新 9 步管线待重验）；场景 2/3 待人工 |
 | 2026-08-29 | 步骤 5/6 文章视图瘦身（零值过滤 + 六条结构规则） | ✅ |
 | 2026-09-07 | iframe 重定向转换（占优内容 iframe → frame 真实 URL；`redirected_` 目录 + marker；步骤 0 瘦身、核心参数移交步骤 1） | ✅ |
-| 2026-09-09 | 文章视图分块（>80KB 物理分割为 ≤50KB 分块 + 三侧只读上下文标记；步骤 7 并行派发子代理、步骤 8 入口合并分片） | ✅ |
+| 2026-09-09 | 文章视图分块（>60KB 物理分割为 ≤40KB 分块 + 三侧只读上下文标记；步骤 7 并行派发子代理、步骤 8 入口合并分片） | ✅ |
