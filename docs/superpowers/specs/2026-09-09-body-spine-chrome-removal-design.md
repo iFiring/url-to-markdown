@@ -89,6 +89,10 @@ scanLevel(root, depth):
 scanLevel(document.body, 0)
 ```
 
+候选与文本计量均排除 `script/style/template/noscript` 标签（非渲染内容；真实管线
+步骤 1 page-prepare 已剥除，此处防御夹具/异常快照直入——模拟实测 classify-article/
+mermaid 夹具的 body 内联 `<script>` 会被 UA 样式 display:none 误判为 hidden 折叠）。
+
 ### 4.3 弹窗词汇（R7）
 
 - 词面：`/modal|dialog|popup|pop-?up|popover|drawer|lightbox|toast|snackbar/i`
@@ -314,3 +318,18 @@ kill 明细（层级路径、ratio、信号、守卫状态）到 stderr。stdout
 | mmh1 17K | 0 | ~0 | 0（负控制） |
 
 带样式版额外受益于 D1 删除（微信 −16K+），步骤 4/5/8 输入同步变瘦。
+
+## 14. 修订记录
+
+**2026-09-09 计划前算法模拟修正**（`.temp/probe-sim-rules.mjs` 对全部相关夹具 +
+五真实样本原样跑 D1/折叠标志算法）：
+
+1. D1 候选与折叠标志 walk 增加 `script/style/template/noscript` 标签排除——
+   classify-article/mermaid 夹具实测 body 内联 `<script>` 因 UA 样式 display:none
+   被误判为链上 hidden 折叠候选（真实管线步骤 1 已剥 script，属夹具直入防御）
+2. article-1 夹具含 `div#immersive-translate-browser-popup`（浏览器扩展残留，
+   `all:initial` + 零文本 + id 含 "popup" 命中词汇）——D1 命中删除，但该空 div
+   现行为本就被规则 8 空元素级联删除，**最终字节不变，golden 不漂移**
+3. 注释剥离将使 article-1 golden 漂移（head 第 7 行主题字体注释被剥）——实施时
+   重建 golden 并人工核对 diff 只含注释行；其余 13 个夹具与 clean-simplify
+   golden 经模拟零扰动
