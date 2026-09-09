@@ -87,7 +87,7 @@ test('compute_styles.mjs: juice 内联并删净 <style> 与 class，只产一份
   assert.ok(juiced.includes('display: flex'), 'flex 布局的 display 应保留');
   assert.ok(juiced.includes('flex-direction'), 'flex 方向属性应保留');
   assert.ok(!juiced.includes('gap'), 'gap 出白名单应删除');
-  assert.ok(juiced.includes('overflow-x'), 'overflow（块级滚动裁剪）应保留');
+  assert.ok(!juiced.includes('overflow-x'), 'overflow 三件出白名单应删除');
   assert.ok(juiced.includes('translateY(2px)'), 'transform 声明应保留');
   // 白名单按属性判定而非按元素：行内元素（高亮 span）的背景同样保留
   assert.ok(juiced.includes('rgb(255, 255, 0)'), 'span 的背景色应保留');
@@ -437,8 +437,9 @@ test('compute_styles.mjs: 零值声明过滤——等于全元素初始值的声
   const juiced = fs.readFileSync(out.juiceStyles, 'utf8');
   const tagOf = (id) => juiced.match(new RegExp(`<[^>]*data-idx="${id}"[^>]*>`))?.[0] || '';
 
-  // 只剩零值声明的元素：style 属性整体消失
-  for (const id of [1, 2, 5, 8, 9, 10, 11, 15]) {
+  // 只剩零值声明的元素：style 属性整体消失（id 12 overflow:auto 因
+  // 2026-09-09 overflow 出白名单同批清空）
+  for (const id of [1, 2, 5, 8, 9, 10, 11, 12, 15]) {
     assert.ok(!tagOf(id).includes('style='), `id ${id} 零值声明应清空 style 属性: ${tagOf(id)}`);
   }
   // 实信号保留
@@ -448,12 +449,11 @@ test('compute_styles.mjs: 零值声明过滤——等于全元素初始值的声
   assert.ok(tagOf(6).includes('rgb(249, 249, 249)') && !tagOf(6).includes('border-radius'),
     `零圆角删、实背景留: ${tagOf(6)}`);
   assert.ok(tagOf(7).includes('border-radius: 8px'), `非零圆角应保留: ${tagOf(7)}`);
-  assert.ok(tagOf(12).includes('overflow: auto'), `overflow:auto 应保留: ${tagOf(12)}`);
   // flex 简写在 2026-09-09 布局白名单收紧中出白名单（只留方向信号）
   assert.ok(!tagOf(13).includes('style='), `flex 简写出白名单应清空 style: ${tagOf(13)}`);
   assert.ok(tagOf(14).includes('outline') && tagOf(14).includes('1px'),
     `实 outline 应保留: ${tagOf(14)}`);
-  assert.equal(out.styledCount, 6, `应剩 6 个带样式元素（3/4/6/7/12/14），实得 ${out.styledCount}`);
+  assert.equal(out.styledCount, 5, `应剩 5 个带样式元素（3/4/6/7/14），实得 ${out.styledCount}`);
 
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
