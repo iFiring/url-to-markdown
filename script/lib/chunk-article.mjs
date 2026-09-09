@@ -9,8 +9,9 @@
  *
  * 算法（spec §3.3-§3.5）：
  *   1. 触发：slimHtml 字节 > splitThreshold 才分割
- *   2. 贪心装箱：按文档序累加，加入下一块会超 chunkMax 即封块；单个段落块
- *      自身 > chunkMax 时独立成块（允许溢出——段落块是步骤 7 的原子契约单位）
+ *   2. 贪心装箱：按文档序累加，加入下一块会超 chunkMax 即封块（own 向
+ *      50KB 靠齐）；单个段落块自身 > chunkMax 时独立成块（允许溢出——
+ *      段落块是步骤 7 的原子契约单位）
  *   3. 尾块合并（循环每轮重查）：最后一块段落块数 <5 且（前块+尾块 own）≤
  *      splitThreshold → 并入前块。守护必须用 splitThreshold：贪心封边处恒有
  *      前块+尾块首块 > chunkMax，而尾块 own ≥ 尾块首块，chunkMax 守护下条件
@@ -19,10 +20,11 @@
  *      （上一块尾部向前 ≤2，跳过已在开头集内的块）；每块 ⚠️下文（下一块
  *      开头向后 ≤2，末块无）。每侧独立字节帽 chunkMax/5：(已取+候选) ≤ 帽
  *      才取、否则停
- *   5. 超限削减（下文豁免，spec §3.4）：触发条件 =（文件字节 − 下文侧字节）
- *      > chunkMax——下文不计入预算（贪心封边处恒有 own+b₀ > chunkMax，计入
- *      则下文恒被清空）；按 上文→开头→下文 整侧清空直到触发条件不成立或
- *      上下文全空（own 自身超限的巨块/合并块自然删光上下文）
+ *   5. 上下文不计入块预算（2026-09-09 用户裁定）：📌/⚠️ 侧是只读参照，为压
+ *      50KB 削上下文本末倒置——无超限削减 pass；每侧自身选取上限（≤3/≤2/≤2
+ *      块且 ≤chunkMax/5）即是约束，文件最坏 ≈ chunkMax + 3×cap。
+ *      （历史：v1 按「文件−下文 > chunkMax」削减上文→开头→下文，紧装块
+ *      上下文被削光；v2 装箱预留 3072B 仍被胖开头侧吃掉——均废弃）
  *
  * 标记注释（一句话中英双语，spec §3.5 文案）划出转换边界：子代理只转换
  * ✅ 与 ❌ 之间（或无标记时的全部）段落块。
@@ -112,54 +114,34 @@ export function chunkArticle(slimHtml, children, { splitThreshold, chunkMax }) {
     return out;
   };
 
-  // ── 4. 组装 + 超限削减（上文→开头→下文 整侧清空）──
+  // ── 4. 组装（上下文不计入块预算——无削减 pass，spec §3.4）──
   const n = packs.length;
   const chunks = [];
   for (let i = 0; i < n; i++) {
     const own = packs[i];
-    let openingIdxs = i > 0 ? opening : [];
-    let prevIdxs = i > 0 ? pickPrev(i) : [];
-    let nextIdxs = i < n - 1 ? pickNext(i) : [];
-    const build = () => {
-      // DOC_RE 捕获组从 <html 起——DOCTYPE 前缀在此补上，与 6_article.html
-      // 的 '<!DOCTYPE html>\n' + outerHTML 序列化形态逐字节同头
-      const parts = ['<!DOCTYPE html>\n', header];
-      if (openingIdxs.length > 0) {
-        parts.push(`\n${OPENING_MARK(openingIdxs.length)}`);
-        parts.push(...openingIdxs.map((t) => children[t]));
-      }
-      if (prevIdxs.length > 0) {
-        parts.push(`\n${PREV_MARK(prevIdxs.length)}`);
-        parts.push(...prevIdxs.map((t) => children[t]));
-      }
-      if (openingIdxs.length > 0 || prevIdxs.length > 0) parts.push(`\n${START_MARK}\n`);
-      parts.push(...own.map((t) => children[t]));
-      if (nextIdxs.length > 0) {
-        parts.push(`\n${END_MARK}`);
-        parts.push(`\n${NEXT_MARK(nextIdxs.length)}`);
-        parts.push(...nextIdxs.map((t) => children[t]));
-      }
-      parts.push('</body></html>');
-      return parts.join('');
-    };
-    // 超限削减（下文豁免，spec §3.4）：触发条件不含下文侧——贪心封边处恒有
-    // own + b₀ > chunkMax（b₀ = 下一块首块 = 下文侧首候选），计入预算则下文
-    // 恒被清空（结构性死代码）。削减顺序：上文 → 开头 → 下文（最后兜底）
-    const nextExtra = () => (nextIdxs.length > 0
-      ? bytes(`\n${END_MARK}`) + bytes(`\n${NEXT_MARK(nextIdxs.length)}`)
-        + nextIdxs.reduce((s, t) => s + sizes[t], 0)
-      : 0);
-    let html = build();
-    for (const clear of [
-      () => { prevIdxs = []; },
-      () => { openingIdxs = []; },
-      () => { nextIdxs = []; },
-    ]) {
-      if (bytes(html) - nextExtra() <= chunkMax) break;
-      clear();
-      html = build();
+    const openingIdxs = i > 0 ? opening : [];
+    const prevIdxs = i > 0 ? pickPrev(i) : [];
+    const nextIdxs = i < n - 1 ? pickNext(i) : [];
+    // DOC_RE 捕获组从 <html 起——DOCTYPE 前缀在此补上，与 6_article.html
+    // 的 '<!DOCTYPE html>\n' + outerHTML 序列化形态逐字节同头
+    const parts = ['<!DOCTYPE html>\n', header];
+    if (openingIdxs.length > 0) {
+      parts.push(`\n${OPENING_MARK(openingIdxs.length)}`);
+      parts.push(...openingIdxs.map((t) => children[t]));
     }
-    chunks.push({ x: i + 1, n, html });
+    if (prevIdxs.length > 0) {
+      parts.push(`\n${PREV_MARK(prevIdxs.length)}`);
+      parts.push(...prevIdxs.map((t) => children[t]));
+    }
+    if (openingIdxs.length > 0 || prevIdxs.length > 0) parts.push(`\n${START_MARK}\n`);
+    parts.push(...own.map((t) => children[t]));
+    if (nextIdxs.length > 0) {
+      parts.push(`\n${END_MARK}`);
+      parts.push(`\n${NEXT_MARK(nextIdxs.length)}`);
+      parts.push(...nextIdxs.map((t) => children[t]));
+    }
+    parts.push('</body></html>');
+    chunks.push({ x: i + 1, n, html: parts.join('') });
   }
   return { split: true, chunks };
 }

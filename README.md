@@ -108,7 +108,7 @@ working/                 # 运行时工作目录（gitignore，仅保留骨架�
 | `U2M_DEBUG` | 非空时各 CLI 向 stderr 输出 `[dbg +N.NNs]` 调试行（阶段耗时、输入输出字节数、登录检测信号、滚动轮次、逐图下载、`[net]` 打开页面（document 导航，含重定向/登录跳转）的请求头与响应头（裸行无前缀，子资源不记），反爬诊断用） |
 | `U2M_FONTCONFIG_CONF` / `U2M_FONT_DIR` | 覆盖 init.sh（仅 Linux）fontconfig 配置与字体目录的探测路径；测试在任意宿主模拟 Linux 环境用 |
 | `U2M_ARTICLE_SPLIT_THRESHOLD` | 文章视图超过该字节数（默认 81920）时物理分块，步骤 7 并行派发子代理 |
-| `U2M_ARTICLE_CHUNK_MAX` | 分块单块字节上限（默认 51200；巨段落块独立成块、尾块 <5 块合并为例外） |
+| `U2M_ARTICLE_CHUNK_MAX` | 分块主内容字节上限（默认 51200，上下文侧不计；巨段落块独立成块、尾块 <5 块合并为例外） |
 
 ## 测试
 

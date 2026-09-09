@@ -154,6 +154,6 @@ openai 页检查点（英文文档，展开器/嵌套图解/UI 控件密集）�
 
 URL：微信长文（复用 `working/mp.weixin.qq.com_s_lspwTyzxUnpbw1eHIoqluw/`，6_article.html 372KB / 509 段落块）
 
-- [ ] 重跑步骤 6 → 预期 emit `chunks.split=true`、约 8 块、每块 ≤50KB、分块含 📌/⚠️/✅/❌ 标记
+- [ ] 重跑步骤 6 → 预期 emit `chunks.split=true`、约 8 块、主内容 ≤50KB（上下文侧不计）、分块含 📌/⚠️/✅/❌ 标记
 - [ ] 步骤 7 并行派发子代理 → 全部分片落盘
 - [ ] 步骤 8 → `chunksMerged` 与块数一致；步骤 9 的 9_markdown.md 与不分块基线对比内容一致（标题层级、列表延续无跨块断裂）
