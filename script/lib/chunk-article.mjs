@@ -26,8 +26,10 @@
  *      （历史：v1 按「文件−下文 > chunkMax」削减上文→开头→下文，紧装块
  *      上下文被削光；v2 装箱预留 3072B 仍被胖开头侧吃掉——均废弃）
  *
- * 标记注释（一句话中英标签，spec §3.5 文案）划出转换边界：子代理只转换
- * ✅ 与 ❌ 之间（或无标记时的全部）段落块。三侧上下文段落块**包裹在注释内、
+ * 标记注释（一句话中英标签，spec §3.5 文案）划出转换边界：✅/❌ **每块恒在**
+ * （2026-09-09 用户裁定：首块 ✅ 紧跟 body 开标签、末块 ❌ 紧贴 </body>，
+ * 不随上下文侧有无而缺失），子代理只转换 ✅ 与 ❌ 之间的段落块。
+ * 三侧上下文段落块**包裹在注释内、
  * 每块独立一行**（2026-09-09 用户裁定：注释对 DOM 解析不可见、对子代理的
  * 文本阅读可见——结构上杜绝误转换；序列化保证文本节点中 > 转义为 &gt;，
  * 内容不会提前终结注释）。
@@ -146,12 +148,12 @@ export function chunkArticle(slimHtml, children, { splitThreshold, chunkMax }) {
     const parts = ['<!DOCTYPE html>\n', header];
     if (openingIdxs.length > 0) parts.push(commented(OPENING_MARK, openingIdxs));
     if (prevIdxs.length > 0) parts.push(commented(PREV_MARK, prevIdxs));
-    if (openingIdxs.length > 0 || prevIdxs.length > 0) parts.push(`\n${START_MARK}\n`);
+    // ✅/❌ 每块恒在（2026-09-09 用户裁定）：首块 ✅ 紧跟 body 开标签、
+    // 末块 ❌ 紧贴 </body>——转换边界直观统一，不随上下文侧的有无而缺失
+    parts.push(`\n${START_MARK}\n`);
     parts.push(own.map((t) => children[t]).join(''));
-    if (nextIdxs.length > 0) {
-      parts.push(`\n${END_MARK}`);
-      parts.push(commented(NEXT_MARK, nextIdxs));
-    }
+    parts.push(`\n${END_MARK}`);
+    if (nextIdxs.length > 0) parts.push(commented(NEXT_MARK, nextIdxs));
     parts.push('</body></html>');
     chunks.push({ x: i + 1, n, html: parts.join('') });
   }

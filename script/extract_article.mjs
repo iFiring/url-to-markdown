@@ -6,7 +6,8 @@
  * 主体的 html，产出 6_article.html（写入该 URL 的工作目录）。
  * 超过 U2M_ARTICLE_SPLIT_THRESHOLD（默认 60KB）时另产出分块
  * 6_article_chunk_X_of_N.html（lib/chunk-article.mjs 纯函数分块，spec
- * 2026-09-09——第 2 块起带只读上下文与 ✅/❌ 转换边界标记）。
+ * 2026-09-09——第 2 块起带只读上下文；✅/❌ 转换边界标记每块恒在：首块 ✅
+ * 紧跟 body 开标签、末块 ❌ 紧贴 </body>）。
  *
  * 用法:
  *   node extract_article.mjs --url <url>

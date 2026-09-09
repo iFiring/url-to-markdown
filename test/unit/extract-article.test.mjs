@@ -442,9 +442,10 @@ test('extract_article.mjs: 超阈值分割——分块文件落盘 + emit chunks
   for (const id of [1, 100, 139]) {
     assert.ok(all.includes(`data-idx="${id}"`), `id ${id} 应在某分块中`);
   }
-  // 均质块场景：own ≈ chunkMax − 1 块 → 开头/上文恒被削减、✅ 不稳定出现；
-  // 稳定出现的是下文豁免产物 ❌/⚠️下文（非末块）——断言这个
-  assert.ok(all.includes('❌ 待转换内容自此结束'), '非末块应保留下文侧（豁免）');
+  // ✅/❌ 每块恒在（2026-09-09 用户裁定：边界不随上下文侧有无而缺失）；
+  // ⚠️下文在非末块照常就位（上下文不计预算）
+  assert.ok(all.includes('✅ 待转换内容自此开始'), '✅ 每块恒在');
+  assert.ok(all.includes('❌ 待转换内容自此结束'), '❌ 每块恒在');
   assert.ok(all.includes('⚠️ 下文上下文'));
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });

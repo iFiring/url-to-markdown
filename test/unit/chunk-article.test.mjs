@@ -50,20 +50,20 @@ test('T2 贪心装箱 + 尾块合并 + 上下文不计预算（合并块带全�
   assert.equal(r.chunks.length, 2);
   const [c1, c2] = r.chunks;
   // 块 1：own=6000，下文 [b7] 1000B ≤cap(1300)——上下文不计预算、永不被削；
-  // 首块无开头/上文 → 无 ✅；ids 只含 own（下文副本剥 data-idx）
+  // ✅/❌ 每块恒在（2026-09-09 用户裁定：边界统一围绕 own）；ids 只含 own（下文副本剥 data-idx）
   assert.deepEqual(ids(c1.html), [1, 2, 3, 4, 5, 6]);
   assert.ok(c1.html.includes('❌ 待转换内容自此结束'), '上下文免费后 ❌ 应存活');
   assert.ok(c1.html.includes('⚠️ 下文上下文'));
   assertCtxCompact(c1.html, '⚠️ 下文上下文');
-  assert.ok(!c1.html.includes('✅'), '首块无开头/上文 → 无 ✅');
+  assert.ok(c1.html.includes('✅ 待转换内容自此开始'), '✅ 每块恒在（首块也有）');
   // 块 2（末块、尾块合并产物 own 8000 > chunkMax）：上下文照常就位——
-  // 📌[b1]、⚠️上文=[b6]（各 1 块即触帽：2×1000>cap 1300）、✅；无 ❌（末块）
+  // 📌[b1]、⚠️上文=[b6]（各 1 块即触帽：2×1000>cap 1300）、✅；❌ 恒在（末块紧贴 </body>）
   assert.deepEqual(ids(c2.html), [7, 8, 9, 10, 11, 12, 13, 14]);
   assert.ok(c2.html.includes('📌 开头上下文') && c2.html.includes('⚠️ 上文上下文'));
   assertCtxCompact(c2.html, '📌 开头上下文');
   assertCtxCompact(c2.html, '⚠️ 上文上下文');
   assert.ok(c2.html.includes('✅ 待转换内容自此开始'));
-  assert.ok(!c2.html.includes('❌'), '末块无下文侧');
+  assert.ok(c2.html.includes('❌ 待转换内容自此结束'), '❌ 每块恒在（末块也有）');
   // 合并块 own 8000 > chunkMax 6500——尾块合并溢出是合法例外（≤ splitThreshold）
   assert.ok(bytes(c2.html) > 6500 && bytes(c2.html) <= 12000);
 });
@@ -82,12 +82,13 @@ test('T3 上下文窗口：开头/上文就位、下文被字节帽压制、合�
   assert.equal(r.chunks.length, 3);
   const [c1, c2, c3] = r.chunks;
 
-  // 块 1：own=[1-7]；next 候选 id8(3000) > cap → 下文侧为空 → 裸 own
+  // 块 1：own=[1-7]；next 候选 id8(3000) > cap → 下文侧为空；✅/❌ 仍恒在围绕 own
   assert.deepEqual(ids(c1.html), [1, 2, 3, 4, 5, 6, 7]);
-  assert.ok(!c1.html.includes('✅') && !c1.html.includes('❌'), '首块无上下文标记');
+  assert.ok(c1.html.includes('✅ 待转换内容自此开始'), '✅ 每块恒在（首块也有）');
+  assert.ok(c1.html.includes('❌ 待转换内容自此结束'), '❌ 每块恒在（下文被帽压制也有）');
 
   // 块 2：📌开头=[1,2]（第 3 块 2400>cap 截停）、⚠️上文=[6,7]（向前取 2 块、
-  // id5 3000 截停）、✅；next 候选 id12(8000)>cap → 无 ❌。
+  // id5 3000 截停）、✅；next 候选 id12(8000)>cap → 无下文侧，❌ 仍恒在。
   // 上下文不计预算：own 5400 + 两侧 ~3.9KB 照常全保留；ids 只含 own
   assert.deepEqual(ids(c2.html), [8, 9, 10, 11]);
   assert.ok(c2.html.includes('📌 开头上下文'), '应有开头上下文标记');
@@ -95,19 +96,19 @@ test('T3 上下文窗口：开头/上文就位、下文被字节帽压制、合�
   assertCtxCompact(c2.html, '📌 开头上下文');
   assertCtxCompact(c2.html, '⚠️ 上文上下文');
   assert.ok(c2.html.includes('✅ 待转换内容自此开始'), '应有开始标记');
-  assert.ok(!c2.html.includes('❌'), '下文被字节帽压制 → 无结束标记');
+  assert.ok(c2.html.includes('❌ 待转换内容自此结束'), '❌ 每块恒在（下文被帽压制也有）');
   // 开头副本已在注释内剥 data-idx——待转换区无重复块（上下文不可被引用）
   assert.ok(!c2.html.replace(/<!--[\s\S]*?-->/g, '').includes('data-idx="1"')
     && !c2.html.replace(/<!--[\s\S]*?-->/g, '').includes('data-idx="2"'),
   'own 区不应出现开头块的 data-idx（上下文副本在注释内已剥）');
 
   // 块 3（末块、守护不过保留 own 9600）：📌[1,2] + ⚠️上文=[10,11]
-  // （1600 ≤cap）+ ✅ 照常就位（上下文免费），无 ❌；
+  // （1600 ≤cap）+ ✅ 照常就位（上下文免费）；❌ 恒在（末块紧贴 </body>）；
   // own 9600+上下文 → 文件 > chunkMax——上下文不计预算、合法
   assert.deepEqual(ids(c3.html), [12, 13, 14]);
   assert.ok(c3.html.includes('📌 开头上下文') && c3.html.includes('⚠️ 上文上下文'));
   assert.ok(c3.html.includes('✅ 待转换内容自此开始'));
-  assert.ok(!c3.html.includes('❌'), '末块无下文侧');
+  assert.ok(c3.html.includes('❌ 待转换内容自此结束'), '❌ 每块恒在（末块也有）');
   assert.ok(bytes(c3.html) > 10000, '上下文不计预算：文件可超 chunkMax');
 
   // 每块都是完整独立文档（与 6_article.html 同头）
@@ -131,7 +132,9 @@ test('T4b 尾块合并溢出合法：巨侧块全被字节帽压制 → 两裸�
   assert.deepEqual(r.chunks.map((c) => ids(c.html)), [[1, 2, 3, 4], [5, 6, 7, 8, 9, 10, 11]]);
   const c2 = r.chunks[1];
   assert.ok(bytes(c2.html) > 9500 && bytes(c2.html) <= 20000, '合并块 own 溢出 chunkMax 合法');
-  assert.ok(!c2.html.includes('📌') && !c2.html.includes('✅') && !c2.html.includes('❌'));
+  // 三侧上下文全被帽压制 → 无任何上下文侧，但 ✅/❌ 每块恒在
+  assert.ok(!c2.html.includes('📌') && !c2.html.includes('⚠️'), '无上下文侧');
+  assert.ok(c2.html.includes('✅ 待转换内容自此开始') && c2.html.includes('❌ 待转换内容自此结束'));
 });
 
 test('T4 尾块守护不过：巨块尾部保留为独立小块', () => {
@@ -153,8 +156,10 @@ test('T5 巨段落块独立成块（允许溢出）+ 首块下文照常就位', 
   assert.ok(bytes(r.chunks[0].html) > 50000, '巨块溢出是合法例外');
   assert.ok(r.chunks[0].html.includes('❌ 待转换内容自此结束') && r.chunks[0].html.includes('⚠️ 下文上下文'));
   assertCtxCompact(r.chunks[0].html, '⚠️ 下文上下文');
-  // 末块：opening 候选 60KB > cap、prev 候选 60KB > cap → 裸 own
+  // 末块：opening 候选 60KB > cap、prev 候选 60KB > cap → 裸 own + 恒在的 ✅/❌
   assert.deepEqual(ids(r.chunks[1].html), [2, 3, 4, 5, 6, 7, 8, 9]);
+  assert.ok(r.chunks[1].html.includes('✅ 待转换内容自此开始'), '✅ 每块恒在（末块也有）');
+  assert.ok(r.chunks[1].html.includes('❌ 待转换内容自此结束'), '❌ 每块恒在（末块也有）');
 });
 
 test('T6 N=1 回退：装箱后仅 1 块 → 视为未分割', () => {
@@ -179,11 +184,11 @@ test('T7 三侧各就各位：下文帽截停、中间块五标记齐备、末�
   const [c1, c2, c3] = r.chunks;
 
   // 块 1：own 8900 + 下文 [id5]（1700 ≤cap；id6 会 2500>cap 截停），
-  // 无 ✅（首块无开头/上文）；ids 只含 own
+  // ✅ 恒在（首块紧跟 body 开标签）；ids 只含 own
   assert.deepEqual(ids(c1.html), [1, 2, 3, 4]);
   assert.ok(c1.html.includes('❌ 待转换内容自此结束') && c1.html.includes('⚠️ 下文上下文'));
   assertCtxCompact(c1.html, '⚠️ 下文上下文');
-  assert.ok(!c1.html.includes('✅'), '首块无开头/上文 → 无 ✅');
+  assert.ok(c1.html.includes('✅ 待转换内容自此开始'), '✅ 每块恒在（首块也有）');
 
   // 块 2（上下文不计预算的中间块）：📌=[1,2]（1600 ≤cap，id3 6500 截停）+
   // ⚠️上文=[4]（800 ≤cap，id3 6500 截停）+ ✅ + own 8600 + 下文 [14]
@@ -198,9 +203,30 @@ test('T7 三侧各就各位：下文帽截停、中间块五标记齐备、末�
   assert.ok(bytes(c2.html) > 10000, '上下文不计预算：文件可超 chunkMax');
 
   // 块 3（末块）：📌=[1,2] + ⚠️上文=[13]（1300 ≤cap，id12 会 2100>cap 截停）
-  // + ✅ + own，无 ❌（末块无下文侧）
+  // + ✅ + own + ❌（恒在，末块紧贴 </body>）
   assert.deepEqual(ids(c3.html), [14, 15, 16, 17, 18, 19]);
   assert.ok(c3.html.includes('📌 开头上下文') && c3.html.includes('⚠️ 上文上下文'));
   assert.ok(c3.html.includes('✅ 待转换内容自此开始'));
-  assert.ok(!c3.html.includes('❌'), '末块无下文侧');
+  assert.ok(c3.html.includes('❌ 待转换内容自此结束'), '❌ 每块恒在（末块也有）');
+});
+
+test('T8 ✅/❌ 位置：首块 ✅ 紧跟 body 开标签、末块 ❌ 紧贴 </body></html>', () => {
+  // 2026-09-09 用户裁定：待转换边界每块恒在且位置直观——首块无前侧上下文时
+  // ✅ 就是 body 第一个节点；末块无下文侧时 ❌ 就是 body 最后一个节点
+  const children = Array.from({ length: 14 }, (_, i) => blk(i + 1, 1000));
+  const r = chunkArticle(doc(children), children, { splitThreshold: 12000, chunkMax: 6500 });
+  assert.equal(r.chunks.length, 2);
+  const [c1, c2] = r.chunks;
+  const START = '<!-- ✅ 待转换内容自此开始 / Convert ONLY the content below this marker -->';
+  const END = '<!-- ❌ 待转换内容自此结束 / Convertible content ENDS here -->';
+  // 首块：body 开标签 → 换行 → ✅ → 换行 → own 首块
+  assert.ok(c1.html.includes(`${HEAD}\n${START}\n${children[0]}`), '✅ 应紧跟 body 开标签、own 之前');
+  // 末块：own 尾块 → 换行 → ❌ → </body></html>
+  assert.ok(c2.html.endsWith(`${children[13]}\n${END}</body></html>`), '❌ 应紧贴 </body></html>');
+  // 每块 own 恰被一对 ✅/❌ 围绕（各出现一次）
+  for (const c of r.chunks) {
+    assert.equal(c.html.split(START).length - 1, 1, '✅ 每块恰一次');
+    assert.equal(c.html.split(END).length - 1, 1, '❌ 每块恰一次');
+    assert.ok(c.html.indexOf(START) < c.html.indexOf(END), '✅ 应在 ❌ 之前');
+  }
 });
