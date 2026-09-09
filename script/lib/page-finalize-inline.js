@@ -10,8 +10,9 @@
  *     flex/grid 方向（2026-09-09 收紧：display 按值门控仅 flex/grid 四值
  *     存活 + flex-direction/wrap、grid-auto-flow/template-columns/rows
  *     五个方向 longhand；对齐全族/gap/order/flex 长手/grid placement
- *     全部出白名单）、滚动裁剪（overflow、overflow-x/y）、transform、
- *     font-size 与 font-weight（步骤 7 LLM 判标题层级的信号）、
+ *     全部出白名单；overflow 三件（overflow/overflow-x/y）2026-09-09
+ *     同批出白名单）、transform、font-size 与
+ *     font-weight（步骤 7 LLM 判标题层级的信号）、
  *     position:absolute（步骤 7 LLM 判特殊定位元素的信号——浮层/装饰/
  *     trans2img 候选；按值门控项有二：position 仅 absolute 存活
  *     （relative/fixed/sticky/static 一律删）、display 见 1.9）；长属性
@@ -41,7 +42,7 @@
  *     序列化）、outline 同理、box-shadow:none、background-color:
  *     transparent（含 rgba(0,0,0,0) 计算形）、background-image:none、
  *     border-image 初始值（简写展开的五个 longhand，四边全灭才删）、
- *     radius:0px、overflow:visible、transform:none、<img> 宽高值 auto
+ *     radius:0px、transform:none、<img> 宽高值 auto
  *     （auto 是初始值无信号量，真实像素宽高保留——步骤 7 图片权重信号）。
  *     flex 布局信号不是零值，保留；font-size/weight 见 1.11 继承等值修剪。
  *     函数值替换出的初始值同受此表过滤——替换整趟先落定（1.5），过滤
@@ -94,8 +95,7 @@ function __u2mFinalizeInline(computedMap) {
     // display 不在此列，走 keepDisplay 值门控
     'flex-direction': 1, 'flex-wrap': 1,
     'grid-auto-flow': 1, 'grid-template-columns': 1, 'grid-template-rows': 1,
-    // overflow 精确到 x/y：overflow- 前缀会把文本换行的 overflow-wrap 放进来
-    'overflow': 1, 'overflow-x': 1, 'overflow-y': 1,
+    // overflow 三件 2026-09-09 同批出白名单（滚动裁剪不再是保留信号）
     'transform': 1,
     // 字体类仅留这两个：步骤 7 LLM 判 div→h2 层级的信号
     'font-size': 1, 'font-weight': 1
@@ -260,9 +260,6 @@ function __u2mFinalizeInline(computedMap) {
     }
     if (prop === 'background-image') return val === 'none';
     if (prop === 'font-size' || prop === 'font-weight') return fontVoid(el, prop, val);
-    if (prop === 'overflow' || prop === 'overflow-x' || prop === 'overflow-y') {
-      return val === 'visible';
-    }
     return false;
   }
   var styled = document.querySelectorAll('[style]');

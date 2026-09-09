@@ -293,3 +293,10 @@ test('R7: grid placement 删——容器方向信号（display:grid + template-c
   assert.equal(b.getPropertyValue('grid-template-columns'), 'repeat(2, 1fr)');
   assert.equal(b.getPropertyValue('grid-auto-flow'), 'column');
 });
+
+test('R7: overflow 三件全删（auto/hidden/scroll/x/y——滚动裁剪不再保留）', () => {
+  const doc = run(`<div id=a style="overflow: auto;">x</div><div id=b style="overflow: hidden;">x</div><div id=c style="overflow-x: scroll; overflow-y: hidden;">x</div>`);
+  for (const id of ['a', 'b', 'c']) {
+    assert.equal(doc.getElementById(id).getAttribute('style'), null, id + ' overflow 应删');
+  }
+});
