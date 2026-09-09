@@ -2,6 +2,8 @@
 /**
  * screenshot_trans.mjs —— 步骤 8：占位符还原 + 图片下载 + trans2img 截图。
  * 读 7_skeleton.json + 1_snapshot.html + 2_long_text.json + 3_key_ids.json，产出：
+ * （分割时读分片 7_skeleton_chunk_X_of_N.json 并按 X 序合并，spec
+ * 2026-09-09 §5；7_skeleton.json 存在时优先）
  * 
  *   8_resolved_skeleton.json  结构同步骤 7，所有 {{LONG_TEXT_k[|suffix]}}
  *                             替换为真实文本；img 条目（![img](url) 形态）在
@@ -172,8 +174,51 @@ async function main() {
   if (!fs.existsSync(snapshotPath)) {
     return emitError(`找不到 ${snapshotPath}，请先运行步骤 1`);
   }
-  if (!fs.existsSync(skeletonPath)) {
-    return emitError(`找不到 ${skeletonPath}，请先运行步骤 7`);
+  // ── 骨架读取：未分割直读 7_skeleton.json；分割则 glob 分片、校验、按 X 序
+  //    合并（spec 2026-09-09 §5）。7_skeleton.json 存在时优先——升级前跑了一
+  //    半的目录防御；步骤 6 的 stale 清理已保证两者不并存 ──
+  const CHUNK_SKELETON_RE = /^7_skeleton_chunk_(\d+)_of_(\d+)\.json$/;
+  let skeleton = null;
+  let chunksMerged; // 分片合并路径才有值
+  if (fs.existsSync(skeletonPath)) {
+    skeleton = JSON.parse(await fsPromises.readFile(skeletonPath, 'utf8'));
+  } else {
+    const found = fs.readdirSync(dir)
+      .map((f) => CHUNK_SKELETON_RE.exec(f))
+      .filter(Boolean)
+      .map((mm) => ({ file: mm[0], x: Number(mm[1]), n: Number(mm[2]) }));
+    if (found.length === 0) {
+      return emitError(`找不到 ${skeletonPath}，请先运行步骤 7`);
+    }
+    const ns = new Set(found.map((f) => f.n));
+    if (ns.size !== 1) {
+      return emitError(`骨架分片 N 不一致: ${found.map((f) => f.file).join(', ')}——请重跑步骤 7`);
+    }
+    const n = found[0].n;
+    const xs = new Set(found.map((f) => f.x));
+    const missing = [];
+    for (let i = 1; i <= n; i++) if (!xs.has(i)) missing.push(i);
+    if (missing.length > 0) {
+      return emitError(`骨架分片缺失（应共 ${n} 片，缺 ${missing.join(', ')}）——请补跑对应分块的步骤 7 后重试`);
+    }
+    if (found.some((f) => f.x > n)) {
+      return emitError(`骨架分片编号越界（>N=${n}）: ${found.filter((f) => f.x > n).map((f) => f.file).join(', ')}`);
+    }
+    skeleton = [];
+    for (const f of found.sort((a, b) => a.x - b.x)) {
+      let part;
+      try {
+        part = JSON.parse(await fsPromises.readFile(path.join(dir, f.file), 'utf8'));
+      } catch (e) {
+        return emitError(`骨架分片 ${f.file} 不是合法 JSON: ${e.message}`);
+      }
+      if (!Array.isArray(part)) {
+        return emitError(`骨架分片 ${f.file} 应为 JSON 数组`);
+      }
+      skeleton.push(...part);
+    }
+    chunksMerged = n;
+    log(`分片骨架合并: ${found.length} 片 → ${skeleton.length} 条`);
   }
   if (!fs.existsSync(longTextPath)) {
     return emitError(`找不到 ${longTextPath}，请先运行步骤 2`);
@@ -190,8 +235,6 @@ async function main() {
   if (parsed.error) return emitError(parsed.error);
   const { titleId, descriptionIds, blockIds, dumpIds } = parsed;
   debug(`key_ids: title=${titleId ?? '无'} desc=${descriptionIds.length} blocks=${blockIds.length} dump=${dumpIds.length}`);
-
-  const skeleton = JSON.parse(await fsPromises.readFile(skeletonPath, 'utf8'));
 
   // ── runs 段 → markdown（spec 2026-09-06 §5.1）：逐 k 经 inline2md 确定性
   //    转换，与 texts 合并为扁平解析表——resolveSkeletonString 零改动。转换
@@ -327,6 +370,7 @@ async function main() {
     return emit({
       status: 'ok', skipped: 'no_trans2img', resolvedSkeleton: resolvedPath,
       runsResolved, tablesResolved, failedTables, codesResolved, failedCodes,
+      ...(chunksMerged !== undefined && { chunksMerged }),
     });
   }
 
@@ -379,6 +423,7 @@ async function main() {
         runsResolved,
         images,
         failedImages,
+        ...(chunksMerged !== undefined && { chunksMerged }),
       });
     }
 
@@ -548,6 +593,7 @@ async function main() {
       failedTables,
       codesResolved,
       failedCodes,
+      ...(chunksMerged !== undefined && { chunksMerged }),
     });
   } catch (e) {
     if (browser) await browser.close().catch(() => {});

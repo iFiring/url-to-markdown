@@ -835,3 +835,104 @@ test('screenshot_trans: runs 段经 inline2md 转 markdown 合并还原 + runsRe
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
 });
+
+// ── 分片骨架合并（spec 2026-09-09 §5）──
+
+function setupChunksTmp(name, chunkMap, { skeleton = null } = {}) {
+  const t = setupTmp(name, { skeleton, longText: { texts: {}, runs: {} } });
+  for (const [file, content] of Object.entries(chunkMap)) {
+    fs.writeFileSync(path.join(t.urlDir, file),
+      typeof content === 'string' ? content : JSON.stringify(content));
+  }
+  return t;
+}
+
+async function runTrans(tmpRoot) {
+  const script = path.resolve('script/screenshot_trans.mjs');
+  return runScript(process.execPath, [script, '--url', LIVE_URL], {
+    env: { U2M_WORKING_ROOT: tmpRoot },
+    timeoutMs: 30000,
+  });
+}
+
+test('screenshot_trans.mjs: 分片按 X 序合并 + chunksMerged 通报', async () => {
+  const { tmpRoot, urlDir } = setupChunksTmp('merge-ok', {
+    '7_skeleton_chunk_1_of_3.json': [{ p: '一' }, { p: '二' }],
+    '7_skeleton_chunk_2_of_3.json': [{ h1: '# 标题' }],
+    '7_skeleton_chunk_3_of_3.json': [{ p: '三' }],
+  });
+  const r = await runTrans(tmpRoot);
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'ok');
+  assert.equal(out.skipped, 'no_trans2img');
+  assert.equal(out.chunksMerged, 3);
+  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
+  assert.deepEqual(resolved, [{ p: '一' }, { p: '二' }, { h1: '# 标题' }, { p: '三' }]);
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test('screenshot_trans.mjs: 缺片报 error 列缺失号', async () => {
+  const { tmpRoot } = setupChunksTmp('merge-missing', {
+    '7_skeleton_chunk_1_of_3.json': [{ p: '一' }],
+    '7_skeleton_chunk_3_of_3.json': [{ p: '三' }],
+  });
+  const r = await runTrans(tmpRoot);
+  assert.equal(r.code, 1);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.status, 'error');
+  assert.ok(out.reason.includes('2'), `reason 应列出缺失号 2: ${out.reason}`);
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test('screenshot_trans.mjs: N 不一致报 error 列冲突文件', async () => {
+  const { tmpRoot } = setupChunksTmp('merge-nmismatch', {
+    '7_skeleton_chunk_1_of_2.json': [{ p: '一' }],
+    '7_skeleton_chunk_2_of_3.json': [{ p: '二' }],
+  });
+  const r = await runTrans(tmpRoot);
+  assert.equal(r.code, 1);
+  assert.ok(JSON.parse(r.stdout).reason.includes('N 不一致'));
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test('screenshot_trans.mjs: 坏 JSON / 非数组报 error 指明文件', async () => {
+  const a = setupChunksTmp('merge-badjson', {
+    '7_skeleton_chunk_1_of_2.json': '{oops',
+    '7_skeleton_chunk_2_of_2.json': [{ p: '二' }],
+  });
+  const ra = await runTrans(a.tmpRoot);
+  assert.equal(ra.code, 1);
+  assert.ok(JSON.parse(ra.stdout).reason.includes('1_of_2'), 'reason 应指明坏文件');
+  fs.rmSync(a.tmpRoot, { recursive: true, force: true });
+
+  const b = setupChunksTmp('merge-notarray', {
+    '7_skeleton_chunk_1_of_2.json': { nope: 1 },
+    '7_skeleton_chunk_2_of_2.json': [{ p: '二' }],
+  });
+  const rb = await runTrans(b.tmpRoot);
+  assert.equal(rb.code, 1);
+  assert.ok(JSON.parse(rb.stdout).reason.includes('数组'));
+  fs.rmSync(b.tmpRoot, { recursive: true, force: true });
+});
+
+test('screenshot_trans.mjs: 7_skeleton.json 存在时优先（忽略分片、无 chunksMerged）', async () => {
+  const { tmpRoot } = setupChunksTmp('merge-priority', {
+    '7_skeleton_chunk_1_of_2.json': [{ p: '分片内容' }],
+    '7_skeleton_chunk_2_of_2.json': [{ p: '分片内容2' }],
+  }, { skeleton: [{ p: '单文件内容' }] });
+  const r = await runTrans(tmpRoot);
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.chunksMerged, undefined, '单文件路径不应有 chunksMerged');
+  assert.ok(!fs.readFileSync(path.join(tmpRoot, urlToDirName(LIVE_URL), '8_resolved_skeleton.json'), 'utf8').includes('分片内容'));
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test('screenshot_trans.mjs: 无骨架无分片报 error 提示步骤 7', async () => {
+  const { tmpRoot } = setupChunksTmp('merge-none', {}, { skeleton: null });
+  const r = await runTrans(tmpRoot);
+  assert.equal(r.code, 1);
+  assert.ok(JSON.parse(r.stdout).reason.includes('步骤 7'));
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});

@@ -25,6 +25,9 @@ npx playwright install chromium                  # 浏览器缓存
 # 响应头（裸行无前缀；子资源不记），反爬诊断用，见 lib/browser.mjs），
 # 不设则静默——stdout 单行 JSON 契约不受影响
 U2M_DEBUG=1 node script/snapshot.mjs --url <url>
+
+# 大产物分块阈值（字节）：U2M_ARTICLE_SPLIT_THRESHOLD（默认 81920）触发分割、
+# U2M_ARTICLE_CHUNK_MAX（默认 51200）每块上限——测试调低触发用
 ```
 
 环境要求：node ≥20（nvm）、pnpm > yarn > npm。未配置 linter。测试以子进程方式启动真实 CLI、对接随机端口的夹具服务器；集成测试需要已安装 chromium。
@@ -139,6 +142,7 @@ U2M_DEBUG=1 node script/snapshot.mjs --url <url>
     - ⑥ 属性只剩 data-idx 的 span 迭代拆包到不动点
   - 保护集 = 迁入 key 元素全集 titleId∪descriptionIds∪blockIds——body 顶层全是显式标记的内容单元，删除/解包类启发式只清理块内未标记残留、替换类不设防；emit 增 slim 计数对象
   - 新 body 带 `max-width:768px; margin:4rem auto` 居中布局；产物 `6_article.html`
+  - **大产物分块（2026-09-09）**：`6_article.html` 总字节 > `U2M_ARTICLE_SPLIT_THRESHOLD`（默认 80KB）时按段落块贪心分割为 `6_article_chunk_X_of_N.html`（`lib/chunk-article.mjs` 纯函数：主内容 own 向 `U2M_ARTICLE_CHUNK_MAX`（默认 50KB）靠齐；📌开头（body 前 ≤3 块）/⚠️上文（上一块尾部 ≤2）/⚠️下文（下一块开头 ≤2）三侧只读上下文（**包裹在 HTML 注释内、每块独立一行**——DOM 解析不可见、子代理文本阅读可见；副本剥 data-idx/style、压缩块内标签间空白，own 区保真）+ ✅/❌ 转换边界标记，均**不计入 50KB 预算**（2026-09-09 用户裁定：上下文是只读参照，为压 50KB 削上下文本末倒置——v1 超限削减/v2 装箱预留两版均致中间块上下文被削光而废弃）、每侧自身 ≤chunkMax/5 字节帽即全部约束；单个巨段落块独立成块；尾块 <5 个段落块循环并入前块——splitThreshold 守护，贪心封边处 50KB 守护恒为死代码）；emit 增 `chunks:{split,count,files}` 恒定形状；成功后清 stale 骨架（`7_skeleton.json` + `7_skeleton_chunk_*.json`——重跑 6 后旧骨架必然失效）与另一模式旧分块 html。步骤 7 由 chunks.split 驱动：true → 单条消息并行派发 count 个子代理各读各的分块、各写 `7_skeleton_chunk_X_of_N.json`；false → 单子代理照旧。步骤 8 入口：`7_skeleton.json` 优先，否则 glob 分片校验（N 一致/X 恰 1..N/均为 JSON 数组）按 X 序合并，emit 增 `chunksMerged`，下游零改动
 
 - **步骤 7 [agent] —— LLM 读 `6_article.html` 产出 markdown 骨架 `7_skeleton.json`**
   - **段落块 = `<body>` 直接子元素**——每个段落块各自拆成独占一行的 markdown 行；数组按文档序、每项单键
@@ -178,7 +182,7 @@ U2M_DEBUG=1 node script/snapshot.mjs --url <url>
     - `trans2img`（此时已是步骤 8 回写的选中路径）→ `![](assets/trans/{id}.webp)`、仍为数组则 error 提示先跑步骤 8
   - 块间空行、文件以换行收尾，产物 `9_markdown.md`
 
-**工作目录。** 所有 CLI 只收 `--url`，经 `lib/env.mjs urlDir(url)` 自行派生工作目录（步骤 1 emit 输出 `url-name`/`url-working-path`）。每个 URL 对应 `working/<净化URL>/`；**占优内容 iframe 页面（步骤 1 重定向门判定）的专属目录为 `redirected_<原名>`**，目录内 `redirect_to.yaml`（内容 `to: <目标URL>`）是定位 marker——`urlDir()` 一次 existsSync 间接，步骤 2-9 无感知；marker 只在快照成功后写入（检测未命中时清除 stale）。所有步骤产物直接在 `<url-dir>/` 根目录（`1_snapshot.html`、`2_clean_snapshot.html`、`2_clean_style_snapshot.html`、`2_long_text.json`、`2_tables.json`、`2_code.json`、`3_key_ids.json`、`4_styled_extract.html`、`5_juice_styles.html`、`6_article.html`、`7_skeleton.json`、`8_resolved_skeleton.json`、`9_markdown.md`）；表格失败诊断在 `<url-dir>/logs/tables/{k}_{dataIdx}.log`，代码块失败诊断在 `<url-dir>/logs/codes/{k}_{dataIdx}.log`；截图在 `<url-dir>/assets/trans/{id}.webp`，下载图片在 `<url-dir>/assets/images/<name>`；净化先剥 `http(s)://` 前缀（目录名从域名开始），其余非 `[A-Za-z0-9.-]` 替换为 `_`，超 120 字符截断 + sha256 前 8 位十六进制后缀；同域名 http/https 派生同一目录。`U2M_WORKING_ROOT` 覆盖根目录（所有测试用它隔离）。`working/cookies/storage_state.json` 是唯一全局登录态——仅 `snapshot-login.mjs` 写入（cookie 按 name|domain|path 去重、localStorage 按 origin+name、读取时剔除过期）；转换脚本只读。`working/cookies/login_decisions_skips.json` 是跳过记忆（`{hostname: [信号名,...]}`，仅弱信号入档）——同样仅 `snapshot-login.mjs` 读写；旧版 `login_decisions.json`（信号级 `"login"|"skip"` 对象格式）已废弃，代码不读不写、磁盘遗留自然失效。
+**工作目录。** 所有 CLI 只收 `--url`，经 `lib/env.mjs urlDir(url)` 自行派生工作目录（步骤 1 emit 输出 `url-name`/`url-working-path`）。每个 URL 对应 `working/<净化URL>/`；**占优内容 iframe 页面（步骤 1 重定向门判定）的专属目录为 `redirected_<原名>`**，目录内 `redirect_to.yaml`（内容 `to: <目标URL>`）是定位 marker——`urlDir()` 一次 existsSync 间接，步骤 2-9 无感知；marker 只在快照成功后写入（检测未命中时清除 stale）。所有步骤产物直接在 `<url-dir>/` 根目录（`1_snapshot.html`、`2_clean_snapshot.html`、`2_clean_style_snapshot.html`、`2_long_text.json`、`2_tables.json`、`2_code.json`、`3_key_ids.json`、`4_styled_extract.html`、`5_juice_styles.html`、`6_article.html`、`6_article_chunk_X_of_N.html`（>80KB 时）、`7_skeleton.json`、`7_skeleton_chunk_X_of_N.json`（分割时）、`8_resolved_skeleton.json`、`9_markdown.md`）；表格失败诊断在 `<url-dir>/logs/tables/{k}_{dataIdx}.log`，代码块失败诊断在 `<url-dir>/logs/codes/{k}_{dataIdx}.log`；截图在 `<url-dir>/assets/trans/{id}.webp`，下载图片在 `<url-dir>/assets/images/<name>`；净化先剥 `http(s)://` 前缀（目录名从域名开始），其余非 `[A-Za-z0-9.-]` 替换为 `_`，超 120 字符截断 + sha256 前 8 位十六进制后缀；同域名 http/https 派生同一目录。`U2M_WORKING_ROOT` 覆盖根目录（所有测试用它隔离）。`working/cookies/storage_state.json` 是唯一全局登录态——仅 `snapshot-login.mjs` 写入（cookie 按 name|domain|path 去重、localStorage 按 origin+name、读取时剔除过期）；转换脚本只读。`working/cookies/login_decisions_skips.json` 是跳过记忆（`{hostname: [信号名,...]}`，仅弱信号入档）——同样仅 `snapshot-login.mjs` 读写；旧版 `login_decisions.json`（信号级 `"login"|"skip"` 对象格式）已废弃，代码不读不写、磁盘遗留自然失效。
 
 **浏览器上下文**：`snapshot.mjs` 启动单个 chromium 实例贯穿步骤 1 全流程。route-abort `resourceType === 'media'`；`bypassCSP: true`（否则严格 CSP 站点会在 addScriptTag 处杀死 Node 工作流）；viewport 1280×3000；`U2M_PROXY` 环境变量控制代理（未设置继承系统代理 / `direct` 绕过 / URL 显式钉住——真实冒烟曾因系统代理隧道失败报 ERR_TUNNEL_CONNECTION_FAILED 而加，实现于 `script/lib/browser.mjs` 的 `proxyLaunchOptions`）。步骤 8 自起同参数浏览器（外加 `deviceScaleFactor: 2` 原生 2x 截图）：页 A `file://` 渲染快照、页 B 重渲染原 URL（storageState 复用登录态），进程内用完即关。浏览器/viewer 一律在最终 emit **之前**关闭（emit 会退出进程，顺序错了会留孤儿 chromium）。
 
