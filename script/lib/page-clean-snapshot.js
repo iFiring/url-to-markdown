@@ -99,6 +99,86 @@ function __u2mCleanSnapshot(cfg) {
     controls[i].parentNode.removeChild(controls[i]);
   }
 
+  // 7.5 D1 脊柱占优比较删除（两趟共享，spec 2026-09-09 §4）：沿 body 向下的
+  //     「脊柱」逐层比较兄弟文本量——非占优子元素 ratio ≤5% ∧ (fixed/absolute/
+  //     sticky ∨ 弹窗词汇) ∧ 内容守卫通过 → 判为 chrome（弹窗/浮层/工具条），
+  //     整树删除。文本量排名第 1（含并列）永不入候选（裁定 R9，堵全零文本
+  //     退化）；下探进入占优子元素，其匹配 main/article/[role=main] 或子树
+  //     p≥5 → 不进入（裁定 R6，内容内部永不扫描）；硬上限 20 层。文本计量与
+  //     候选均排除 script/style/template/noscript（spec §14 修订 1：UA 样式
+  //     使 script display:none、CSS 源非文本量；真实管线步骤 1 已剥，防御
+  //     夹具直入）。置于控件删除后、空元素级联前——删除腾出的空壳由级联收尾。
+  var CHROME_VOCAB_RE = /modal|dialog|popup|pop-?up|popover|drawer|lightbox|toast|snackbar/i;
+  var CHROME_POS = { fixed: 1, absolute: 1, sticky: 1 };
+  var CHROME_TAG_SKIP = { SCRIPT: 1, STYLE: 1, TEMPLATE: 1, NOSCRIPT: 1 };
+  var chromeRemovedCount = 0;
+  var chromeKills = [];
+  function chromeTextOf(el) {
+    var parts = [];
+    (function walk(node) {
+      for (var c = node.firstChild; c; c = c.nextSibling) {
+        if (c.nodeType === 3) parts.push(c.textContent);
+        else if (c.nodeType === 1 && !CHROME_TAG_SKIP[c.tagName]) walk(c);
+      }
+    })(el);
+    return parts.join(' ').replace(/\s+/g, ' ').trim();
+  }
+  function chromeGuardOk(el) {
+    if (el.querySelectorAll('p').length > 2) return false;
+    if (el.matches('main, article, [role="main"]')) return false;
+    if (el.querySelector('main, article, [role="main"]')) return false;
+    if (el.querySelectorAll('pre, table').length > 0) return false;
+    return true;
+  }
+  function chromeVocabHit(el) {
+    var cls = typeof el.className === 'string' ? el.className : '';
+    if (CHROME_VOCAB_RE.test(cls + ' ' + (el.id || ''))) return true;
+    return !!(el.matches('[role="dialog"], [role="alertdialog"], [aria-modal="true"]')
+      || el.querySelector('[role="dialog"], [role="alertdialog"], [aria-modal="true"]'));
+  }
+  function spineScan(root, depth, label) {
+    var kids = [];
+    for (var i = 0; i < root.children.length; i++) {
+      if (!CHROME_TAG_SKIP[root.children[i].tagName]) kids.push(root.children[i]);
+    }
+    if (!kids.length) return;
+    var texts = [], lens = [], max = 0;
+    for (var i = 0; i < kids.length; i++) {
+      texts[i] = chromeTextOf(kids[i]);
+      lens[i] = texts[i].length;
+      if (lens[i] > max) max = lens[i];
+    }
+    if (max === 0) return;                    // 全零文本：无占优信号（裁定 R9）
+    for (var i = 0; i < kids.length; i++) {
+      if (lens[i] === max) continue;          // rank1（含并列）恒排除
+      if (lens[i] / max > 0.05) continue;     // ratio 阈值（裁定 R5：相差 ≥95%）
+      var pos = getComputedStyle(kids[i]).position;
+      var sig = CHROME_POS[pos] ? 'pos:' + pos : (chromeVocabHit(kids[i]) ? 'vocab' : '');
+      if (!sig) continue;
+      if (!chromeGuardOk(kids[i])) continue;  // 内容守卫（裁定 R10）
+      if (chromeKills.length < 60) {
+        chromeKills.push({
+          at: label, ratio: +(lens[i] / max).toFixed(4), sig: sig,
+          tag: kids[i].tagName.toLowerCase(),
+          idx: kids[i].getAttribute('data-idx') || '', txt: texts[i].slice(0, 30),
+        });
+      }
+      kids[i].parentNode.removeChild(kids[i]);
+      chromeRemovedCount++;
+    }
+    if (depth >= 20) return;                  // 硬上限，防病态链
+    var dom = null;
+    for (var i = 0; i < kids.length; i++) {
+      if (lens[i] === max && kids[i].parentNode) { dom = kids[i]; break; }
+    }
+    if (!dom || !dom.children.length) return;
+    if (dom.matches('main, article, [role="main"]')) return;       // 裁定 R6
+    if (dom.querySelectorAll('p').length >= 5) return;             // 裁定 R6
+    spineScan(dom, depth + 1, label + '>' + dom.tagName.toLowerCase()
+      + (dom.getAttribute('data-idx') ? '#' + dom.getAttribute('data-idx') : ''));
+  }
+  if (document.body) spineScan(document.body, 0, 'body');
+
   // 8. 删除空元素：子树内既无非空白文本、也无内容元素的空壳（含仅空白文本者）。
   //    级联：后序单趟——判定基于子树的真实内容，子空则父亦空，自然级联到任意深度。
   //    内容元素（img/br/svg/pre/h1-h6 等）本身即内容，即使无子节点也保留；
@@ -969,6 +1049,9 @@ function __u2mCleanSnapshot(cfg) {
 
   return {
     html: '<!DOCTYPE html>\n' + document.documentElement.outerHTML,
-    stats: { hiddenCount: hiddenCount, viewTextCount: viewTextCount }
+    stats: {
+      hiddenCount: hiddenCount, viewTextCount: viewTextCount,
+      chromeRemoved: chromeRemovedCount, chromeKills: chromeKills,
+    }
   };
 }
