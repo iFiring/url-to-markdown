@@ -78,14 +78,15 @@ test('compute_styles.mjs: juice 内联并删净 <style> 与 class，只产一份
   assert.ok(!juiced.includes('<style'), '不应含 <style> 标签');
   assert.ok(!juiced.includes('class='), '不应含 class 属性');
 
-  // 结构化样式保留：边框背景 / box-shadow / flex·grid 布局
+  // 结构化样式保留：边框背景 / box-shadow / flex·grid 方向（2026-09-09
+  // 收紧：display 值门控 + 方向 longhand；gap/对齐出白名单）
   assert.ok(juiced.includes('2px solid red'), '应保留边框规则');
   // 被清理过的元素经 CSSOM 重序列化，颜色归一为 rgb() 形式（语义等价）
   assert.ok(juiced.includes('rgb(240, 240, 240)'), '应保留背景色规则');
   assert.ok(juiced.includes('box-shadow'), '应保留 box-shadow');
   assert.ok(juiced.includes('display: flex'), 'flex 布局的 display 应保留');
-  assert.ok(juiced.includes('flex-direction'), 'flex 布局属性应保留');
-  assert.ok(juiced.includes('gap: 8px'), 'flex/grid 的 gap 应保留');
+  assert.ok(juiced.includes('flex-direction'), 'flex 方向属性应保留');
+  assert.ok(!juiced.includes('gap'), 'gap 出白名单应删除');
   assert.ok(juiced.includes('overflow-x'), 'overflow（块级滚动裁剪）应保留');
   assert.ok(juiced.includes('translateY(2px)'), 'transform 声明应保留');
   // 白名单按属性判定而非按元素：行内元素（高亮 span）的背景同样保留
@@ -375,16 +376,17 @@ test('compute_styles.mjs: 隐藏声明剥离——收起元素展开、自然 di
     assert.ok(juiced.includes(text), `收起内容应展开保留: ${text}`);
   }
   // 只删隐藏声明、规则其余声明保留：collapse 剥除后 .row 的 flex 自然恢复
-  // （不是 display:block 盲改——flex 结构信号对步骤 7 LLM 完整）。
+  // （不是 display:block 盲改——flex 方向信号对步骤 7 LLM 完整）。
   // 逐元素断言用整标签匹配（style 属性可能排在 data-idx 之前，从 id
   // 往后切片会切掉它）
   const tagOf = (id) => juiced.match(new RegExp(`<[^>]*data-idx="${id}"[^>]*>`))?.[0] || '';
   assert.ok(tagOf(2).includes('display: flex'), `自然 display:flex 应恢复: ${tagOf(2)}`);
-  assert.ok(tagOf(2).includes('gap'), `row 的其余声明（gap）应保留: ${tagOf(2)}`);
+  assert.ok(!tagOf(2).includes('gap'), `gap 出白名单应删除: ${tagOf(2)}`);
   // visibility:hidden 剥除但同规则 border 保留
   assert.ok(tagOf(3).includes('border') || tagOf(3).includes('rgb('), `invis 的边框应保留: ${tagOf(3)}`);
-  // 变量驱动兜底：内联覆写为可见（display:block）
-  assert.ok(tagOf(4).includes('display: block'), `var 驱动收起应兜底覆写 display:block: ${tagOf(4)}`);
+  // 变量驱动兜底：strip 阶段覆写 display:block 展开可见；finalize 值门控下
+  // block（div 的 UA 默认值）不再残留——可见性由「内容在 + 零 display:none」保证
+  assert.ok(!tagOf(4).includes('display:'), `display:block 兜底值不应残留于终态: ${tagOf(4)}`);
   assert.ok(tagOf(4).includes('border') || tagOf(4).includes('rgb('), `byvar 的边框应保留: ${tagOf(4)}`);
   // 裸 hidden 属性摘除后元素可见、属性不残留
   assert.ok(tagOf(5).includes('border') || tagOf(5).includes('rgb('), `attrhide 的边框应保留: ${tagOf(5)}`);
@@ -447,10 +449,11 @@ test('compute_styles.mjs: 零值声明过滤——等于全元素初始值的声
     `零圆角删、实背景留: ${tagOf(6)}`);
   assert.ok(tagOf(7).includes('border-radius: 8px'), `非零圆角应保留: ${tagOf(7)}`);
   assert.ok(tagOf(12).includes('overflow: auto'), `overflow:auto 应保留: ${tagOf(12)}`);
-  assert.ok(tagOf(13).includes('flex: 0 0 auto'), `flex 布局信号不是零值: ${tagOf(13)}`);
+  // flex 简写在 2026-09-09 布局白名单收紧中出白名单（只留方向信号）
+  assert.ok(!tagOf(13).includes('style='), `flex 简写出白名单应清空 style: ${tagOf(13)}`);
   assert.ok(tagOf(14).includes('outline') && tagOf(14).includes('1px'),
     `实 outline 应保留: ${tagOf(14)}`);
-  assert.equal(out.styledCount, 7, `应剩 7 个带样式元素（3/4/6/7/12/13/14），实得 ${out.styledCount}`);
+  assert.equal(out.styledCount, 6, `应剩 6 个带样式元素（3/4/6/7/12/14），实得 ${out.styledCount}`);
 
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
