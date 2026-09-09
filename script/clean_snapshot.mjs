@@ -6,8 +6,10 @@
  *     → 2_clean_style_snapshot.html（供步骤 4 裁剪）+ 2_long_text.json
  *   趟 2（clean）结构清洗 + K1-K11 机械规则瘦身 + 长文本占位（K11 之后、无编号）
  *     → 2_clean_snapshot.html（结构视图）
- * 零样式计算：不做 juice 内联、不做 CSS 隐藏检测——CSS 隐藏子树按可见
- * 保留，清洗版的隐藏折叠只认 HTML 裸 hidden 属性（K5）。
+ * 样式计算仅限共享段标志预计算（spec 2026-09-09）：不做 juice 内联；
+ * CSS 隐藏检测限 body 边界脚手架区（body 直接子孙 ∪ 独子链）——链外深处
+ * 的 CSS 隐藏子树（FAQ/非激活 tab）按可见保留，清洗版折叠为 HIDDEN_TAG
+ * 壳（K5x）；裸 hidden 属性折叠（K5）全文档不变。
  *
  * 长文本占位分两趟各自执行（2026-09-03 修订，自共享段移出）：styled 趟在
  * 分支开头带编号执行（{{LONG_TEXT_k|n_chars}}，恢复清单 2_long_text.json

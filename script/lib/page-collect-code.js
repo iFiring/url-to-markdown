@@ -105,7 +105,7 @@ function __u2mCollectCode() {
   for (var i = 0; i < pres.length; i++) {
     var pre = pres[i];
     if (!pre.parentNode) continue;
-    if (pre.hasAttribute('hidden')) continue; // K5 独占
+    if (pre.hasAttribute('hidden') || pre.__u2mChromeFold || pre.__u2mInChromeFold) continue; // K5/K5x 独占（同源 skip）
     k++;
     var code = pre.querySelector('code') || pre;
 

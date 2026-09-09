@@ -325,6 +325,56 @@ function __u2mCleanSnapshot(cfg) {
     prePre[i].__u2mPreLines = countPreLines(prePre[i]);
   }
 
+  // chrome 折叠集预计算（两趟共享，spec 2026-09-09 §5/§9.1-3）：候选区 =
+  //     body 直接子孙（豁免兄弟检查，裁定 R4）∪ 独子链节点（自 body 下每步
+  //     皆独元素子，遇分叉出链，裁定 R3）。本任务只判 hidden 种：computed
+  //     display:none ∨ visibility:hidden 含祖先累积（display:none 后代的
+  //     computed 值不回传 none，必须文档序自顶向下累积）。裸 [hidden] 及其
+  //     后代除外——K5 独占（既定政策不变）。统一内容守卫 chromeGuardOk
+  //     （裁定 R10）。最外层优先：文档序单趟，祖先已入折叠集则后代不再独立
+  //     判定。script/style/template/noscript 排除（spec §14 修订 1）。
+  //     折叠集节点挂 __u2mChromeFold（种类）、后代挂 __u2mInChromeFold——
+  //     styled 侧收集与 clean 侧 K6/K7 同源 skip（k 对齐，spec §9.3）；规模
+  //     复用 __u2mHiddenSize 占位前预计算。必须在此计算：clean 趟随后删
+  //     <style>/style 属性，computed display 退化为 UA 默认。
+  var chromeFolds = [];
+  (function () {
+    var all = document.querySelectorAll('body *');
+    var hidAcc = new Map(), attrAcc = new Map();
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      if (CHROME_TAG_SKIP[el.tagName]) { hidAcc.set(el, true); attrAcc.set(el, true); continue; }
+      var cs = getComputedStyle(el);
+      var par = el.parentElement;
+      hidAcc.set(el, cs.display === 'none' || cs.visibility === 'hidden' || !!(par && hidAcc.get(par)));
+      attrAcc.set(el, el.hasAttribute('hidden') || !!(par && attrAcc.get(par)));
+    }
+    function onChain(el) {
+      var n = el;
+      while (n && n.tagName !== 'BODY') {
+        var p = n.parentElement;
+        if (!p) return false;
+        if (p.tagName !== 'BODY' && p.children.length !== 1) return false;   // 非 body 层须独子
+        n = p;
+      }
+      return !!n && n.tagName === 'BODY';
+    }
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      if (CHROME_TAG_SKIP[el.tagName]) continue;
+      if (el.__u2mInChromeFold || el.__u2mChromeFold) continue;   // 已随外层入集
+      if (attrAcc.get(el)) continue;                              // K5 独占领地
+      if (!onChain(el)) continue;                                 // 候选区限制（裁定 R2/R3）
+      if (!hidAcc.get(el)) continue;                              // 本任务：仅 hidden 种
+      if (!chromeGuardOk(el)) continue;                           // 内容守卫
+      el.__u2mChromeFold = 'hidden';
+      if (!el.__u2mHiddenSize) el.__u2mHiddenSize = sizeSuffix(el.textContent);
+      chromeFolds.push({ el: el, kind: 'hidden' });
+      var desc = el.querySelectorAll('*');
+      for (var j = 0; j < desc.length; j++) desc[j].__u2mInChromeFold = true;
+    }
+  })();
+
   // 9. 长文本占位（foldLongText；中英文分标准）：run+散文本统一 walk。
   //    numbered=true（styled 趟，分支开头调用）：run 命中（共享段末尾检测挂
   //    的 __u2mRunHtml expando）→ 整段占位 {{LONG_TEXT_k|n_unit}}、canonical
@@ -826,6 +876,32 @@ function __u2mCleanSnapshot(cfg) {
     hiddenCount++;
   }
 
+  // K5x. chrome 折叠集消费（仅清洗版，spec 2026-09-09 §5-7）：共享段
+  //      chromeFolds 判定，壳机制逐字复用 K5——K2 白名单属性（含 data-idx）
+  //      已就位、子树清空、token 带占位前预计算规模 + topTags 构成。
+  //      hidden 种复用 HIDDEN_TAG（语义同裸 [hidden]：可能是收起正文，壳可
+  //      标进 paragraphIds，还原走带样式版）。带样式版不折叠（步骤 5 隐藏
+  //      剥离照旧展开、步骤 4 按壳 id 保整枝）。
+  var CHROME_TOKEN = { hidden: 'HIDDEN_TAG' };
+  var cssHiddenCount = 0;
+  for (var i = 0; i < chromeFolds.length; i++) {
+    var cfEl = chromeFolds[i].el, cfKind = chromeFolds[i].kind;
+    if (!cfEl.parentNode || !document.body.contains(cfEl)) continue;   // 已被前序删除
+    var cfTags = {};
+    var cfDesc = cfEl.querySelectorAll('*');
+    for (var j = 0; j < cfDesc.length; j++) {
+      var cft = cfDesc[j].tagName.toLowerCase();
+      cfTags[cft] = (cfTags[cft] || 0) + 1;
+    }
+    var cfSz = cfEl.__u2mHiddenSize || sizeSuffix(cfEl.textContent);
+    var cfComp = topTags(cfTags);
+    var cfToken = '{{' + CHROME_TOKEN[cfKind] + '|' + cfSz.n + '_' + cfSz.unit
+      + (cfComp ? ';' + cfComp : '') + '}}';
+    while (cfEl.firstChild) cfEl.removeChild(cfEl.firstChild);
+    cfEl.appendChild(document.createTextNode(cfToken));
+    if (cfKind === 'hidden') cssHiddenCount++;
+  }
+
   // K6. table 折叠（仅清洗版）：整树清空、折叠为 {{TABLE_k|rows×cols}} 占位符
   //     ——k = 文档序编号（1 起、跳过 [hidden] 表，与 styled 趟 __u2mCollectTables
   //     /__u2mFoldTables 一致，保证两版 k 对齐）。行 = 本表自身的 <tr> 数（嵌套
@@ -839,7 +915,7 @@ function __u2mCleanSnapshot(cfg) {
   for (var i = 0; i < tables.length; i++) {
     var tb = tables[i];
     if (!tb.parentNode) continue;
-    if (tb.hasAttribute('hidden')) continue;
+    if (tb.hasAttribute('hidden') || tb.__u2mChromeFold || tb.__u2mInChromeFold) continue;   // K5/K5x 独占（折叠集同源 skip，两版 k 对齐）
     tableK++;
     var shape = tb.__u2mTableShape;
     while (tb.firstChild) tb.removeChild(tb.firstChild);
@@ -859,7 +935,7 @@ function __u2mCleanSnapshot(cfg) {
   for (var i = 0; i < pres.length; i++) {
     var pre = pres[i];
     if (!pre.parentNode) continue;
-    if (pre.hasAttribute('hidden')) continue;
+    if (pre.hasAttribute('hidden') || pre.__u2mChromeFold || pre.__u2mInChromeFold) continue;   // K5/K5x 独占（同源 skip）
     var langShell = pre.querySelector('code[data-language]');
     if (langShell && !pre.hasAttribute('data-language')) {
       pre.setAttribute('data-language', langShell.getAttribute('data-language'));
@@ -1069,6 +1145,7 @@ function __u2mCleanSnapshot(cfg) {
       hiddenCount: hiddenCount, viewTextCount: viewTextCount,
       chromeRemoved: chromeRemovedCount, chromeKills: chromeKills,
       commentsRemoved: commentsRemovedCount,
+      cssHiddenFolded: cssHiddenCount,
     }
   };
 }

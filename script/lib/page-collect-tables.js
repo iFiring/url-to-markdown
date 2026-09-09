@@ -10,7 +10,7 @@ function __u2mCollectTables() {
   for (var i = 0; i < tables.length; i++) {
     var tb = tables[i];
     if (!tb.parentNode) continue;
-    if (tb.hasAttribute('hidden')) continue; // K5 独占
+    if (tb.hasAttribute('hidden') || tb.__u2mChromeFold || tb.__u2mInChromeFold) continue; // K5/K5x 独占（chrome 折叠集同源 skip，两版 k 对齐，spec 2026-09-09 §9.3）
     k++;
     var trs = tb.querySelectorAll('tr');
     var rows = 0, cols = 0;
