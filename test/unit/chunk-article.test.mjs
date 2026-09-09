@@ -18,8 +18,8 @@ assert.equal(bytes(blk(3, 800)), 800, 'blk 辅助函数应精确控制字节');
 // data-idx，ids 只能看到待转换区）
 const ids = (html) => [...html.matchAll(/data-idx="(\d+)"/g)].map((m) => Number(m[1]));
 
-// 断言标记注释包裹的上下文：无 data-idx/style、块内标签间无空白/换行
-// （块与块之间的独立换行是刻意展示形态，检查前先摘掉）
+// 断言标记注释包裹的上下文：无 data-idx/style、块内标签间与文本节点两缘
+// 均无空白（块与块之间的独立换行是刻意展示形态，检查前先摘掉）
 const assertCtxCompact = (html, mark) => {
   const start = html.indexOf(mark);
   assert.ok(start >= 0, `应有 ${mark.slice(0, 20)} 标记`);
@@ -28,6 +28,10 @@ const assertCtxCompact = (html, mark) => {
   assert.ok(!ctx.includes('data-idx'), '上下文副本应剥 data-idx');
   assert.ok(!ctx.includes('style='), '上下文副本应剥 style 属性');
   assert.ok(!/>\s+</.test(ctx), '上下文副本块内标签间应无空白/换行');
+  for (const m of ctx.matchAll(/>([^<>]+)</g)) {
+    const trimmed = m[1].replace(/^(?:\s|&nbsp;|&#160;)+|(?:\s|&nbsp;|&#160;)+$/g, '');
+    assert.equal(trimmed, m[1], `文本节点两缘应无空白: ${JSON.stringify(m[1])}`);
+  }
 };
 
 test('T1 未达阈值不分割：split=false、chunks 空', () => {
