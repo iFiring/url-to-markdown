@@ -268,6 +268,22 @@ function __u2mCleanSnapshot(cfg) {
     wrap.parentNode.removeChild(wrap);
   }
 
+  // 注释节点剥离（两趟共享，spec 2026-09-09 §9.1-2）：框架 SSR 残留（<!---->
+  //     Vue/React 占位注释）与模板注释零信息量；顺带消除原生注释与步骤 6 分块
+  //     上下文标记（HTML 注释形态）的潜在混淆。pre/code 子树除外——代码样本
+  //     可能含 HTML 注释作为内容（styled 失败 live 代码块由步骤 7 LLM 阅读）。
+  //     先收集后删——避免 TreeWalker 活遍历中删节点的迭代陷阱。
+  var commentsRemovedCount = 0;
+  var commentWalker = document.createTreeWalker(document.documentElement, 128, null);
+  var commentHits = [];
+  while (commentWalker.nextNode()) commentHits.push(commentWalker.currentNode);
+  for (var i = 0; i < commentHits.length; i++) {
+    var cmt = commentHits[i];
+    var cpar = cmt.parentElement;
+    if (cpar && cpar.closest('pre, code')) continue;
+    if (cmt.parentNode) { cmt.parentNode.removeChild(cmt); commentsRemovedCount++; }
+  }
+
   // ---- 折叠统计预计算（两趟共享）+ 长文本占位函数定义 ----
   // 长文本占位（2026-09-03 修订）移出共享段、两趟各自调用 foldLongText：
   // styled 趟在分支开头执行（带编号，原文按编号收集 → 2_long_text.json）；
@@ -1052,6 +1068,7 @@ function __u2mCleanSnapshot(cfg) {
     stats: {
       hiddenCount: hiddenCount, viewTextCount: viewTextCount,
       chromeRemoved: chromeRemovedCount, chromeKills: chromeKills,
+      commentsRemoved: commentsRemovedCount,
     }
   };
 }
