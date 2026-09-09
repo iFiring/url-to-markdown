@@ -33,15 +33,46 @@
  *     颜色空间参数的 color-mix）浏览器会整条丢弃，不如删净，保证终态
  *     零函数间接引用。
  *  1.7 零值声明过滤：白名单内值等于全元素初始值的声明删除——边框按"边"
- *     语义（style none/缺省或 width 0 → 该边三件全删）、outline 同理、
- *     box-shadow:none、background-color:transparent（含 rgba(0,0,0,0)
- *     计算形）、background-image:none、border-image 初始值（简写展开的
- *     五个 longhand，四边全灭才删——边存活时留着维持 border: 简写紧凑
- *     序列化）、radius:0px、overflow:visible。font-size/weight 的相对
- *     对比与 flex 布局信号不是零值，保留；<img> 宽高例外不受影响。
+ *     语义（style none/缺省/initial/unset 或 width 0 → 该边三件全删；
+ *     bare 简写 border-width/style/color 按四边全灭判——border-color:
+ *     currentcolor 只在四边全灭时删，边存活时留着维持 border: 简写紧凑
+ *     序列化）、outline 同理、box-shadow:none、background-color:
+ *     transparent（含 rgba(0,0,0,0) 计算形）、background-image:none、
+ *     border-image 初始值（简写展开的五个 longhand，四边全灭才删）、
+ *     radius:0px、overflow:visible、transform:none、<img> 宽高值 auto
+ *     （auto 是初始值无信号量，真实像素宽高保留——步骤 7 图片权重信号）。
+ *     flex 布局信号不是零值，保留；font-size/weight 见 1.11 继承等值修剪。
  *     函数值替换出的初始值同受此表过滤——替换整趟先落定（1.5），过滤
  *     在落定后的块上整趟跑（带 var 的简写在 CSSOM 里 longhand 读作空串，
  *     同趟混跑会把尚未替换的边误判成缺省样式而连带删掉实边）
+ *  1.8 CSS 关键字零值：非继承属性上 initial/unset = 写了等于没写——
+ *     finalize 末尾 <style>/class 已删净、内联样式是唯一级联源，关键字
+ *     声明与不声明计算结果恒同，删。白名单内唯一继承属性 font-size/
+ *     font-weight 例外分流：unset≡inherit（默认行为，同既有 inherit
+ *     删除）、initial 阻断继承（有意义，保留）；display 不走本规则
+ *     （display:initial=inline 在块级标签上是真布局信号，行内标签见 1.9）
+ *  1.9 UA 默认 display：行内为 UA 默认的标签集（span/a/strong/em/code
+ *     等 INLINE_DEFAULT_TAGS）上 display:inline 删——写了等于没写；
+ *     div 等块级标签上的 inline 是真信号、inline-block 等非默认值一律保留
+ *  1.10 背景噪音两组（微信页面实测每 chunk ~14KB 长手簇 + ~4KB 白底）：
+ *     - 无图长手簇——无有效 background-image 时 position(含 -x/-y)/size/
+ *       repeat/attachment/origin 无论何值全删（无图可绘制则零视觉效果，
+ *       含非初始的 no-repeat/left top），clip 仅删初始 border-box（clip
+ *       同时影响纯色绘制，padding-box/text 等保留）；有图时按初始值形删
+ *       （0% 0%/left top/auto/repeat/scroll/padding-box）
+ *     - 画布等值——元素 background-color（或 bare background 简写的纯色
+ *       值/none）与有效背景精确相等则删：白底页面刷白、黑卡上黑 span 都是
+ *       视觉零效果。有效背景 = 最近祖先非透明 background-color，全透明则
+ *       画布白（浏览器默认底色）；灰卡上的白 span 保留（其背景是卡片而
+ *       非画布）；body 自身声明对 html/白比较，深色画布源不被误删。
+ *       修剪与顺序无关：只删与有效背景相等的声明，祖先行修剪后有效背景
+ *       不变（其被删声明本就等于更上层的背景）
+ *  1.11 继承等值 font 修剪：font-size/font-weight 是继承属性——声明与
+ *     继承有效值相等的是纯重复，删（normal≡400、bold≡700、medium≡16px
+ *     归一比较，最近祖先声明链上溯、根默认 16px/400）。只删重复、对比点
+ *     全保留：bold 下的 400 重置、17px 下的 18px 等步骤 7 需要的层级/
+ *     强调信号零损失；em/%/bolder 等不可比形态保守保留。修剪与顺序无关：
+ *     只删与有效值相等的声明，祖先行修剪后有效值不变
  *  2. 删除全部 <style> 标签与 class 属性
  * 供 juice 版输出收尾（juice 已内联规则并移除 <style>，此处清理与兜底）。
  * 在浏览器里删而非在 Node 里正则替换：正文若含字面 class="..." 等文本，
@@ -83,23 +114,112 @@ function __u2mFinalizeInline(computedMap) {
   // 零值声明：值等于全元素初始值——写与不写等价，纯非信息（参考页
   // 1,946 个元素的 style 值只有 border: 0px solid——Tailwind preflight
   // 被 juice 内联的产物）。边框按"边"语义：style none（显式或缺省——
-  // 缺省即 initial none）或 width 0 → 该边三件全删，宽 0 或样式 none
-  // 的边无论其余声明什么都不可见；style 实值 + width 缺省 =
-  // medium+solid 可见边框，保留。font-size/weight 的相对对比与
-  // flex 布局信号不是零值，不在本表
+  // 缺省即 initial none；initial/unset 关键字计算后同为 none）或 width 0
+  // → 该边三件全删，宽 0 或样式 none 的边无论其余声明什么都不可见；
+  // style 实值 + width 缺省 = medium+solid 可见边框，保留。
+  // flex 布局信号不是零值；font-size/weight 走 1.11 继承等值修剪
+  var NO_STYLE = {'none': 1, '': 1, 'initial': 1, 'unset': 1};
   function sideVoid(st, side) {
     var style = st.getPropertyValue('border-' + side + '-style');
     var width = st.getPropertyValue('border-' + side + '-width');
-    return style === 'none' || style === '' || width === '0px' || width === '0';
+    return NO_STYLE[style] === 1 || width === '0px' || width === '0';
   }
   function outlineVoid(st) {
     var style = st.getPropertyValue('outline-style');
     var width = st.getPropertyValue('outline-width');
-    return style === 'none' || style === '' || width === '0px' || width === '0';
+    return NO_STYLE[style] === 1 || width === '0px' || width === '0';
   }
-  function isVoidDeclaration(prop, val, st) {
-    var m = /^border-(top|right|bottom|left)-(width|style|color)$/.exec(prop);
-    if (m) return sideVoid(st, m[1]);
+  // 1.8 CSS 关键字零值：内联是唯一级联源后（<style>/class 已删净），
+  // 非继承属性上 initial/unset 与不声明计算结果恒同。font-size/font-weight
+  // （白名单内唯一继承属性）分流：unset≡inherit 删、initial 阻断继承保留；
+  // display 不走本规则（见 1.9 标签门控）
+  var INHERITED_PROPS = {'font-size': 1, 'font-weight': 1};
+  function keywordVoid(prop, val) {
+    if (val !== 'initial' && val !== 'unset') return false;
+    if (prop === 'display') return false;
+    if (INHERITED_PROPS[prop]) return val === 'unset';
+    return true;
+  }
+  // 1.9 UA 默认 display:inline 的行内标签集——写了等于没写；button/input
+  // 等 UA 默认 inline-block 的标签不在集内（inline 对它们是改布局的真信号）
+  var INLINE_DEFAULT_TAGS = {
+    'span': 1, 'a': 1, 'strong': 1, 'b': 1, 'em': 1, 'i': 1, 'code': 1,
+    'small': 1, 'big': 1, 'mark': 1, 'sub': 1, 'sup': 1, 'kbd': 1, 'samp': 1,
+    'var': 1, 'label': 1, 'abbr': 1, 'cite': 1, 'q': 1, 's': 1, 'u': 1,
+    'del': 1, 'ins': 1, 'time': 1, 'data': 1, 'bdi': 1, 'bdo': 1, 'ruby': 1,
+    'rt': 1, 'rp': 1, 'output': 1, 'font': 1, 'nobr': 1, 'br': 1,
+    'svg': 1, 'math': 1
+  };
+  // 1.10 背景长手簇：这些属性只服务于 background-image 的绘制——无图时
+  // 无论何值零视觉效果；有图时仅初始值形是零效果。clip 例外单判（影响纯色）
+  var BG_IMAGE_DEPS = {
+    'background-position': 1, 'background-position-x': 1, 'background-position-y': 1,
+    'background-size': 1, 'background-repeat': 1, 'background-attachment': 1,
+    'background-origin': 1
+  };
+  var BG_INITIAL_FORMS = {
+    'background-position': {'0% 0%': 1, 'left top': 1, '0px 0px': 1},
+    'background-position-x': {'0%': 1, 'left': 1, '0px': 1},
+    'background-position-y': {'0%': 1, 'top': 1, '0px': 1},
+    'background-size': {'auto': 1},
+    'background-repeat': {'repeat': 1},
+    'background-attachment': {'scroll': 1},
+    'background-origin': {'padding-box': 1}
+  };
+  function hasRealImage(st) {
+    var img = st.getPropertyValue('background-image');
+    return img !== '' && img !== 'none';
+  }
+  // 1.10 画布等值：有效背景 = 最近祖先非透明 background-color，全透明则
+  // 浏览器默认画布白。值比较靠 CSSOM 归一（两侧同经 getPropertyValue 读出）
+  function normColor(v) { return (v || '').replace(/\s+/g, ' ').trim().toLowerCase(); }
+  var TRANSPARENT_BG = {'': 1, 'transparent': 1, 'rgba(0, 0, 0, 0)': 1};
+  function backdropOf(el) {
+    var p = el.parentElement;
+    while (p) {
+      var v = p.style ? normColor(p.style.getPropertyValue('background-color')) : '';
+      if (TRANSPARENT_BG[v] !== 1) return v;
+      p = p.parentElement;
+    }
+    return 'rgb(255, 255, 255)';
+  }
+  // 1.11 继承等值 font 修剪：normal≡400、bold≡700、medium≡16px 归一后与
+  // 最近祖先声明（无则根默认）比较；em/%/bolder 等不可比形态保守保留
+  var FONT_NORM = {'normal': '400', 'bold': '700', 'medium': '16px'};
+  function normFont(v) { v = (v || '').trim().toLowerCase(); return FONT_NORM[v] || v; }
+  function inheritedFont(el, prop) {
+    var p = el.parentElement;
+    while (p) {
+      var v = p.style ? p.style.getPropertyValue(prop) : '';
+      if (v !== '') return normFont(v);
+      p = p.parentElement;
+    }
+    return prop === 'font-weight' ? '400' : '16px';
+  }
+  function fontVoid(el, prop, val) {
+    var n = normFont(val);
+    if (prop === 'font-weight') {
+      if (!/^[0-9]+$/.test(n)) return false;
+    } else if (!/^[0-9.]+px$/.test(n)) return false;
+    return n === inheritedFont(el, prop);
+  }
+  function isVoidDeclaration(el, prop, val, st) {
+    if (keywordVoid(prop, val)) return true;
+    if (prop === 'display') {
+      return val === 'inline' && INLINE_DEFAULT_TAGS[el.tagName.toLowerCase()] === 1;
+    }
+    // 1.7 img 宽高例外中的 auto 值：初始值且无信号量（真实像素才判权重）
+    if ((prop === 'width' || prop === 'height') && val === 'auto') return true;
+    if (prop === 'transform') return val === 'none';
+    // bare 简写（无方位捕获组）按四边全灭判；逐边形态按该边判。
+    // currentcolor 是 border-color 初始值：边灭时纯残渣，边存活时留着
+    // 维持简写紧凑序列化（镜像 border-image 逻辑）
+    var m = /^border-(?:(top|right|bottom|left)-)?(width|style|color)$/.exec(prop);
+    if (m) {
+      if (m[1]) return sideVoid(st, m[1]);
+      return sideVoid(st, 'top') && sideVoid(st, 'right') &&
+        sideVoid(st, 'bottom') && sideVoid(st, 'left');
+    }
     if (prop === 'outline-style' || prop === 'outline-width' || prop === 'outline-color') {
       return outlineVoid(st);
     }
@@ -122,10 +242,15 @@ function __u2mFinalizeInline(computedMap) {
       return val === '0px';
     }
     if (prop === 'box-shadow') return val === 'none';
-    if (prop === 'background-color') {
-      return val === 'transparent' || val === 'rgba(0, 0, 0, 0)';
+    if (prop === 'background-clip') return val === 'border-box';
+    if (BG_IMAGE_DEPS[prop]) return !hasRealImage(st) || BG_INITIAL_FORMS[prop][val] === 1;
+    if (prop === 'background-color' || prop === 'background') {
+      // bare background 简写只有纯色值/none 会命中等值比较，含图/多件形态保留
+      var nv = normColor(val);
+      return TRANSPARENT_BG[nv] === 1 || nv === 'none' || nv === backdropOf(el);
     }
     if (prop === 'background-image') return val === 'none';
+    if (prop === 'font-size' || prop === 'font-weight') return fontVoid(el, prop, val);
     if (prop === 'overflow' || prop === 'overflow-x' || prop === 'overflow-y') {
       return val === 'visible';
     }
@@ -188,7 +313,7 @@ function __u2mFinalizeInline(computedMap) {
       var keepThis2 = keep(prop2) ||
         (isImg && (prop2 === 'width' || prop2 === 'height')) ||
         keepPosition(prop2, val2);
-      if (!keepThis2 || val2 === 'inherit' || isVoidDeclaration(prop2, val2, st)) {
+      if (!keepThis2 || val2 === 'inherit' || isVoidDeclaration(styled[i], prop2, val2, st)) {
         st.removeProperty(prop2);
         dirty = true;
       }

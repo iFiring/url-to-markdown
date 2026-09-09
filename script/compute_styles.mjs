@@ -51,7 +51,19 @@
  *        属性。只动确有删除的元素——全合规的保持 juice 字面输出（被清
  *        理元素的声明经 CSSOM 重序列化，颜色归一为 rgb() 形式，语义等价）
  *      - 零值声明过滤：白名单内值等于全元素初始值的声明删除（边框按
- *        "边"语义判无效——宽 0 或样式 none 的边无论其余声明什么都不可见）
+ *        "边"语义判无效——宽 0 或样式 none/initial/unset 的边无论其余
+ *        声明什么都不可见；transform:none、img 宽高 auto 同删）
+ *      - CSS 关键字零值：非继承属性上 initial/unset 与不声明恒同（内联
+ *        已是唯一级联源），删；font-size/weight 例外分流（unset≡inherit
+ *        删、initial 阻断继承保留）；display 走标签门控——行内默认标签
+ *        （span/a/code 等）上 display:inline 删，块级标签上保留
+ *      - 背景噪音：无 background-image 时 position/size/repeat/attachment/
+ *        origin 长手无论何值全删（无图零视觉效果）、clip 仅删初始
+ *        border-box；background-color（含 bare 简写纯色）与有效背景
+ *        （最近祖先非透明底色，兜底画布白）等值删——白底刷白是纯噪音
+ *      - 继承等值 font 修剪：font-size/font-weight 与继承有效值相等的
+ *        重复声明删（normal≡400、bold≡700、medium≡16px 归一），只留
+ *        对比点——步骤 7 的层级/强调信号零损失，em/% 等不可比形态保留
  *      - <style> 标签与 class 属性删净（正文含字面 class="..." 文本也
  *        不会误伤）
  *
