@@ -14,8 +14,20 @@ const blk = (id, size) => {
 };
 assert.equal(bytes(blk(3, 800)), 800, 'blk 辅助函数应精确控制字节');
 
-// 从 html 提取 data-idx 序列（断言块身份与顺序）
+// 从 html 提取 data-idx 序列（断言 own 区块身份与顺序——上下文副本剥
+// data-idx，ids 只能看到待转换区）
 const ids = (html) => [...html.matchAll(/data-idx="(\d+)"/g)].map((m) => Number(m[1]));
+
+// 断言标记注释包裹的上下文：无 data-idx、块内标签间无空白/换行
+// （块与块之间的独立换行是刻意展示形态，检查前先摘掉）
+const assertCtxCompact = (html, mark) => {
+  const start = html.indexOf(mark);
+  assert.ok(start >= 0, `应有 ${mark.slice(0, 20)} 标记`);
+  const end = html.indexOf('-->', start);
+  const ctx = html.slice(start, end).replace(/>\n</g, '><');
+  assert.ok(!ctx.includes('data-idx'), '上下文副本应剥 data-idx');
+  assert.ok(!/>\s+</.test(ctx), '上下文副本块内标签间应无空白/换行');
+};
 
 test('T1 未达阈值不分割：split=false、chunks 空', () => {
   const children = [blk(1, 300), blk(2, 300), blk(3, 300)];
@@ -33,15 +45,18 @@ test('T2 贪心装箱 + 尾块合并 + 上下文不计预算（合并块带全�
   assert.equal(r.chunks.length, 2);
   const [c1, c2] = r.chunks;
   // 块 1：own=6000，下文 [b7] 1000B ≤cap(1300)——上下文不计预算、永不被削；
-  // 首块无开头/上文 → 无 ✅
-  assert.deepEqual(ids(c1.html), [1, 2, 3, 4, 5, 6, 7]);
+  // 首块无开头/上文 → 无 ✅；ids 只含 own（下文副本剥 data-idx）
+  assert.deepEqual(ids(c1.html), [1, 2, 3, 4, 5, 6]);
   assert.ok(c1.html.includes('❌ 待转换内容自此结束'), '上下文免费后 ❌ 应存活');
   assert.ok(c1.html.includes('⚠️ 下文上下文'));
+  assertCtxCompact(c1.html, '⚠️ 下文上下文');
   assert.ok(!c1.html.includes('✅'), '首块无开头/上文 → 无 ✅');
   // 块 2（末块、尾块合并产物 own 8000 > chunkMax）：上下文照常就位——
   // 📌[b1]、⚠️上文=[b6]（各 1 块即触帽：2×1000>cap 1300）、✅；无 ❌（末块）
-  assert.deepEqual(ids(c2.html), [1, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+  assert.deepEqual(ids(c2.html), [7, 8, 9, 10, 11, 12, 13, 14]);
   assert.ok(c2.html.includes('📌 开头上下文') && c2.html.includes('⚠️ 上文上下文'));
+  assertCtxCompact(c2.html, '📌 开头上下文');
+  assertCtxCompact(c2.html, '⚠️ 上文上下文');
   assert.ok(c2.html.includes('✅ 待转换内容自此开始'));
   assert.ok(!c2.html.includes('❌'), '末块无下文侧');
   // 合并块 own 8000 > chunkMax 6500——尾块合并溢出是合法例外（≤ splitThreshold）
@@ -68,19 +83,23 @@ test('T3 上下文窗口：开头/上文就位、下文被字节帽压制、合�
 
   // 块 2：📌开头=[1,2]（第 3 块 2400>cap 截停）、⚠️上文=[6,7]（向前取 2 块、
   // id5 3000 截停）、✅；next 候选 id12(8000)>cap → 无 ❌。
-  // 上下文不计预算：own 5400 + 两侧 ~3.9KB 照常全保留
-  assert.deepEqual(ids(c2.html), [1, 2, 6, 7, 8, 9, 10, 11]);
+  // 上下文不计预算：own 5400 + 两侧 ~3.9KB 照常全保留；ids 只含 own
+  assert.deepEqual(ids(c2.html), [8, 9, 10, 11]);
   assert.ok(c2.html.includes('📌 开头上下文'), '应有开头上下文标记');
   assert.ok(c2.html.includes('⚠️ 上文上下文'), '应有上文上下文标记');
+  assertCtxCompact(c2.html, '📌 开头上下文');
+  assertCtxCompact(c2.html, '⚠️ 上文上下文');
   assert.ok(c2.html.includes('✅ 待转换内容自此开始'), '应有开始标记');
   assert.ok(!c2.html.includes('❌'), '下文被字节帽压制 → 无结束标记');
-  // 开头块不重复出现（去重语义：上文跳过已在开头集内的块）
-  assert.equal((c2.html.match(/data-idx="1"/g) || []).length, 1);
+  // 开头副本已在注释内剥 data-idx——待转换区无重复块（上下文不可被引用）
+  assert.ok(!c2.html.replace(/<!--[\s\S]*?-->/g, '').includes('data-idx="1"')
+    && !c2.html.replace(/<!--[\s\S]*?-->/g, '').includes('data-idx="2"'),
+  'own 区不应出现开头块的 data-idx（上下文副本在注释内已剥）');
 
-  // 块 3（末块、守护不过保留的合并前形态 own 9600）：📌[1,2] + ⚠️上文=[10,11]
+  // 块 3（末块、守护不过保留 own 9600）：📌[1,2] + ⚠️上文=[10,11]
   // （1600 ≤cap）+ ✅ 照常就位（上下文免费），无 ❌；
   // own 9600+上下文 → 文件 > chunkMax——上下文不计预算、合法
-  assert.deepEqual(ids(c3.html), [1, 2, 10, 11, 12, 13, 14]);
+  assert.deepEqual(ids(c3.html), [12, 13, 14]);
   assert.ok(c3.html.includes('📌 开头上下文') && c3.html.includes('⚠️ 上文上下文'));
   assert.ok(c3.html.includes('✅ 待转换内容自此开始'));
   assert.ok(!c3.html.includes('❌'), '末块无下文侧');
@@ -123,10 +142,12 @@ test('T5 巨段落块独立成块（允许溢出）+ 首块下文照常就位', 
   const children = [blk(1, 60000), ...Array.from({ length: 8 }, (_, i) => blk(i + 2, 500))];
   const r = chunkArticle(doc(children), children, { splitThreshold: 60000, chunkMax: 50000 });
   assert.equal(r.chunks.length, 2);
-  // 首块 own 60KB（巨块溢出合法）；下文 [2,3] 1000B ≤cap 照常就位（不计预算）
-  assert.deepEqual(ids(r.chunks[0].html), [1, 2, 3]);
+  // 首块 own 60KB（巨块溢出合法）；下文 [2,3] 1000B ≤cap 照常就位（不计预算，
+  // 副本剥 data-idx → ids 只含 own）
+  assert.deepEqual(ids(r.chunks[0].html), [1]);
   assert.ok(bytes(r.chunks[0].html) > 50000, '巨块溢出是合法例外');
   assert.ok(r.chunks[0].html.includes('❌ 待转换内容自此结束') && r.chunks[0].html.includes('⚠️ 下文上下文'));
+  assertCtxCompact(r.chunks[0].html, '⚠️ 下文上下文');
   // 末块：opening 候选 60KB > cap、prev 候选 60KB > cap → 裸 own
   assert.deepEqual(ids(r.chunks[1].html), [2, 3, 4, 5, 6, 7, 8, 9]);
 });
@@ -153,23 +174,27 @@ test('T7 三侧各就各位：下文帽截停、中间块五标记齐备、末�
   const [c1, c2, c3] = r.chunks;
 
   // 块 1：own 8900 + 下文 [id5]（1700 ≤cap；id6 会 2500>cap 截停），
-  // 无 ✅（首块无开头/上文）
-  assert.deepEqual(ids(c1.html), [1, 2, 3, 4, 5]);
+  // 无 ✅（首块无开头/上文）；ids 只含 own
+  assert.deepEqual(ids(c1.html), [1, 2, 3, 4]);
   assert.ok(c1.html.includes('❌ 待转换内容自此结束') && c1.html.includes('⚠️ 下文上下文'));
+  assertCtxCompact(c1.html, '⚠️ 下文上下文');
   assert.ok(!c1.html.includes('✅'), '首块无开头/上文 → 无 ✅');
 
   // 块 2（上下文不计预算的中间块）：📌=[1,2]（1600 ≤cap，id3 6500 截停）+
   // ⚠️上文=[4]（800 ≤cap，id3 6500 截停）+ ✅ + own 8600 + 下文 [14]
-  // （1500 ≤cap，id15 会 2300>cap 截停）——五标记齐备
-  assert.deepEqual(ids(c2.html), [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+  // （1500 ≤cap，id15 会 2300>cap 截停）——五标记齐备；ids 只含 own
+  assert.deepEqual(ids(c2.html), [5, 6, 7, 8, 9, 10, 11, 12, 13]);
   assert.ok(c2.html.includes('📌 开头上下文') && c2.html.includes('⚠️ 上文上下文'));
+  assertCtxCompact(c2.html, '📌 开头上下文');
+  assertCtxCompact(c2.html, '⚠️ 上文上下文');
+  assertCtxCompact(c2.html, '⚠️ 下文上下文');
   assert.ok(c2.html.includes('✅ 待转换内容自此开始'));
   assert.ok(c2.html.includes('❌ 待转换内容自此结束') && c2.html.includes('⚠️ 下文上下文'));
   assert.ok(bytes(c2.html) > 10000, '上下文不计预算：文件可超 chunkMax');
 
   // 块 3（末块）：📌=[1,2] + ⚠️上文=[13]（1300 ≤cap，id12 会 2100>cap 截停）
   // + ✅ + own，无 ❌（末块无下文侧）
-  assert.deepEqual(ids(c3.html), [1, 2, 13, 14, 15, 16, 17, 18, 19]);
+  assert.deepEqual(ids(c3.html), [14, 15, 16, 17, 18, 19]);
   assert.ok(c3.html.includes('📌 开头上下文') && c3.html.includes('⚠️ 上文上下文'));
   assert.ok(c3.html.includes('✅ 待转换内容自此开始'));
   assert.ok(!c3.html.includes('❌'), '末块无下文侧');

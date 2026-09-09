@@ -120,9 +120,17 @@ export function chunkArticle(slimHtml, children, { splitThreshold, chunkMax }) {
   // ── 4. 组装（上下文不计入块预算——无削减 pass，spec §3.4）──
   const n = packs.length;
   const chunks = [];
+  // 上下文副本变换（2026-09-09 用户裁定）：剥 data-idx（只读参照无需选择器
+  // 锚点，也强化「勿转换」信号——待转换块才带编号）+ 压缩标签间空白（换行/
+  // 空格）。序列化保证文本中 < > 已转义，两个正则只触达标签语法；
+  // own 区保真不压缩
+  const ctxHtml = (t) =>
+    children[t]
+      .replace(/\s+data-idx="[^"]*"/g, '')
+      .replace(/>\s+</g, '><');
   // 一侧上下文 = 注释开标签 + 逐块独立一行 + 注释闭标签
   const commented = (mark, idxs) =>
-    `\n${mark}\n${idxs.map((t) => children[t]).join('\n')}\n-->`;
+    `\n${mark}\n${idxs.map((t) => ctxHtml(t)).join('\n')}\n-->`;
   for (let i = 0; i < n; i++) {
     const own = packs[i];
     const openingIdxs = i > 0 ? opening : [];
