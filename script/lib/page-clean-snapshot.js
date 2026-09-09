@@ -327,11 +327,13 @@ function __u2mCleanSnapshot(cfg) {
 
   // chrome 折叠集预计算（两趟共享，spec 2026-09-09 §5/§9.1-3）：候选区 =
   //     body 直接子孙（豁免兄弟检查，裁定 R4）∪ 独子链节点（自 body 下每步
-  //     皆独元素子，遇分叉出链，裁定 R3）。两种（优先级 dialog > hidden，
-  //     spec §7.1）：dialog = role=dialog/alertdialog/aria-modal 自我声明、
-  //     任意深度不限候选区（H2）；hidden = computed display:none ∨
+  //     皆独元素子，遇分叉出链，裁定 R3）。三种（优先级 dialog > hidden >
+  //     overlay，spec §7.1）：dialog = role=dialog/alertdialog/aria-modal 自
+  //     我声明、任意深度不限候选区（H2）；hidden = computed display:none ∨
   //     visibility:hidden 含祖先累积（display:none 后代的 computed 值不回传
-  //     none，必须文档序自顶向下累积）、限候选区（H1-C）。裸 [hidden] 及其
+  //     none，必须文档序自顶向下累积）、限候选区（H1-C）；overlay = 候选区
+  //     内可见 ∧ fixed/absolute/sticky（H3'，知乎登录横幅形态——ratio 超标
+  //     逃 D1、非脊柱层级不扫描的漏网浮层）。裸 [hidden] 及其
   //     后代除外——K5 独占（既定政策不变）。统一内容守卫 chromeGuardOk
   //     （裁定 R10）。最外层优先：文档序单趟，祖先已入折叠集则后代不再独立
   //     判定。script/style/template/noscript 排除（spec §14 修订 1）。
@@ -368,9 +370,10 @@ function __u2mCleanSnapshot(cfg) {
       if (attrAcc.get(el)) continue;                              // K5 独占领地
       var kind = null;
       if (el.matches('[role="dialog"], [role="alertdialog"], [aria-modal="true"]')) {
-        kind = 'dialog';                                  // H2：语义自我声明，任意深度
-      } else if (onChain(el) && hidAcc.get(el)) {
-        kind = 'hidden';                                  // H1-C：候选区限制（裁定 R2/R3）
+        kind = 'dialog';                                  // H2：任意深度
+      } else if (onChain(el)) {
+        kind = hidAcc.get(el) ? 'hidden'                  // H1-C：状态优先
+          : (CHROME_POS[getComputedStyle(el).position] ? 'overlay' : null);   // H3'：可见浮层
       }
       if (!kind) continue;
       if (!chromeGuardOk(el)) continue;                           // 内容守卫
@@ -889,9 +892,10 @@ function __u2mCleanSnapshot(cfg) {
   //      hidden 种复用 HIDDEN_TAG（语义同裸 [hidden]：可能是收起正文，壳可
   //      标进 paragraphIds，还原走带样式版）。带样式版不折叠（步骤 5 隐藏
   //      剥离照旧展开、步骤 4 按壳 id 保整枝）。
-  var CHROME_TOKEN = { hidden: 'HIDDEN_TAG', dialog: 'DIALOG_TAG' };
+  var CHROME_TOKEN = { hidden: 'HIDDEN_TAG', dialog: 'DIALOG_TAG', overlay: 'OVERLAY_TAG' };
   var cssHiddenCount = 0;
   var dialogCount = 0;
+  var overlayCount = 0;
   for (var i = 0; i < chromeFolds.length; i++) {
     var cfEl = chromeFolds[i].el, cfKind = chromeFolds[i].kind;
     if (!cfEl.parentNode || !document.body.contains(cfEl)) continue;   // 已被前序删除
@@ -907,8 +911,16 @@ function __u2mCleanSnapshot(cfg) {
       + (cfComp ? ';' + cfComp : '') + '}}';
     while (cfEl.firstChild) cfEl.removeChild(cfEl.firstChild);
     cfEl.appendChild(document.createTextNode(cfToken));
+    // 壳上的 LT run 记录随折删除：run 检测（共享段末尾）先于本消费点，可见
+    //     overlay/dialog 壳内文本 ≥16 汉字必被记录 run（expando 挂壳元素）；
+    //     foldLongText(clean 趟、K11 后) 按 __u2mRunHtml 整段替换壳内容——
+    //     不删则 chrome token 被 {{LONG_TEXT}} 覆写。styled 趟不跑 K5x，该
+    //     run 照常折为带编号占位入恢复清单，clean LT ⊆ styled 不破。
+    delete cfEl.__u2mRunHtml;
+    delete cfEl.__u2mRunSize;
     if (cfKind === 'hidden') cssHiddenCount++;
     else if (cfKind === 'dialog') dialogCount++;
+    else overlayCount++;
   }
 
   // K6. table 折叠（仅清洗版）：整树清空、折叠为 {{TABLE_k|rows×cols}} 占位符
@@ -1156,6 +1168,7 @@ function __u2mCleanSnapshot(cfg) {
       commentsRemoved: commentsRemovedCount,
       cssHiddenFolded: cssHiddenCount,
       dialogFolded: dialogCount,
+      overlayFolded: overlayCount,
     }
   };
 }
