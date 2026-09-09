@@ -216,7 +216,9 @@
 
 - `{{TABLE_k|y×x}}`：表格整体占位，k = 文档序编号（1 起、跳过 `[hidden]` 表），y = 行数（`<tr>` 数），x = 列数（各行 colspan 之和的最大值，即网格列数）。行列规模是判读表格的信号——大表（如 `30×` 级）大概率是核心数据载体。成功表的 GFM markdown 已由步骤 2 预计算存 `2_tables.json`、步骤 8 还原；步骤 3 仅需标记其 `data-idx` 入 paragraphIds
 
-- `{{HIDDEN_TAG|n_chars;n_a/n_div/…}}` 为带 `hidden` 属性的元素，折叠了子树；token 是真实文本规模与标签构成（计数降序），标明其后是整块折叠内容。hidden 元素按内容语义判身份：文章正文（FAQ/附录/展开收起）→ 段落块（也是锚点）；页面功能（模态/抽屉/移动端导航）→ 流内标 `dumpIds`、流外不标
+- `{{HIDDEN_TAG|n_chars;n_a/n_div/…}}` 为带 `hidden` 属性的元素，折叠了子树；token 是真实文本规模与标签构成（计数降序），标明其后是整块折叠内容。hidden 元素按内容语义判身份：文章正文（FAQ/附录/展开收起）→ 段落块（也是锚点）；页面功能（模态/抽屉/移动端导航）→ 流内标 `dumpIds`、流外不标。自 2026-09-09 起也覆盖 **body 边界脚手架区的 CSS 隐藏**（body 直接子孙与独子链上的 display:none/visibility:hidden）——判读方式不变；正文流深处的 CSS 隐藏内容（非激活 tab、FAQ 收起答案）不折叠、原文可见
+- `{{DIALOG_TAG|n_chars;构成}}` 为 `role="dialog"`/`aria-modal` 弹窗折叠壳（任意深度）——**chrome，不要选入任何键**；壳 data-idx 也不需要标 dumpIds（步骤 4 对键外分支整枝删除）
+- `{{OVERLAY_TAG|n_chars;构成}}` 为 body 边界独子链上的可见 fixed/absolute/sticky 浮层折叠壳（登录横幅/吸顶工具条等）——**chrome，不要选入任何键**
 
 - `{{VIEW_TEXT|n_chars}}` / `{{VIEW_TEXT|n_words}}` 为**纯视图文本占位符**：可视模块（图解/图表/对比卡片/公式渲染等）内部「只含 div + 行内文本元素（span/a/strong/em/code/br/MathML 等）+ 文本」的极大子树、或「只含文本与行内元素」的 p 根折叠、**壳元素保留**——标签、class、data-idx、aria-label 原样。模块内即使含长文本也**整棵折叠、原文随折吞没**（`n` 是整模块文本体量信号）。判读要点：① **壳的 class/aria-label 标识模块身份**（如 `ra-raw`、`katex-html`）、`n` 是模块文本体量信号；② 标 paragraphIds 时以**壳的 `data-idx` 整块标记**（可视模块整棵标记、内部不拆），占位符不是段落文本、不要标记壳内已被折叠的后代 id。文本量不足（<8 汉字/6 词）、结构单薄（纯 div 树 ≤6 内部 div、含行内元素树 ≤4 元素）的子树**保留原样**；链接/按钮/标题（h1-h3）内的文本结构、含图片（img）的子树也不折叠
 

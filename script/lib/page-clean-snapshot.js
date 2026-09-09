@@ -7,8 +7,12 @@
  *                → 带样式版 + 恢复清单（供步骤 4 裁剪与后续占位还原）
  *   clean 趟   —— 共享结构清洗 + SVG 清空/样式剥除 + 瘦身规则 → 清洗版
  * 两趟共享同一套结构清洗（步骤 1-9：link/meta/base 删除、骨架删除、播放器
- * 删除、控件删除、空元素级联 + KEEP_EMPTY、astro- 前缀解包）与折叠统计预
- * 计算（K5 hidden 规模、K7 pre 行数量原文挂 expando）。长文本占位自
+ * 删除、控件删除、D1 脊柱占优比较删除 7.5、空元素级联 + KEEP_EMPTY、astro-
+ * 前缀解包、注释剥离（pre/code 子树除外））与折叠统计预计算（K5 hidden 规模、
+ * K7 pre 行数量原文挂 expando）+ chrome 折叠集标志预计算（2026-09-09，spec
+ * docs/superpowers/specs/2026-09-09-body-spine-chrome-removal-design.md：
+ * body 边界脚手架区 getComputedStyle 判 dialog/hidden/overlay，clean 趟 K5x
+ * 消费；样式计算仅此一处，clean 趟折叠消费零计算）。长文本占位自
  * 2026-09-03 起移出共享段、两趟各自执行：styled 趟带编号 {{LONG_TEXT_k|n_chars}}
  * （还原链消费），clean 趟在 K11 之后执行且无编号 {{LONG_TEXT|n_chars}}——
  * 唯一消费者步骤 3 只看结构+体量信号。
@@ -21,7 +25,9 @@
  *
  * 清洗版瘦身规则 K1-K7/K9-K11：class 语义过滤 K1 → 属性白名单 K2 →
  * SVG 清空 K3 → astro 解包 K4（两趟共享，见共享段）→ hidden 裸属性折叠 K5
- * （{{HIDDEN_TAG|n;构成}}）→ table 折叠 K6 → pre 折叠 K7 → 空白压缩 K9 →
+ * （{{HIDDEN_TAG|n;构成}}）→ chrome 折叠集消费 K5x（hidden→{{HIDDEN_TAG}}、
+ * dialog→{{DIALOG_TAG}}、overlay→{{OVERLAY_TAG}}，壳机制同 K5；带样式版
+ * 折叠集保活）→ table 折叠 K6 → pre 折叠 K7 → 空白压缩 K9 →
  * 空壳 span 拆包 K10 → 纯视图文本折叠 K11（{{VIEW_TEXT|n_chars}}，两道
  * 门槛：文本量 ≥8 汉字/≥6 词、结构量纯 div 树内部 div>6 / 含 span 树
  * 合计>4（p 根只含 text/span、同 span 档），含 LT 模块整棵折，见 K11 段
