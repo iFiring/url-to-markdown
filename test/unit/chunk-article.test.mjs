@@ -18,7 +18,7 @@ assert.equal(bytes(blk(3, 800)), 800, 'blk 辅助函数应精确控制字节');
 // data-idx，ids 只能看到待转换区）
 const ids = (html) => [...html.matchAll(/data-idx="(\d+)"/g)].map((m) => Number(m[1]));
 
-// 断言标记注释包裹的上下文：无 data-idx、块内标签间无空白/换行
+// 断言标记注释包裹的上下文：无 data-idx/style、块内标签间无空白/换行
 // （块与块之间的独立换行是刻意展示形态，检查前先摘掉）
 const assertCtxCompact = (html, mark) => {
   const start = html.indexOf(mark);
@@ -26,6 +26,7 @@ const assertCtxCompact = (html, mark) => {
   const end = html.indexOf('-->', start);
   const ctx = html.slice(start, end).replace(/>\n</g, '><');
   assert.ok(!ctx.includes('data-idx'), '上下文副本应剥 data-idx');
+  assert.ok(!ctx.includes('style='), '上下文副本应剥 style 属性');
   assert.ok(!/>\s+</.test(ctx), '上下文副本块内标签间应无空白/换行');
 };
 

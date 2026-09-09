@@ -121,12 +121,13 @@ export function chunkArticle(slimHtml, children, { splitThreshold, chunkMax }) {
   const n = packs.length;
   const chunks = [];
   // 上下文副本变换（2026-09-09 用户裁定）：剥 data-idx（只读参照无需选择器
-  // 锚点，也强化「勿转换」信号——待转换块才带编号）+ 压缩标签间空白（换行/
-  // 空格）。序列化保证文本中 < > 已转义，两个正则只触达标签语法；
-  // own 区保真不压缩
+  // 锚点，也强化「勿转换」信号——待转换块才带编号）+ 剥 style（内联样式对
+  // 只读参照是纯字节噪音）+ 压缩标签间空白（换行/空格）。序列化保证文本中
+  // < > 已转义，正则只触达标签语法；own 区保真不压缩
   const ctxHtml = (t) =>
     children[t]
       .replace(/\s+data-idx="[^"]*"/g, '')
+      .replace(/\s+style="[^"]*"/g, '')
       .replace(/>\s+</g, '><');
   // 一侧上下文 = 注释开标签 + 逐块独立一行 + 注释闭标签
   const commented = (mark, idxs) =>
