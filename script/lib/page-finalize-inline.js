@@ -7,13 +7,15 @@
  * 间接引用（var()/color-mix()/calc() 一律不出现在终态值里）。
  *  1. 白名单清理（逐元素遍历 CSSOM 声明，倒序删除防索引漂移）：
  *     仅保留——边框背景（border、outline、background、box-shadow）、
- *     flex 与 grid 布局（display、flex、grid、gap、对齐、order）、
- *     滚动裁剪（overflow、overflow-x/y）、transform、font-size 与
- *     font-weight（步骤 7 LLM 判标题层级的信号）、position:absolute
- *     （步骤 7 LLM 判特殊定位元素的信号——浮层/装饰/trans2img 候选；
- *     唯一按值门控的白名单项，仅 absolute 存活，relative/fixed/
- *     sticky/static 一律删）；长属性按前缀匹配覆盖（如 border- 前缀
- *     同时覆盖 border-radius 等长属性）。
+ *     flex/grid 方向（2026-09-09 收紧：display 按值门控仅 flex/grid 四值
+ *     存活 + flex-direction/wrap、grid-auto-flow/template-columns/rows
+ *     五个方向 longhand；对齐全族/gap/order/flex 长手/grid placement
+ *     全部出白名单）、滚动裁剪（overflow、overflow-x/y）、transform、
+ *     font-size 与 font-weight（步骤 7 LLM 判标题层级的信号）、
+ *     position:absolute（步骤 7 LLM 判特殊定位元素的信号——浮层/装饰/
+ *     trans2img 候选；按值门控项有二：position 仅 absolute 存活
+ *     （relative/fixed/sticky/static 一律删）、display 见 1.9）；长属性
+ *     按前缀匹配覆盖（如 border- 前缀同时覆盖 border-radius 等长属性）。
  *     其余全删：盒模型几何（box-sizing、宽高、min/max、margin、padding；
  *     唯一例外——<img> 的 width/height 保留，见下）、
  *     定位其余（relative/fixed/sticky/static、inset、z-index）、浮动、
@@ -49,11 +51,12 @@
  *     finalize 末尾 <style>/class 已删净、内联样式是唯一级联源，关键字
  *     声明与不声明计算结果恒同，删。白名单内唯一继承属性 font-size/
  *     font-weight 例外分流：unset≡inherit（默认行为，同既有 inherit
- *     删除）、initial 阻断继承（有意义，保留）；display 不走本规则
- *     （display:initial=inline 在块级标签上是真布局信号，行内标签见 1.9）
- *  1.9 UA 默认 display：行内为 UA 默认的标签集（span/a/strong/em/code
- *     等 INLINE_DEFAULT_TAGS）上 display:inline 删——写了等于没写；
- *     div 等块级标签上的 inline 是真信号、inline-block 等非默认值一律保留
+ *     删除）、initial 阻断继承（有意义，保留）
+ *  1.9 display 值门控（2026-09-09 收紧）：仅 flex/inline-flex/grid/
+ *     inline-grid 四值存活（布局方向载体）；INLINE_DEFAULT_TAGS
+ *     （span/a/strong/em/code 等行内标签）上 display 无论何值全删
+ *     （原「仅删 UA 默认 display:inline」的升级——行内语义优先，
+ *     display:flex 等属视觉实现细节）
  *  1.10 背景噪音两组（微信页面实测每 chunk ~14KB 长手簇 + ~4KB 白底）：
  *     - 无图长手簇——无有效 background-image 时 position(含 -x/-y)/size/
  *       repeat/attachment/origin 无论何值全删（无图可绘制则零视觉效果，
@@ -82,14 +85,15 @@ function __u2mFinalizeInline(computedMap) {
   // 函数间接引用检测：与 page-collect-fn-values.js 的 FUNC_RE 保持一致
   var FUNC_RE = /var\(|color-mix\(|calc\(/i;
   // 结构化样式白名单：前缀匹配（border- 覆盖 border-radius 等长属性）
-  var KEEP_PREFIX = ['border-', 'outline-', 'background-',
-    'flex-', 'grid-', 'align-', 'justify-', 'place-'];
+  var KEEP_PREFIX = ['border-', 'outline-', 'background-'];
   var KEEP_EXACT = {
-    'display': 1,
     'border': 1, 'outline': 1, 'background': 1, 'box-shadow': 1,
-    'flex': 1, 'gap': 1, 'row-gap': 1, 'column-gap': 1, 'order': 1,
-    'justify-content': 1, 'align-items': 1, 'align-content': 1, 'align-self': 1,
-    'place-items': 1, 'place-content': 1, 'place-self': 1,
+    // 2026-09-09 布局白名单收紧：只留方向信号——对齐全族（justify-* /
+    // align-* / place-*）、gap、order、flex 长手与简写、grid placement
+    // （grid-column/row/area/areas/auto-rows/auto-columns/简写）出白名单；
+    // display 不在此列，走 keepDisplay 值门控
+    'flex-direction': 1, 'flex-wrap': 1,
+    'grid-auto-flow': 1, 'grid-template-columns': 1, 'grid-template-rows': 1,
     // overflow 精确到 x/y：overflow- 前缀会把文本换行的 overflow-wrap 放进来
     'overflow': 1, 'overflow-x': 1, 'overflow-y': 1,
     'transform': 1,
@@ -111,6 +115,15 @@ function __u2mFinalizeInline(computedMap) {
   function keepPosition(prop, val) {
     return prop === 'position' && val === 'absolute';
   }
+  // display 值门控（头注 1.9）：仅方向载体四值存活；行内标签全值删。
+  // 两趟与 keepPosition 同构——第一趟传 real（var() 解析值）、第二趟传
+  // val2（字面或已被第一趟替换的落定值）
+  function keepDisplay(el, prop, val) {
+    if (prop !== 'display') return false;
+    if (INLINE_DEFAULT_TAGS[el.tagName.toLowerCase()] === 1) return false;
+    return val === 'flex' || val === 'inline-flex' ||
+      val === 'grid' || val === 'inline-grid';
+  }
   // 零值声明：值等于全元素初始值——写与不写等价，纯非信息（参考页
   // 1,946 个元素的 style 值只有 border: 0px solid——Tailwind preflight
   // 被 juice 内联的产物）。边框按"边"语义：style none（显式或缺省——
@@ -131,17 +144,16 @@ function __u2mFinalizeInline(computedMap) {
   }
   // 1.8 CSS 关键字零值：内联是唯一级联源后（<style>/class 已删净），
   // 非继承属性上 initial/unset 与不声明计算结果恒同。font-size/font-weight
-  // （白名单内唯一继承属性）分流：unset≡inherit 删、initial 阻断继承保留；
-  // display 不走本规则（见 1.9 标签门控）
+  // （白名单内唯一继承属性）分流：unset≡inherit 删、initial 阻断继承保留
+  // （display 的 initial/unset 由 1.9 值门控删除，不经此规则）
   var INHERITED_PROPS = {'font-size': 1, 'font-weight': 1};
   function keywordVoid(prop, val) {
     if (val !== 'initial' && val !== 'unset') return false;
-    if (prop === 'display') return false;
     if (INHERITED_PROPS[prop]) return val === 'unset';
     return true;
   }
-  // 1.9 UA 默认 display:inline 的行内标签集——写了等于没写；button/input
-  // 等 UA 默认 inline-block 的标签不在集内（inline 对它们是改布局的真信号）
+  // 1.9 行内标签集（原「UA 默认 display:inline 删」——2026-09-09 升级为
+  // keepDisplay 的行内全删依据：集内标签上 display 无论何值都删）
   var INLINE_DEFAULT_TAGS = {
     'span': 1, 'a': 1, 'strong': 1, 'b': 1, 'em': 1, 'i': 1, 'code': 1,
     'small': 1, 'big': 1, 'mark': 1, 'sub': 1, 'sup': 1, 'kbd': 1, 'samp': 1,
@@ -205,9 +217,6 @@ function __u2mFinalizeInline(computedMap) {
   }
   function isVoidDeclaration(el, prop, val, st) {
     if (keywordVoid(prop, val)) return true;
-    if (prop === 'display') {
-      return val === 'inline' && INLINE_DEFAULT_TAGS[el.tagName.toLowerCase()] === 1;
-    }
     // 1.7 img 宽高例外中的 auto 值：初始值且无信号量（真实像素才判权重）
     if ((prop === 'width' || prop === 'height') && val === 'auto') return true;
     if (prop === 'transform') return val === 'none';
@@ -291,7 +300,8 @@ function __u2mFinalizeInline(computedMap) {
       var real = computedMap && computedMap[idx] && computedMap[idx][prop];
       var keepThis = keep(prop) ||
         (isImg && (prop === 'width' || prop === 'height')) ||
-        keepPosition(prop, real);
+        keepPosition(prop, real) ||
+        keepDisplay(styled[i], prop, real);
       // 第一趟：函数值替换（白名单内且有计算值）或删净（否则）——机制见
       // 头注 1.5。空串值同路：简写属性带 var 在本页展开为 longhand 且值为
       // 空（收集侧见 page-collect-fn-values.js 头注），不替换就会把 var()
@@ -312,7 +322,8 @@ function __u2mFinalizeInline(computedMap) {
       var val2 = st.getPropertyValue(prop2);
       var keepThis2 = keep(prop2) ||
         (isImg && (prop2 === 'width' || prop2 === 'height')) ||
-        keepPosition(prop2, val2);
+        keepPosition(prop2, val2) ||
+        keepDisplay(styled[i], prop2, val2);
       if (!keepThis2 || val2 === 'inherit' || isVoidDeclaration(styled[i], prop2, val2, st)) {
         st.removeProperty(prop2);
         dirty = true;

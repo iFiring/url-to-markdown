@@ -62,9 +62,11 @@ test('R1: 继承属性 unset 删（≡inherit 默认行为）、initial 保留�
   assert.equal(doc.getElementById('b').style.getPropertyValue('font-size'), 'initial');
 });
 
-test('R1: display 不走关键字规则（div 上 display:initial=inline 是真信号）', () => {
-  const doc = run(`<div style="display: initial;">x</div>`);
-  assert.equal(doc.querySelector('div').style.getPropertyValue('display'), 'initial');
+// R7 收紧后 display 走值门控（仅 flex/grid 四值存活），initial/unset 一律删
+test('R1: display:initial/unset 删（值门控吸收，不再保留块级标签上的行内化信号）', () => {
+  const doc = run(`<div id=a style="display: initial;">x</div><div id=b style="display: unset;">y</div>`);
+  assert.equal(doc.getElementById('a').getAttribute('style'), null);
+  assert.equal(doc.getElementById('b').getAttribute('style'), null);
 });
 
 // ===== R1b：border/outline 形态扩展 =====
@@ -125,7 +127,9 @@ test('R2: background-clip 仅删初始 border-box（clip 影响纯色绘制）',
 });
 
 // ===== R3：UA 默认 display:inline =====
-// 破坏点：无标签白名单 → div 上 display:inline 被误删；无值门控 → inline-block 被误删
+// 破坏点：无标签白名单 → span 上 display:inline 残留为噪音。
+// （2026-09-09 R7 收紧后 div 上 inline / span 上 inline-block 也删——display
+// 仅 flex/grid 四值存活，行内标签全值删，旧「保留真信号」语义已被取代）
 
 test('R3: 行内默认标签 display:inline 删、其余声明保留', () => {
   const doc = run(`<span style="display: inline; font-weight: bold;">x</span>`);
@@ -134,10 +138,10 @@ test('R3: 行内默认标签 display:inline 删、其余声明保留', () => {
   assert.equal(st.getPropertyValue('font-weight'), 'bold');
 });
 
-test('R3: div display:inline 保留、span display:inline-block 保留', () => {
+test('R3: div display:inline 与 span display:inline-block 均删（R7 值门控+行内全删）', () => {
   const doc = run(`<div id=a style="display: inline;">x</div><span id=b style="display: inline-block;">y</span>`);
-  assert.equal(doc.getElementById('a').style.getPropertyValue('display'), 'inline');
-  assert.equal(doc.getElementById('b').style.getPropertyValue('display'), 'inline-block');
+  assert.equal(doc.getElementById('a').getAttribute('style'), null);
+  assert.equal(doc.getElementById('b').getAttribute('style'), null);
 });
 
 // ===== R4：背景画布等值 =====
@@ -229,4 +233,63 @@ test('组合: 微信 h3 标题噪音簇清理后只剩 bold/18px/左边框', () 
     'overflow', 'transform']) {
     assert.equal(st.getPropertyValue(p), '', p + ' 应删');
   }
+});
+
+// ===== R7：布局白名单收紧（2026-09-09）=====
+// 语义：布局组只保留「方向」信号——display 值门控（flex/inline-flex/grid/
+// inline-grid 四值）+ 五个方向 longhand；对齐全族（justify-*/align-*/place-*，
+// 不只 center）、gap、order、flex 长手与简写、grid placement（span/areas/
+// auto-rows/简写）全部出白名单；行内标签（INLINE_DEFAULT_TAGS）display
+// 无论何值全删。
+// 破坏点：值门控缺失 → display:block/inline-block 等噪音存活；行内全删缺失
+// → span 上 display:flex 残留；白名单未收紧 → 对齐/gap/placement 存活
+
+test('R7: display 值门控——flex/inline-flex/grid/inline-grid 保留，其余值删', () => {
+  const doc = run(`<div id=a style="display: flex;">x</div><div id=b style="display: inline-flex;">x</div><div id=c style="display: grid;">x</div><div id=d style="display: inline-grid;">x</div><div id=e style="display: block;">x</div><div id=f style="display: inline;">x</div><div id=g style="display: inline-block;">x</div><div id=h style="display: table;">x</div><div id=i style="display: contents;">x</div>`);
+  for (const id of ['a', 'b', 'c', 'd']) {
+    assert.ok(doc.getElementById(id).style.getPropertyValue('display'), id + ' 方向值应保留');
+  }
+  for (const id of ['e', 'f', 'g', 'h', 'i']) {
+    assert.equal(doc.getElementById(id).getAttribute('style'), null, id + ' 非方向值应删净');
+  }
+});
+
+test('R7: 行内标签 display 全值删（inline-block/flex/grid 也不留）', () => {
+  const doc = run(`<span id=a style="display: inline-block;">x</span><span id=b style="display: flex;">x</span><a id=c style="display: grid;">x</a><strong id=d style="display: block; font-weight: bold;">x</strong>`);
+  for (const id of ['a', 'b', 'c']) {
+    assert.equal(doc.getElementById(id).getAttribute('style'), null, id + ' 行内标签 display 应全删');
+  }
+  const d = doc.getElementById('d').style;
+  assert.equal(d.getPropertyValue('display'), '', 'strong 上 display:block 也删');
+  assert.equal(d.getPropertyValue('font-weight'), 'bold', '非 display 声明不受牵连');
+});
+
+test('R7: 五方向属性保留（flex-direction/wrap、grid-auto-flow/template-columns/rows）', () => {
+  const doc = run(`<div style="flex-direction: column; flex-wrap: wrap; grid-auto-flow: row dense; grid-template-columns: repeat(3, 1fr); grid-template-rows: auto auto;">x</div>`);
+  const st = doc.querySelector('div').style;
+  assert.equal(st.getPropertyValue('flex-direction'), 'column');
+  assert.equal(st.getPropertyValue('flex-wrap'), 'wrap');
+  assert.equal(st.getPropertyValue('grid-auto-flow'), 'row dense');
+  assert.equal(st.getPropertyValue('grid-template-columns'), 'repeat(3, 1fr)');
+  assert.equal(st.getPropertyValue('grid-template-rows'), 'auto auto');
+});
+
+test('R7: 对齐全族删——center 与 space-between/flex-start 同删', () => {
+  const doc = run(`<div id=a style="justify-content: center; justify-items: center; justify-self: center; align-items: center; align-content: center; align-self: center; place-items: center; place-content: center; place-self: center;">x</div><div id=b style="justify-content: space-between; align-items: flex-start;">y</div>`);
+  assert.equal(doc.getElementById('a').getAttribute('style'), null, '居中全家删');
+  assert.equal(doc.getElementById('b').getAttribute('style'), null, '非居中对齐值同删（只留方向、不留分布）');
+});
+
+test('R7: gap/order/flex 长手与简写删', () => {
+  const doc = run(`<div style="gap: 8px; row-gap: 4px; column-gap: 6px; order: 2; flex: 1; flex-grow: 2; flex-shrink: 0; flex-basis: 40%; flex-flow: column wrap;">x</div>`);
+  assert.equal(doc.querySelector('div').getAttribute('style'), null);
+});
+
+test('R7: grid placement 删——容器方向信号（display:grid + template-columns/rows）保留', () => {
+  const doc = run(`<div id=a style="grid-column: span 2; grid-row: 1 / 3; grid-area: main; grid-template-areas: 'a b'; grid-auto-rows: 40px; grid-auto-columns: 1fr; grid: 100px / 200px;">x</div><div id=b style="display: grid; grid-template-columns: repeat(2, 1fr); grid-auto-flow: column;">y</div>`);
+  assert.equal(doc.getElementById('a').getAttribute('style'), null, 'placement/几何/简写全删');
+  const b = doc.getElementById('b').style;
+  assert.equal(b.getPropertyValue('display'), 'grid', '容器信号保留');
+  assert.equal(b.getPropertyValue('grid-template-columns'), 'repeat(2, 1fr)');
+  assert.equal(b.getPropertyValue('grid-auto-flow'), 'column');
 });
