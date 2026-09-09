@@ -26,14 +26,17 @@
  *      （历史：v1 按「文件−下文 > chunkMax」削减上文→开头→下文，紧装块
  *      上下文被削光；v2 装箱预留 3072B 仍被胖开头侧吃掉——均废弃）
  *
- * 标记注释（一句话中英双语，spec §3.5 文案）划出转换边界：子代理只转换
- * ✅ 与 ❌ 之间（或无标记时的全部）段落块。
+ * 标记注释（一句话中英标签，spec §3.5 文案）划出转换边界：子代理只转换
+ * ✅ 与 ❌ 之间（或无标记时的全部）段落块。三侧上下文段落块**包裹在注释内、
+ * 每块独立一行**（2026-09-09 用户裁定：注释对 DOM 解析不可见、对子代理的
+ * 文本阅读可见——结构上杜绝误转换；序列化保证文本节点中 > 转义为 &gt;，
+ * 内容不会提前终结注释）。
  */
-const OPENING_MARK = (k) => `<!-- 📌 开头上下文（勿转换）/ OPENING CONTEXT (do NOT convert): 以下 ${k} 个段落块是文章开头的标题/导语，仅供建立标题层级与字号基准。勿为它们产出条目；其中出现的 LONG_TEXT/TABLE/CODE 编号一律勿引用（由第 1 块负责）。 -->`;
-const PREV_MARK = (k) => `<!-- ⚠️ 上文上下文（勿转换）/ PRECEDING CONTEXT (do NOT convert): 以下 ${k} 个段落块紧邻本块待转换内容之前，仅供衔接语境（标题层级/列表延续/字号基准）。勿为它们产出条目；其中的编号一律勿引用（由上一块负责）。 -->`;
+const OPENING_MARK = '<!-- 📌 开头上下文（勿转换）/ OPENING CONTEXT (do NOT convert)';
+const PREV_MARK = '<!-- ⚠️ 上文上下文（勿转换）/ PRECEDING CONTEXT (do NOT convert)';
 const START_MARK = '<!-- ✅ 待转换内容自此开始 / Convert ONLY the content below this marker -->';
-const END_MARK = '<!-- ❌ 待转换内容自此结束 / Convertible content ENDS here（下方为下文上下文，勿转换） -->';
-const NEXT_MARK = (k) => `<!-- ⚠️ 下文上下文（勿转换）/ FOLLOWING CONTEXT (do NOT convert): 以上 ${k} 个段落块紧邻本块待转换内容之后，仅供衔接语境。勿为它们产出条目；其中的编号一律勿引用（由下一块负责）。 -->`;
+const END_MARK = '<!-- ❌ 待转换内容自此结束 / Convertible content ENDS here -->';
+const NEXT_MARK = '<!-- ⚠️ 下文上下文（勿转换）/ FOLLOWING CONTEXT (do NOT convert)';
 
 const bytes = (s) => Buffer.byteLength(s, 'utf8');
 
@@ -117,28 +120,25 @@ export function chunkArticle(slimHtml, children, { splitThreshold, chunkMax }) {
   // ── 4. 组装（上下文不计入块预算——无削减 pass，spec §3.4）──
   const n = packs.length;
   const chunks = [];
+  // 一侧上下文 = 注释开标签 + 逐块独立一行 + 注释闭标签
+  const commented = (mark, idxs) =>
+    `\n${mark}\n${idxs.map((t) => children[t]).join('\n')}\n-->`;
   for (let i = 0; i < n; i++) {
     const own = packs[i];
     const openingIdxs = i > 0 ? opening : [];
     const prevIdxs = i > 0 ? pickPrev(i) : [];
     const nextIdxs = i < n - 1 ? pickNext(i) : [];
     // DOC_RE 捕获组从 <html 起——DOCTYPE 前缀在此补上，与 6_article.html
-    // 的 '<!DOCTYPE html>\n' + outerHTML 序列化形态逐字节同头
+    // 的 '<!DOCTYPE html>\n' + outerHTML 序列化形态逐字节同头；
+    // own 区逐字节拼接（与 6_article.html body 内容一致）
     const parts = ['<!DOCTYPE html>\n', header];
-    if (openingIdxs.length > 0) {
-      parts.push(`\n${OPENING_MARK(openingIdxs.length)}`);
-      parts.push(...openingIdxs.map((t) => children[t]));
-    }
-    if (prevIdxs.length > 0) {
-      parts.push(`\n${PREV_MARK(prevIdxs.length)}`);
-      parts.push(...prevIdxs.map((t) => children[t]));
-    }
+    if (openingIdxs.length > 0) parts.push(commented(OPENING_MARK, openingIdxs));
+    if (prevIdxs.length > 0) parts.push(commented(PREV_MARK, prevIdxs));
     if (openingIdxs.length > 0 || prevIdxs.length > 0) parts.push(`\n${START_MARK}\n`);
-    parts.push(...own.map((t) => children[t]));
+    parts.push(own.map((t) => children[t]).join(''));
     if (nextIdxs.length > 0) {
       parts.push(`\n${END_MARK}`);
-      parts.push(`\n${NEXT_MARK(nextIdxs.length)}`);
-      parts.push(...nextIdxs.map((t) => children[t]));
+      parts.push(commented(NEXT_MARK, nextIdxs));
     }
     parts.push('</body></html>');
     chunks.push({ x: i + 1, n, html: parts.join('') });
