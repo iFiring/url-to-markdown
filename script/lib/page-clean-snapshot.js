@@ -7,8 +7,12 @@
  *                → 带样式版 + 恢复清单（供步骤 4 裁剪与后续占位还原）
  *   clean 趟   —— 共享结构清洗 + SVG 清空/样式剥除 + 瘦身规则 → 清洗版
  * 两趟共享同一套结构清洗（步骤 1-9：link/meta/base 删除、骨架删除、播放器
- * 删除、控件删除、空元素级联 + KEEP_EMPTY、astro- 前缀解包）与折叠统计预
- * 计算（K5 hidden 规模、K7 pre 行数量原文挂 expando）。长文本占位自
+ * 删除、控件删除、D1 脊柱占优比较删除 7.5、空元素级联 + KEEP_EMPTY、astro-
+ * 前缀解包、注释剥离（pre/code 子树除外））与折叠统计预计算（K5 hidden 规模、
+ * K7 pre 行数量原文挂 expando）+ chrome 折叠集标志预计算（2026-09-09，spec
+ * docs/superpowers/specs/2026-09-09-body-spine-chrome-removal-design.md：
+ * body 边界脚手架区 getComputedStyle 判 dialog/hidden/overlay，clean 趟 K5x
+ * 消费；样式计算仅此一处，clean 趟折叠消费零计算）。长文本占位自
  * 2026-09-03 起移出共享段、两趟各自执行：styled 趟带编号 {{LONG_TEXT_k|n_chars}}
  * （还原链消费），clean 趟在 K11 之后执行且无编号 {{LONG_TEXT|n_chars}}——
  * 唯一消费者步骤 3 只看结构+体量信号。
@@ -21,7 +25,9 @@
  *
  * 清洗版瘦身规则 K1-K7/K9-K11：class 语义过滤 K1 → 属性白名单 K2 →
  * SVG 清空 K3 → astro 解包 K4（两趟共享，见共享段）→ hidden 裸属性折叠 K5
- * （{{HIDDEN_TAG|n;构成}}）→ table 折叠 K6 → pre 折叠 K7 → 空白压缩 K9 →
+ * （{{HIDDEN_TAG|n;构成}}）→ chrome 折叠集消费 K5x（hidden→{{HIDDEN_TAG}}、
+ * dialog→{{DIALOG_TAG}}、overlay→{{OVERLAY_TAG}}，壳机制同 K5；带样式版
+ * 折叠集保活）→ table 折叠 K6 → pre 折叠 K7 → 空白压缩 K9 →
  * 空壳 span 拆包 K10 → 纯视图文本折叠 K11（{{VIEW_TEXT|n_chars}}，两道
  * 门槛：文本量 ≥8 汉字/≥6 词、结构量纯 div 树内部 div>6 / 含 span 树
  * 合计>4（p 根只含 text/span、同 span 档），含 LT 模块整棵折，见 K11 段
@@ -98,6 +104,86 @@ function __u2mCleanSnapshot(cfg) {
   for (var i = controls.length - 1; i >= 0; i--) {
     controls[i].parentNode.removeChild(controls[i]);
   }
+
+  // 7.5 D1 脊柱占优比较删除（两趟共享，spec 2026-09-09 §4）：沿 body 向下的
+  //     「脊柱」逐层比较兄弟文本量——非占优子元素 ratio ≤5% ∧ (fixed/absolute/
+  //     sticky ∨ 弹窗词汇) ∧ 内容守卫通过 → 判为 chrome（弹窗/浮层/工具条），
+  //     整树删除。文本量排名第 1（含并列）永不入候选（裁定 R9，堵全零文本
+  //     退化）；下探进入占优子元素，其匹配 main/article/[role=main] 或子树
+  //     p≥5 → 不进入（裁定 R6，内容内部永不扫描）；硬上限 20 层。文本计量与
+  //     候选均排除 script/style/template/noscript（spec §14 修订 1：UA 样式
+  //     使 script display:none、CSS 源非文本量；真实管线步骤 1 已剥，防御
+  //     夹具直入）。置于控件删除后、空元素级联前——删除腾出的空壳由级联收尾。
+  var CHROME_VOCAB_RE = /modal|dialog|popup|pop-?up|popover|drawer|lightbox|toast|snackbar/i;
+  var CHROME_POS = { fixed: 1, absolute: 1, sticky: 1 };
+  var CHROME_TAG_SKIP = { SCRIPT: 1, STYLE: 1, TEMPLATE: 1, NOSCRIPT: 1 };
+  var chromeRemovedCount = 0;
+  var chromeKills = [];
+  function chromeTextOf(el) {
+    var parts = [];
+    (function walk(node) {
+      for (var c = node.firstChild; c; c = c.nextSibling) {
+        if (c.nodeType === 3) parts.push(c.textContent);
+        else if (c.nodeType === 1 && !CHROME_TAG_SKIP[c.tagName]) walk(c);
+      }
+    })(el);
+    return parts.join(' ').replace(/\s+/g, ' ').trim();
+  }
+  function chromeGuardOk(el) {
+    if (el.querySelectorAll('p').length > 2) return false;
+    if (el.matches('main, article, [role="main"]')) return false;
+    if (el.querySelector('main, article, [role="main"]')) return false;
+    if (el.querySelectorAll('pre, table').length > 0) return false;
+    return true;
+  }
+  function chromeVocabHit(el) {
+    var cls = typeof el.className === 'string' ? el.className : '';
+    if (CHROME_VOCAB_RE.test(cls + ' ' + (el.id || ''))) return true;
+    return !!(el.matches('[role="dialog"], [role="alertdialog"], [aria-modal="true"]')
+      || el.querySelector('[role="dialog"], [role="alertdialog"], [aria-modal="true"]'));
+  }
+  function spineScan(root, depth, label) {
+    var kids = [];
+    for (var i = 0; i < root.children.length; i++) {
+      if (!CHROME_TAG_SKIP[root.children[i].tagName]) kids.push(root.children[i]);
+    }
+    if (!kids.length) return;
+    var texts = [], lens = [], max = 0;
+    for (var i = 0; i < kids.length; i++) {
+      texts[i] = chromeTextOf(kids[i]);
+      lens[i] = texts[i].length;
+      if (lens[i] > max) max = lens[i];
+    }
+    if (max === 0) return;                    // 全零文本：无占优信号（裁定 R9）
+    for (var i = 0; i < kids.length; i++) {
+      if (lens[i] === max) continue;          // rank1（含并列）恒排除
+      if (lens[i] / max > 0.05) continue;     // ratio 阈值（裁定 R5：相差 ≥95%）
+      var pos = getComputedStyle(kids[i]).position;
+      var sig = CHROME_POS[pos] ? 'pos:' + pos : (chromeVocabHit(kids[i]) ? 'vocab' : '');
+      if (!sig) continue;
+      if (!chromeGuardOk(kids[i])) continue;  // 内容守卫（裁定 R10）
+      if (chromeKills.length < 60) {
+        chromeKills.push({
+          at: label, ratio: +(lens[i] / max).toFixed(4), sig: sig,
+          tag: kids[i].tagName.toLowerCase(),
+          idx: kids[i].getAttribute('data-idx') || '', txt: texts[i].slice(0, 30),
+        });
+      }
+      kids[i].parentNode.removeChild(kids[i]);
+      chromeRemovedCount++;
+    }
+    if (depth >= 20) return;                  // 硬上限，防病态链
+    var dom = null;
+    for (var i = 0; i < kids.length; i++) {
+      if (lens[i] === max && kids[i].parentNode) { dom = kids[i]; break; }
+    }
+    if (!dom || !dom.children.length) return;
+    if (dom.matches('main, article, [role="main"]')) return;       // 裁定 R6
+    if (dom.querySelectorAll('p').length >= 5) return;             // 裁定 R6
+    spineScan(dom, depth + 1, label + '>' + dom.tagName.toLowerCase()
+      + (dom.getAttribute('data-idx') ? '#' + dom.getAttribute('data-idx') : ''));
+  }
+  if (document.body) spineScan(document.body, 0, 'body');
 
   // 8. 删除空元素：子树内既无非空白文本、也无内容元素的空壳（含仅空白文本者）。
   //    级联：后序单趟——判定基于子树的真实内容，子空则父亦空，自然级联到任意深度。
@@ -188,6 +274,22 @@ function __u2mCleanSnapshot(cfg) {
     wrap.parentNode.removeChild(wrap);
   }
 
+  // 注释节点剥离（两趟共享，spec 2026-09-09 §9.1-2）：框架 SSR 残留（<!---->
+  //     Vue/React 占位注释）与模板注释零信息量；顺带消除原生注释与步骤 6 分块
+  //     上下文标记（HTML 注释形态）的潜在混淆。pre/code 子树除外——代码样本
+  //     可能含 HTML 注释作为内容（styled 失败 live 代码块由步骤 7 LLM 阅读）。
+  //     先收集后删——避免 TreeWalker 活遍历中删节点的迭代陷阱。
+  var commentsRemovedCount = 0;
+  var commentWalker = document.createTreeWalker(document.documentElement, 128, null);
+  var commentHits = [];
+  while (commentWalker.nextNode()) commentHits.push(commentWalker.currentNode);
+  for (var i = 0; i < commentHits.length; i++) {
+    var cmt = commentHits[i];
+    var cpar = cmt.parentElement;
+    if (cpar && cpar.closest('pre, code')) continue;
+    if (cmt.parentNode) { cmt.parentNode.removeChild(cmt); commentsRemovedCount++; }
+  }
+
   // ---- 折叠统计预计算（两趟共享）+ 长文本占位函数定义 ----
   // 长文本占位（2026-09-03 修订）移出共享段、两趟各自调用 foldLongText：
   // styled 趟在分支开头执行（带编号，原文按编号收集 → 2_long_text.json）；
@@ -228,6 +330,66 @@ function __u2mCleanSnapshot(cfg) {
   for (var i = 0; i < prePre.length; i++) {
     prePre[i].__u2mPreLines = countPreLines(prePre[i]);
   }
+
+  // chrome 折叠集预计算（两趟共享，spec 2026-09-09 §5/§9.1-3）：候选区 =
+  //     body 直接子孙（豁免兄弟检查，裁定 R4）∪ 独子链节点（自 body 下每步
+  //     皆独元素子，遇分叉出链，裁定 R3）。三种（优先级 dialog > hidden >
+  //     overlay，spec §7.1）：dialog = role=dialog/alertdialog/aria-modal 自
+  //     我声明、任意深度不限候选区（H2）；hidden = computed display:none ∨
+  //     visibility:hidden 含祖先累积（display:none 后代的 computed 值不回传
+  //     none，必须文档序自顶向下累积）、限候选区（H1-C）；overlay = 候选区
+  //     内可见 ∧ fixed/absolute/sticky（H3'，知乎登录横幅形态——ratio 超标
+  //     逃 D1、非脊柱层级不扫描的漏网浮层）。裸 [hidden] 及其
+  //     后代除外——K5 独占（既定政策不变）。统一内容守卫 chromeGuardOk
+  //     （裁定 R10）。最外层优先：文档序单趟，祖先已入折叠集则后代不再独立
+  //     判定。script/style/template/noscript 排除（spec §14 修订 1）。
+  //     折叠集节点挂 __u2mChromeFold（种类）、后代挂 __u2mInChromeFold——
+  //     styled 侧收集与 clean 侧 K6/K7 同源 skip（k 对齐，spec §9.3）；规模
+  //     复用 __u2mHiddenSize 占位前预计算。必须在此计算：clean 趟随后删
+  //     <style>/style 属性，computed display 退化为 UA 默认。
+  var chromeFolds = [];
+  (function () {
+    var all = document.querySelectorAll('body *');
+    var hidAcc = new Map(), attrAcc = new Map();
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      if (CHROME_TAG_SKIP[el.tagName]) { hidAcc.set(el, true); attrAcc.set(el, true); continue; }
+      var cs = getComputedStyle(el);
+      var par = el.parentElement;
+      hidAcc.set(el, cs.display === 'none' || cs.visibility === 'hidden' || !!(par && hidAcc.get(par)));
+      attrAcc.set(el, el.hasAttribute('hidden') || !!(par && attrAcc.get(par)));
+    }
+    function onChain(el) {
+      var n = el;
+      while (n && n.tagName !== 'BODY') {
+        var p = n.parentElement;
+        if (!p) return false;
+        if (p.tagName !== 'BODY' && p.children.length !== 1) return false;   // 非 body 层须独子
+        n = p;
+      }
+      return !!n && n.tagName === 'BODY';
+    }
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      if (CHROME_TAG_SKIP[el.tagName]) continue;
+      if (el.__u2mInChromeFold || el.__u2mChromeFold) continue;   // 已随外层入集
+      if (attrAcc.get(el)) continue;                              // K5 独占领地
+      var kind = null;
+      if (el.matches('[role="dialog"], [role="alertdialog"], [aria-modal="true"]')) {
+        kind = 'dialog';                                  // H2：任意深度
+      } else if (onChain(el)) {
+        kind = hidAcc.get(el) ? 'hidden'                  // H1-C：状态优先
+          : (CHROME_POS[getComputedStyle(el).position] ? 'overlay' : null);   // H3'：可见浮层
+      }
+      if (!kind) continue;
+      if (!chromeGuardOk(el)) continue;                           // 内容守卫
+      el.__u2mChromeFold = kind;
+      if (!el.__u2mHiddenSize) el.__u2mHiddenSize = sizeSuffix(el.textContent);
+      chromeFolds.push({ el: el, kind: kind });
+      var desc = el.querySelectorAll('*');
+      for (var j = 0; j < desc.length; j++) desc[j].__u2mInChromeFold = true;
+    }
+  })();
 
   // 9. 长文本占位（foldLongText；中英文分标准）：run+散文本统一 walk。
   //    numbered=true（styled 趟，分支开头调用）：run 命中（共享段末尾检测挂
@@ -730,6 +892,43 @@ function __u2mCleanSnapshot(cfg) {
     hiddenCount++;
   }
 
+  // K5x. chrome 折叠集消费（仅清洗版，spec 2026-09-09 §5-7）：共享段
+  //      chromeFolds 判定，壳机制逐字复用 K5——K2 白名单属性（含 data-idx）
+  //      已就位、子树清空、token 带占位前预计算规模 + topTags 构成。
+  //      hidden 种复用 HIDDEN_TAG（语义同裸 [hidden]：可能是收起正文，壳可
+  //      标进 paragraphIds，还原走带样式版）。带样式版不折叠（步骤 5 隐藏
+  //      剥离照旧展开、步骤 4 按壳 id 保整枝）。
+  var CHROME_TOKEN = { hidden: 'HIDDEN_TAG', dialog: 'DIALOG_TAG', overlay: 'OVERLAY_TAG' };
+  var cssHiddenCount = 0;
+  var dialogCount = 0;
+  var overlayCount = 0;
+  for (var i = 0; i < chromeFolds.length; i++) {
+    var cfEl = chromeFolds[i].el, cfKind = chromeFolds[i].kind;
+    if (!cfEl.parentNode || !document.body.contains(cfEl)) continue;   // 已被前序删除
+    var cfTags = {};
+    var cfDesc = cfEl.querySelectorAll('*');
+    for (var j = 0; j < cfDesc.length; j++) {
+      var cft = cfDesc[j].tagName.toLowerCase();
+      cfTags[cft] = (cfTags[cft] || 0) + 1;
+    }
+    var cfSz = cfEl.__u2mHiddenSize || sizeSuffix(cfEl.textContent);
+    var cfComp = topTags(cfTags);
+    var cfToken = '{{' + CHROME_TOKEN[cfKind] + '|' + cfSz.n + '_' + cfSz.unit
+      + (cfComp ? ';' + cfComp : '') + '}}';
+    while (cfEl.firstChild) cfEl.removeChild(cfEl.firstChild);
+    cfEl.appendChild(document.createTextNode(cfToken));
+    // 壳上的 LT run 记录随折删除：run 检测（共享段末尾）先于本消费点，可见
+    //     overlay/dialog 壳内文本 ≥16 汉字必被记录 run（expando 挂壳元素）；
+    //     foldLongText(clean 趟、K11 后) 按 __u2mRunHtml 整段替换壳内容——
+    //     不删则 chrome token 被 {{LONG_TEXT}} 覆写。styled 趟不跑 K5x，该
+    //     run 照常折为带编号占位入恢复清单，clean LT ⊆ styled 不破。
+    delete cfEl.__u2mRunHtml;
+    delete cfEl.__u2mRunSize;
+    if (cfKind === 'hidden') cssHiddenCount++;
+    else if (cfKind === 'dialog') dialogCount++;
+    else overlayCount++;
+  }
+
   // K6. table 折叠（仅清洗版）：整树清空、折叠为 {{TABLE_k|rows×cols}} 占位符
   //     ——k = 文档序编号（1 起、跳过 [hidden] 表，与 styled 趟 __u2mCollectTables
   //     /__u2mFoldTables 一致，保证两版 k 对齐）。行 = 本表自身的 <tr> 数（嵌套
@@ -743,7 +942,7 @@ function __u2mCleanSnapshot(cfg) {
   for (var i = 0; i < tables.length; i++) {
     var tb = tables[i];
     if (!tb.parentNode) continue;
-    if (tb.hasAttribute('hidden')) continue;
+    if (tb.hasAttribute('hidden') || tb.__u2mChromeFold || tb.__u2mInChromeFold) continue;   // K5/K5x 独占（折叠集同源 skip，两版 k 对齐）
     tableK++;
     var shape = tb.__u2mTableShape;
     while (tb.firstChild) tb.removeChild(tb.firstChild);
@@ -763,7 +962,7 @@ function __u2mCleanSnapshot(cfg) {
   for (var i = 0; i < pres.length; i++) {
     var pre = pres[i];
     if (!pre.parentNode) continue;
-    if (pre.hasAttribute('hidden')) continue;
+    if (pre.hasAttribute('hidden') || pre.__u2mChromeFold || pre.__u2mInChromeFold) continue;   // K5/K5x 独占（同源 skip）
     var langShell = pre.querySelector('code[data-language]');
     if (langShell && !pre.hasAttribute('data-language')) {
       pre.setAttribute('data-language', langShell.getAttribute('data-language'));
@@ -969,6 +1168,13 @@ function __u2mCleanSnapshot(cfg) {
 
   return {
     html: '<!DOCTYPE html>\n' + document.documentElement.outerHTML,
-    stats: { hiddenCount: hiddenCount, viewTextCount: viewTextCount }
+    stats: {
+      hiddenCount: hiddenCount, viewTextCount: viewTextCount,
+      chromeRemoved: chromeRemovedCount, chromeKills: chromeKills,
+      commentsRemoved: commentsRemovedCount,
+      cssHiddenFolded: cssHiddenCount,
+      dialogFolded: dialogCount,
+      overlayFolded: overlayCount,
+    }
   };
 }

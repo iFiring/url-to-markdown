@@ -34,7 +34,7 @@
 - Consumes: 既有共享段（规则 1-7 已删 link/meta/base/nav/footer/form/video/audio/input 等）；`document.body`
 - Produces: 变量 `chromeRemovedCount`(number)、`chromeKills`(array of `{at,ratio,sig,tag,idx,txt}`，上限 60 条)——Task 6 接 emit/debug；clean 趟 return `stats.chromeRemoved`/`stats.chromeKills`；helper `chromeGuardOk(el)`——Task 3/4/5 的标志预计算复用同一守卫函数
 
-- [ ] **Step 1: 写失败测试（完整文件）**
+- [x] **Step 1: 写失败测试（完整文件）**
 
 ```js
 // test/unit/chrome-d1.test.mjs
@@ -200,12 +200,12 @@ test('D1: 全零文本层退化保护；script 不入候选；style 文本不计
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `node --test test/unit/chrome-d1.test.mjs`
 Expected: FAIL——删除类断言失败（`data-idx="4"` 等仍存在）；存活类断言此时即通过（现状不删任何东西）
 
-- [ ] **Step 3: 实现 D1（共享段步骤 7.5）**
+- [x] **Step 3: 实现 D1（共享段步骤 7.5）**
 
 在 `script/lib/page-clean-snapshot.js` 规则 7 的 controls 删除循环结束之后、`// 8. 删除空元素` 注释块之前插入：
 
@@ -303,7 +303,7 @@ Expected: FAIL——删除类断言失败（`data-idx="4"` 等仍存在）；存
   };
 ```
 
-- [ ] **Step 4: 跑测试确认通过 + golden 无漂移 + 全量单测**
+- [x] **Step 4: 跑测试确认通过 + golden 无漂移 + 全量单测**
 
 Run: `node --test test/unit/chrome-d1.test.mjs`
 Expected: PASS（9 个测试全绿）
@@ -314,7 +314,7 @@ Expected: PASS（模拟已验证零漂移——immersive popup 现行为本就�
 Run: `pnpm test`
 Expected: 全绿。若红：逐个核对——被折叠/删除的是夹具 chrome 形态 → 更新该测试断言并在 commit message 记录理由；是正文 → 实现 bug，修复实现而不是改断言
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add script/lib/page-clean-snapshot.js test/unit/chrome-d1.test.mjs
@@ -341,7 +341,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Consumes: 无（独立规则）
 - Produces: 变量 `commentsRemovedCount`(number)；clean 趟 return `stats.commentsRemoved`——Task 6 接 emit
 
-- [ ] **Step 1: 写失败测试（完整文件）**
+- [x] **Step 1: 写失败测试（完整文件）**
 
 ```js
 // test/unit/chrome-comments.test.mjs
@@ -412,12 +412,12 @@ test('注释剥离: pre 子树内注释保留（styled 失败 live 代码块可�
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `node --test test/unit/chrome-comments.test.mjs`
 Expected: FAIL——第一个测试的注释删除断言失败（现状注释保留）；第二个测试的 styled 断言此时即通过
 
-- [ ] **Step 3: 实现注释剥离**
+- [x] **Step 3: 实现注释剥离**
 
 在 astro 解包循环（`for (var i = astroWraps.length - 1; ...)` 结束）之后、`// ---- 折叠统计预计算` 注释之前插入：
 
@@ -446,7 +446,7 @@ clean 趟 return stats 追加一行：
       commentsRemoved: commentsRemovedCount,
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `node --test test/unit/chrome-comments.test.mjs`
 Expected: PASS
@@ -454,7 +454,7 @@ Expected: PASS
 Run: `node --test test/unit/clean-snapshot-golden.test.mjs`
 Expected: **article-1 FAIL**（head 注释被剥）、clean-simplify PASS（无注释，模拟已验证）
 
-- [ ] **Step 5: 重建 article-1 golden 并人工核对 diff**
+- [x] **Step 5: 重建 article-1 golden 并人工核对 diff**
 
 ```bash
 TMP=$(mktemp -d) && D="$TMP/example.com_article-1" && mkdir -p "$D" \
@@ -470,7 +470,7 @@ Expected: diff **只含** head 注释行 `<!-- Theme fonts. tufte falls back to 
 Run: `node --test test/unit/clean-snapshot-golden.test.mjs`
 Expected: PASS（两夹具）
 
-- [ ] **Step 6: 全量单测 + Commit**
+- [x] **Step 6: 全量单测 + Commit**
 
 Run: `pnpm test`
 Expected: 全绿
@@ -500,7 +500,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Consumes: Task 1 的 `chromeGuardOk`/`CHROME_TAG_SKIP`/`CHROME_POS`（同函数作用域直接使用）；既有 `sizeSuffix`（共享段已定义）；既有 `topTags`（K5 段函数声明，hoisting 可用）
 - Produces: `chromeFolds`(array of `{el, kind}`，kind ∈ 'hidden'（本任务）/'dialog'(Task 4)/'overlay'(Task 5))；expando `__u2mChromeFold`(string kind，折叠集最外层节点)、`__u2mInChromeFold`(true，折叠集后代)——收集脚本与 K6/K7 skip 消费；`CHROME_TOKEN`(map)；`cssHiddenCount`(number)；clean 趟 return `stats.cssHiddenFolded`
 
-- [ ] **Step 1: 写失败测试（完整文件）**
+- [x] **Step 1: 写失败测试（完整文件）**
 
 ```js
 // test/unit/chrome-hidden-fold.test.mjs
@@ -620,12 +620,12 @@ console.log(a, b);</pre>`));
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `node --test test/unit/chrome-hidden-fold.test.mjs`
 Expected: FAIL——折叠断言失败（css-hidden 现状全额存活）；红线测试与 styled 保活断言此时即通过；k 对齐测试的 `tables.total` 为 2（现状收集隐藏表）
 
-- [ ] **Step 3: 实现标志预计算（共享段）**
+- [x] **Step 3: 实现标志预计算（共享段）**
 
 在 `__u2mPreLines` 预计算循环之后插入：
 
@@ -681,7 +681,7 @@ Expected: FAIL——折叠断言失败（css-hidden 现状全额存活）；红�
   })();
 ```
 
-- [ ] **Step 4: 实现 K5x 折叠消费（clean 趟）+ K6/K7 skip + 收集 skip 同源**
+- [x] **Step 4: 实现 K5x 折叠消费（clean 趟）+ K6/K7 skip + 收集 skip 同源**
 
 在既有 K5 循环（`hiddenCount++;` 结束的 for 循环）之后、K6 注释块之前插入：
 
@@ -760,7 +760,7 @@ clean 趟 return stats 追加：
  * 壳（K5x）；裸 hidden 属性折叠（K5）全文档不变。
 ```
 
-- [ ] **Step 5: 跑测试确认通过 + golden + 全量**
+- [x] **Step 5: 跑测试确认通过 + golden + 全量**
 
 Run: `node --test test/unit/chrome-hidden-fold.test.mjs`
 Expected: PASS（5 个测试全绿）
@@ -771,7 +771,7 @@ Expected: PASS（模拟已验证 article-1/clean-simplify folds=0；收集脚本
 Run: `pnpm test`
 Expected: 全绿。重点关注 clean-snapshot.test.mjs 内联夹具——模拟显示零扰动；若红按 Task 1 Step 4 的裁决原则处理
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add script/lib/page-clean-snapshot.js script/lib/page-collect-tables.js script/lib/page-collect-code.js script/clean_snapshot.mjs test/unit/chrome-hidden-fold.test.mjs
@@ -798,7 +798,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Consumes: Task 3 的标志预计算循环与 K5x 消费框架
 - Produces: kind `'dialog'`；`CHROME_TOKEN.dialog = 'DIALOG_TAG'`；`dialogCount`(number)；`stats.dialogFolded`
 
-- [ ] **Step 1: 写失败测试（完整文件）**
+- [x] **Step 1: 写失败测试（完整文件）**
 
 ```js
 // test/unit/chrome-dialog-fold.test.mjs
@@ -878,12 +878,12 @@ test('H2: 守卫拦截——dialog 含 3 个 p 或含 table 不折（table 照�
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `node --test test/unit/chrome-dialog-fold.test.mjs`
 Expected: FAIL——DIALOG_TAG 断言失败（现状 dialog div 全额存活）；守卫测试此时即通过（本就不折）
 
-- [ ] **Step 3: 实现 dialog 种**
+- [x] **Step 3: 实现 dialog 种**
 
 标志预计算循环内，`if (!onChain(el)) continue;` **之前**插入 dialog 判定（任意深度，优先级最高——spec §7.1），并把原 hidden 判定改为 else 分支：
 
@@ -919,7 +919,7 @@ clean 趟 return stats 追加：
       dialogFolded: dialogCount,
 ```
 
-- [ ] **Step 4: 跑测试确认通过 + 回归**
+- [x] **Step 4: 跑测试确认通过 + 回归**
 
 Run: `node --test test/unit/chrome-dialog-fold.test.mjs`
 Expected: PASS（3 个测试全绿）
@@ -927,7 +927,7 @@ Expected: PASS（3 个测试全绿）
 Run: `node --test test/unit/chrome-hidden-fold.test.mjs && node --test test/unit/clean-snapshot-golden.test.mjs`
 Expected: PASS（Task 3 测试不回归；golden 模拟 folds=0 不变）
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add script/lib/page-clean-snapshot.js test/unit/chrome-dialog-fold.test.mjs
@@ -952,7 +952,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Consumes: Task 3/4 的标志预计算与 K5x 框架；`CHROME_POS`（Task 1）
 - Produces: kind `'overlay'`；`CHROME_TOKEN.overlay = 'OVERLAY_TAG'`；`overlayCount`(number)；`stats.overlayFolded`
 
-- [ ] **Step 1: 写失败测试（完整文件）**
+- [x] **Step 1: 写失败测试（完整文件）**
 
 ```js
 // test/unit/chrome-overlay-fold.test.mjs
@@ -1040,12 +1040,12 @@ test("H3': 守卫拦截——fixed 含 pre 不折", async () => {
 （第二个测试的文本量刻意设计为 ratio >5%——22 字与 20 字对 max=100——让 D1 不先删，
 从而单独验证 H3' 无 ratio 条件、以及 hidden > overlay 的优先级。）
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `node --test test/unit/chrome-overlay-fold.test.mjs`
 Expected: FAIL——OVERLAY_TAG 断言失败；off-chain 红线断言此时即通过
 
-- [ ] **Step 3: 实现 overlay 种**
+- [x] **Step 3: 实现 overlay 种**
 
 标志预计算 kind 判定改为完整形态（spec §7.1 终态）：
 
@@ -1081,7 +1081,7 @@ clean 趟 return stats 追加：
       overlayFolded: overlayCount,
 ```
 
-- [ ] **Step 4: 跑测试确认通过 + 回归**
+- [x] **Step 4: 跑测试确认通过 + 回归**
 
 Run: `node --test test/unit/chrome-overlay-fold.test.mjs`
 Expected: PASS
@@ -1089,7 +1089,7 @@ Expected: PASS
 Run: `node --test test/unit/chrome-d1.test.mjs && node --test test/unit/chrome-hidden-fold.test.mjs && node --test test/unit/chrome-dialog-fold.test.mjs && node --test test/unit/clean-snapshot-golden.test.mjs`
 Expected: PASS（Task 1 fixed-kill 测试不受影响——D1 在共享段先删，H3' 只见 D1 幸存者）
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add script/lib/page-clean-snapshot.js test/unit/chrome-overlay-fold.test.mjs
@@ -1114,7 +1114,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Consumes: clean 趟 return `stats.{chromeRemoved, chromeKills, commentsRemoved, cssHiddenFolded, dialogFolded, overlayFolded}`（Task 1-5 逐步就位）
 - Produces: emit 顶层 `chrome` 对象（恒定形状 `{removed, cssHiddenFolded, dialogFolded, overlayFolded, commentsRemoved}`）——SKILL.md 决策表与下游 agent 可见
 
-- [ ] **Step 1: 写失败测试（完整文件）**
+- [x] **Step 1: 写失败测试（完整文件）**
 
 ```js
 // test/unit/chrome-emit.test.mjs
@@ -1193,12 +1193,12 @@ test('U2M_DEBUG=1: D1 kill 明细走 stderr，stdout 单行 JSON 契约不破', 
 
 （注：`runClean` 已断言 stdout 恰为一行可解析 JSON——契约由基座保证；第三个测试的 `r.stdout` 行可删，基座 `JSON.parse(r.stdout)` 失败即契约破坏。）
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `node --test test/unit/chrome-emit.test.mjs`
 Expected: FAIL——`out.chrome` undefined；stderr 无 `[chrome-d1]`
 
-- [ ] **Step 3: 实现 emit 与 debug**
+- [x] **Step 3: 实现 emit 与 debug**
 
 `script/clean_snapshot.mjs` debug 行（现 208 行）之后追加：
 
@@ -1228,7 +1228,7 @@ emit 块 `viewText` 字段之后追加：
  *    "chrome":{"removed":N,"cssHiddenFolded":N,"dialogFolded":N,"overlayFolded":N,"commentsRemoved":N}
 ```
 
-- [ ] **Step 4: 跑测试确认通过 + 契约回归**
+- [x] **Step 4: 跑测试确认通过 + 契约回归**
 
 Run: `node --test test/unit/chrome-emit.test.mjs && node --test test/unit/contract.test.mjs`
 Expected: PASS
@@ -1236,7 +1236,7 @@ Expected: PASS
 Run: `pnpm test`
 Expected: 全绿（现有测试对 emit 的断言都是字段级，不因新增顶层字段破坏）
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add script/clean_snapshot.mjs test/unit/chrome-emit.test.mjs
@@ -1264,7 +1264,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Consumes: Task 1-6 全部落地行为
 - Produces: 步骤 3 agent 的 token 判读指引（DIALOG_TAG/OVERLAY_TAG = chrome 不选）
 
-- [ ] **Step 1: 更新 references/analyze_html_guide.md**
+- [x] **Step 1: 更新 references/analyze_html_guide.md**
 
 在第 219 行 HIDDEN_TAG 条目末尾追加一句，并在其后新增两个条目：
 
@@ -1274,7 +1274,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - `{{OVERLAY_TAG|n_chars;构成}}` 为 body 边界独子链上的可见 fixed/absolute/sticky 浮层折叠壳（登录横幅/吸顶工具条等）——**chrome，不要选入任何键**
 ```
 
-- [ ] **Step 2: 更新 CLAUDE.md 步骤 2 段**
+- [x] **Step 2: 更新 CLAUDE.md 步骤 2 段**
 
 共享段描述（「**共享段（两趟一致执行）** = 结构删除 + astro 解包 + …」行）改为：
 
@@ -1292,7 +1292,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 emit 描述行同步加 `chrome:{removed,cssHiddenFolded,dialogFolded,overlayFolded,commentsRemoved}` 恒定形状。
 
-- [ ] **Step 3: 更新 README.md 与 docs/design**
+- [x] **Step 3: 更新 README.md 与 docs/design**
 
 README.md 第 94 行「清洗版瘦身」bullet 中追加：
 
@@ -1306,11 +1306,11 @@ docs/design/url-to-markdown-design.md §6 步骤 2 小节末尾追加一段（�
 边界 chrome 清除与折叠（2026-09-09，spec: docs/superpowers/specs/2026-09-09-body-spine-chrome-removal-design.md）：共享段 D1 脊柱占优删除（两版）+ chrome 折叠集预计算；clean 趟 K5x 消费折叠（HIDDEN/DIALOG/OVERLAY_TAG 壳）；styled 收集与 K6/K7 同源 skip 保 k 对齐。清洗版唯一消费者步骤 3 的 token 判读见 references/analyze_html_guide.md。
 ```
 
-- [ ] **Step 4: 更新 page-clean-snapshot.js 文件头注**
+- [x] **Step 4: 更新 page-clean-snapshot.js 文件头注**
 
 头注「两趟共享同一套结构清洗（步骤 1-9：…）」句中补 `D1 脊柱占优删除 7.5、注释剥离`；「清洗版瘦身规则 K1-K7/K9-K11」清单在 K5 之后补 `K5x chrome 折叠集消费（HIDDEN/DIALOG/OVERLAY_TAG）`；「零样式计算」相关表述与 Task 3 对 clean_snapshot.mjs 头注的修正对齐（共享段 getComputedStyle 标志预计算，clean 趟折叠消费）。
 
-- [ ] **Step 5: 全量验证 + Commit**
+- [x] **Step 5: 全量验证 + Commit**
 
 Run: `pnpm test:all`
 Expected: 全绿（单测 + 集成；集成需 chromium——环境已具备）
@@ -1336,7 +1336,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Consumes: Task 1-7 全部落地
 - Produces: 冒烟记录（实测数字 vs spec §13 预期）
 
-- [ ] **Step 1: 隔离复制五样本快照**
+- [x] **Step 1: 隔离复制五样本快照**
 
 ```bash
 SMOKE=$(mktemp -d /tmp/u2m-smoke-XXXXXX) && echo "$SMOKE" > /tmp/u2m-smoke-dir.txt
@@ -1348,7 +1348,7 @@ ls "$SMOKE"
 
 Expected: 5 个目录各含 1_snapshot.html
 
-- [ ] **Step 2: 重跑步骤 2 并记录 chrome 统计与字节**
+- [x] **Step 2: 重跑步骤 2 并记录 chrome 统计与字节**
 
 ```bash
 SMOKE=$(cat /tmp/u2m-smoke-dir.txt)
@@ -1370,7 +1370,7 @@ Expected（对照 spec §13，允许 ±20% 实现差异；**数量级或方向�
 - mmh1 重定向版：**全零**（负控制——`removed:0` 且三折叠计数全 0），clean ≈17.1K（原 17195，仅注释差）
   - 注：redirected 目录由 `--url` 原 URL 派生 + redirect_to.yaml marker 定位——隔离目录需把 `redirect_to.yaml` 一并复制并放 `redirected_` 前缀目录（Step 1 的 for 循环已按原目录名复制；若 urlDir 派生不中，直接跳过 mmh1 重跑、改用探针数据对照，并在记录注明）。原 URL 无法从目录名反推时向用户询问
 
-- [ ] **Step 3: 微信样本人工核查清洗版**
+- [x] **Step 3: 微信样本人工核查清洗版**
 
 ```bash
 SMOKE=$(cat /tmp/u2m-smoke-dir.txt)
@@ -1380,14 +1380,14 @@ grep -o 'data-idx="4[0-9]\{3\}"' "$SMOKE/mp.weixin.qq.com_s_lspwTyzxUnpbw1eHIoql
 
 Expected: 折叠 token ≥5 个；4xxx 段 chrome id 残留数显著低于改动前基线（基线：先对 `working/` 现产物跑同条 grep 记录数字再对比）。正文区（js_content 内 h3/p/pre 序列）与 `working/` 现产物一致——`diff <(grep -o '{{CODE_[0-9]*' 旧) <(grep -o '{{CODE_[0-9]*' 新)` 编号集合一致（k 对齐实证）
 
-- [ ] **Step 4: 步骤 3 选择质量对比（agent 判断）**
+- [x] **Step 4: 步骤 3 选择质量对比（agent 判断）**
 
 对微信新旧两版清洗版分别按 SKILL.md 步骤 3 产出 key_ids（新：`$SMOKE` 版；旧：`working/` 现产物 + 现 `3_key_ids.json`），对比：
 - titleId/正文 paragraphIds 基本一致（个别边界块差异可接受）
 - 新 key_ids 不含任何 chrome 区 id（4378+ 段、弹窗壳）
 - **若正文块缺失 → 阻断，回到实现排查**（折叠误伤正文）
 
-- [ ] **Step 5: 记录 SMOKE.md + Commit**
+- [x] **Step 5: 记录 SMOKE.md + Commit**
 
 在 `test/smoke/SMOKE.md` 追加场景条目：日期、五样本 chrome 统计实测表、字节对照、步骤 3 对比结论、k 对齐核对结果。
 

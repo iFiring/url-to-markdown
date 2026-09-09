@@ -62,8 +62,10 @@ U2M_DEBUG=1 node script/snapshot.mjs --url <url>
   - 输出核心参数 `skill-root`/`url-name`/`url-working-path`（url-name 经 `lib/env.mjs urlToDirName` 派生，与步骤 2-9 工作目录派生同一事实源；重定向页为 `redirected_` 前缀名）+ `redirect` 通报
   - 产物 `1_snapshot.html`
 
-- **步骤 2 `clean_snapshot.mjs` —— 结构清洗（单页两趟、零样式计算）**
-  - **共享段（两趟一致执行）** = 结构删除 + astro 解包 + 长文本占位 + aria-label 截断 + 折叠统计预计算：
+- **步骤 2 `clean_snapshot.mjs` —— 结构清洗（单页两趟，样式计算仅限共享段标志预计算）**
+  - **共享段（两趟一致执行）** = 结构删除 + **D1 脊柱占优比较删除（步骤 7.5，spec 2026-09-09）** + astro 解包 + **注释剥离（pre/code 子树除外）** + 长文本占位 + aria-label 截断 + 折叠统计预计算 + **chrome 折叠集预计算**：
+    - **D1**——沿 body 脊柱逐层比较兄弟文本量：非占优（rank1 含并列恒豁免）子元素 ratio ≤5% ∧（fixed/absolute/sticky ∨ 弹窗词汇 modal|dialog|popup|popover|drawer|lightbox|toast|snackbar，**不含 overlay**）∧ 内容守卫（p≤2 ∧ 无 main/article ∧ 无 pre/table）→ **两版整树删除**；下探遇占优子元素 p≥5 或 main/article 即停（内容内部永不扫描）、深度上限 20；文本计量与候选排除 script/style/template/noscript
+    - **chrome 折叠集**——候选区 = body 直接子孙 ∪ 独子链（分叉出链）；三种：dialog（role=dialog/aria-modal，**任意深度**）> hidden（computed display:none/visibility:hidden 含祖先累积）> overlay（可见 ∧ fixed/absolute/sticky）；统一内容守卫；裸 [hidden] 及后代归 K5 独占；节点挂 `__u2mChromeFold`、后代挂 `__u2mInChromeFold`——**styled 收集与 clean K6/K7 同源 skip（k 对齐）**；折叠壳上的 LT run expando 随折删除（防 foldLongText 覆写 chrome token）
     - astro 解包——`astro-` 前缀框架脚手架标签子元素上提、包装弃置——两趟一致，步骤 3 引用集来自清洗版从不引用包装 id，两版 id 集对齐
     - **长文本占位（两趟各自执行：styled 分支开头带编号、clean 在 K11 之后无编号 `{{LONG_TEXT|n_unit}}`）**——超阈值 16 汉字/12 词的内容按两级折叠（spec 2026-09-06：`docs/superpowers/specs/2026-09-06-long-text-inline-run-design.md`）：
       - **极大纯行内 run**（流容器内 text 与行内元素混排的整段内容；检测/规范化序列化在两趟共享段末尾执行、结果挂元素 expando，孪生守卫由构造保证）折为单个 `{{LONG_TEXT_k|n_unit}}`、原文以剥净属性的 canonical HTML 片段入 `2_long_text.json` 的 `runs` 段（span 按 computed style 归一 strong/em/del、math 压成仅含 annotation 的极简形态、href 绝对化、`#`/`javascript:`/空 href 解包）
@@ -81,7 +83,8 @@ U2M_DEBUG=1 node script/snapshot.mjs --url <url>
     - 属性白名单（class/id/data-idx/data-language/hidden/type/role/alt/aria-label，href/src/aria（aria-label 除外）全删）
     - SVG 清空
     - hidden 裸属性折叠 `{{HIDDEN_TAG|n_chars;构成}}`（规模按占位前原文预计算）
-    - table/pre 折叠 `{{TABLE_k|rows×cols}}`/`{{CODE_k|n_lines}}`（k = 文档序编号 1 起、跳过 hidden 元素；行列/行数规模信号——表格形状在 K2 剥 colspan 前预计算挂 expando；CODE 行数来自 styled 趟 walkLines 收集结果、两版 k 对齐，未命中 map 的防御分支退回旧 `{{PRE_CODE_TAG|n_lines}}` 局部计数不占 k 编号）
+    - K5x chrome 折叠集消费（仅 clean 趟）——hidden→`{{HIDDEN_TAG}}`（语义同裸 [hidden]，壳可标 paragraphIds）、dialog→`{{DIALOG_TAG}}`、overlay→`{{OVERLAY_TAG}}`（后两者 chrome、步骤 3 不选）；壳机制逐字复用 K5；**带样式版折叠集保活**（还原链零改动）；链外深处 CSS 隐藏（FAQ/非激活 tab）不折——全 DOM hidden 检测被 OpenAI 非激活 tab 正文实证否决；emit 增 `chrome:{removed,cssHiddenFolded,dialogFolded,overlayFolded,commentsRemoved}` 恒定形状
+    - table/pre 折叠 `{{TABLE_k|rows×cols}}`/`{{CODE_k|n_lines}}`（k = 文档序编号 1 起、跳过 hidden/chrome 折叠集元素（同源 skip，两版 k 对齐）；行列/行数规模信号——表格形状在 K2 剥 colspan 前预计算挂 expando；CODE 行数来自 styled 趟 walkLines 收集结果、两版 k 对齐，未命中 map 的防御分支退回旧 `{{PRE_CODE_TAG|n_lines}}` 局部计数不占 k 编号）
     - 空白压缩
     - K10 空壳 span 拆包（clean 趟末段）——仅 data-idx 一个属性的 span 迭代解包，子节点并入父、内容不丢只粒度变粗，省 step 3 输入字节；仅 clean 趟——styled 趟保留这些 span 的 style 供步骤 5-7 判粗体/颜色，孪生 id 集由此放宽为 clean⊆styled
     - K11 纯视图文本折叠 `{{VIEW_TEXT|n_chars/n_words}}`（仅 clean 趟、K10 后、**先于 LT 占位执行**）：
