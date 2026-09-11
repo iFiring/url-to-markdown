@@ -19,15 +19,31 @@ test('文本转义：! 仅在后随 [ 时转义（防误触图片下载扫描）
   assert.equal(inlineRunToMarkdown('太棒了!'), '太棒了!');
 });
 
-test('行首中断符转义：值开头、换行后、前导空白后', () => {
+test('行首中断符转义：值开头、br 硬换行后（文本换行已折叠不再触发行首——spec §12）', () => {
   assert.equal(inlineRunToMarkdown('# 标题样'), '\\# 标题样');
-  assert.equal(inlineRunToMarkdown('a\n- b'), 'a\n\\- b');
-  assert.equal(inlineRunToMarkdown('a\n  1) c'), 'a\n  1\\) c');
-  assert.equal(inlineRunToMarkdown('a\n> 引用'), 'a\n\\> 引用');
-  assert.equal(inlineRunToMarkdown('a\n==='), 'a\n\\===');
+  assert.equal(inlineRunToMarkdown('a<br>- b'), 'a\\\n\\- b');
+  // 文本节点换行折叠为单空格 → 不再是行首，与浏览器渲染一致（a - b 是普通文本）
+  assert.equal(inlineRunToMarkdown('a\n- b'), 'a - b');
+  assert.equal(inlineRunToMarkdown('a\n  1) c'), 'a 1) c');
+  assert.equal(inlineRunToMarkdown('a\n> 引用'), 'a > 引用');
+  assert.equal(inlineRunToMarkdown('a\n==='), 'a ===');
+  // 值首空白后的中断符仍转义（折叠后 ≤3 前导空格仍在 CommonMark 中断窗内）
+  assert.equal(inlineRunToMarkdown('\n  # 标题样'), ' \\# 标题样');
   // 非行首的中断符不转义（渲染透明原则的最小干预）
   assert.equal(inlineRunToMarkdown('a - b'), 'a - b');
   assert.equal(inlineRunToMarkdown('v1.2'), 'v1.2');
+});
+
+test('行内流空白折叠：文本节点空白 run（含换行）→ 单空格（浏览器 white-space:normal 语义）', () => {
+  assert.equal(inlineRunToMarkdown('a\n              b'), 'a b');
+  assert.equal(inlineRunToMarkdown('a  \t b'), 'a b');
+  // 微信 description 实测形态：em 间源码排版空白 → 单行输出（首尾单空格保留防拼接粘词）
+  assert.equal(
+    inlineRunToMarkdown('\n              <em>2026年2月12日 22:00</em>\n              <em>湖北</em>\n              \n          '),
+    ' *2026年2月12日 22:00* *湖北* '
+  );
+  // br 硬换行不受折叠影响（BR 分支不经 escapeText）
+  assert.equal(inlineRunToMarkdown('a\n  <br>  b'), 'a \\\n b');
 });
 
 test('未知标签解包：只递归子节点', () => {
