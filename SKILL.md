@@ -42,10 +42,10 @@ working/                 # 工作目录
       trans/
     1_snapshot.html
     ...
-    9_markdown.md 
-``` 
+    8_markdown.md
+```
 
-## 操作手册（步骤 0-9）
+## 操作手册（步骤 0-8）
 
 ### 步骤 0 · 初始化执行环境
 
@@ -206,30 +206,17 @@ node <skill-root>/script/extract_article.mjs --url <url>
 - 未分割：产物 `<url-working-path>/7_skeleton.json` 完成后进入步骤 8
 - 已分割：**全部 `chunks.count` 个分片文件都存在**后进入步骤 8（步骤 8 会自动检测并合并分片）；个别分片失败/缺失时重新派发该分片一次，仍失败则把缺失清单反馈用户并终止
 
-### 步骤 8 · 用脚本还原占位符 + 图片下载
+### 步骤 8 · 用脚本还原占位符 + 图片下载 + 截图 + 生成 Markdown（终态步骤）
 
 ```bash
-node <skill-root>/script/screenshot_trans.mjs --url <url>
+node <skill-root>/script/render_markdown.mjs --url <url>
 ```
 
-产物：`<url-working-path>/8_resolved_skeleton.json`（你自己不要去读脚本的产物内容，确认有即可）
+产物：`<url-working-path>/8_markdown.md`（最终产物，路径见 stdout 的 `markdownPath`；你自己不要去读脚本的产物内容，确认有即可）；中间产物 `8_resolved_skeleton.json` 与 `assets/` 同轮落盘
 
 | stdout.status | 动作 |
 |---|---|
-| `ok` | 把 stdout 反馈给用户，进入步骤 9。 |
-| `error` | 把 `stdout.reason` 反馈给用户并终止 |
-
-### 步骤 9 · 用脚本将骨架转换为 Markdown
-
-```bash
-node <skill-root>/script/render_skeleton.mjs --url <url>
-```
-
-产物：`<url-working-path>/9_markdown.md`（你自己不要去读脚本的产物内容，确认有即可）
-
-| stdout.status | 动作 |
-|---|---|
-| `ok` | 把 stdout 反馈给用户，所有步骤完成 |
+| `ok` | 把 stdout 反馈给用户，**所有步骤完成**（`skipped: "no_trans2img"` 仅信息通报，无需处理） |
 | `error` | 把 `stdout.reason` 反馈给用户并终止 |
 
 ## 常见错误处理
@@ -244,5 +231,5 @@ node <skill-root>/script/render_skeleton.mjs --url <url>
 | 页面加载报 `net::ERR_TUNNEL_CONNECTION_FAILED` / `ERR_PROXY_CONNECTION_FAILED` | 本机系统代理不可用或拒绝目标站：设 `U2M_PROXY=direct` 绕过系统代理，或 `U2M_PROXY=http://<host>:<port>` 显式指定可用代理后重跑 |
 | `clean_snapshot` 报找不到快照 | 先运行步骤 1 生成 `1_snapshot.html` |
 | `extract_article` 报找不到纯内联视图 | 先运行步骤 5 生成 `5_juice_styles.html` |
-| `render_skeleton` 报 code 条目 value 应为 `{lang, content}` 对象 | 步骤 7 引用了未还原的代码占位符：检查 `7_skeleton.json` 的 code 条目——占位符块用 `{"code": "{{CODE_k}}"}` 引用、live 代码块自转（见骨架指南），修正后重跑步骤 8 |
+| `render_markdown` 报 code 条目 value 应为 `{lang, content}` 对象 | 步骤 7 引用了未还原的代码占位符（`2_code.json` 中不存在或 failed 的 k）：检查 `7_skeleton.json` 的 code 条目——占位符块用 `{"code": "{{CODE_k}}"}` 引用、live 代码块自转（见骨架指南），修正后重跑步骤 8 |
 | `extract_styled` / `extract_article` 报找不到 key_ids | 先运行步骤 3 生成 `3_key_ids.json` |

@@ -191,7 +191,7 @@ CLI：`render_markdown.mjs <url-dir> [--port 0] [--timeout 120000]`
 
 ### 6.5 `clean_snapshot.mjs` —— 边界 chrome 清除与折叠（2026-09-09 增补）
 
-> 注：§6.1-6.4 与 §5 数据流描述的是早期脚本形态；现行管线（步骤 0-9、
+> 注：§6.1-6.4 与 §5 数据流描述的是早期脚本形态；现行管线（步骤 0-8、
 > `snapshot.mjs` 单入口、`clean_snapshot.mjs` 两趟清洗等）的演进见
 > `docs/superpowers/specs/` 系列设计文档与 CLAUDE.md。本节为步骤 2 的增补记录。
 

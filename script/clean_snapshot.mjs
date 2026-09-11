@@ -17,7 +17,7 @@
  * 消费者步骤 3 只看结构+体量信号）。还原链不变——步骤 7 引用、步骤 8 回填
  * 仍只走带样式版路径。
  *
- * 共同结构清洗（两趟一致；实现在 lib/page-clean-snapshot.js，共享步骤 1-9）：
+ * 共同结构清洗（两趟一致；实现在 lib/page-clean-snapshot.js，共享步骤 1-8）：
  *   【整体删除】与正文结构无关的噪声，连子树一起删：
  *     - 文档级噪声：link / meta / base（title 保留，作步骤 3 识别线索）
  *     - 页面骨架：nav / footer / form 及 role="navigation"/"contentinfo"/"form"

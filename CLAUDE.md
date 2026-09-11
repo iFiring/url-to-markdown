@@ -47,7 +47,7 @@ U2M_DEBUG=1 node script/snapshot.mjs --url <url>
 **Playwright 1.62 evaluate 语义**（经源码验证；最初计划写反了，已在代码中修正）：
 - 字符串表达式只有完整表达式形式可用：`page.evaluate(`(${src})()`)`。**解析后得到函数值**的字符串永远不会被调用。
 
-**管线顺序（步骤 0-9）**：步骤 0 环境自检 → 步骤 1 快照下载（五阶段，含重定向门）→ 步骤 2 结构清洗 → 步骤 3 [agent] 识别关键 ID → 步骤 4 样式视图裁剪 → 步骤 5 样式内联 → 步骤 6 文章视图 → 步骤 7 [agent] markdown 骨架 → 步骤 8 占位符还原 + 图片下载 + trans2img 截图 → 步骤 9 骨架回填。逐步详述：
+**管线顺序（步骤 0-8）**：步骤 0 环境自检 → 步骤 1 快照下载（五阶段，含重定向门）→ 步骤 2 结构清洗 → 步骤 3 [agent] 识别关键 ID → 步骤 4 样式视图裁剪 → 步骤 5 样式内联 → 步骤 6 文章视图 → 步骤 7 [agent] markdown 骨架 → 步骤 8 占位符还原 + 图片下载 + trans2img 截图 + 骨架渲染 markdown（终态，2026-09-11 起原步骤 8/9 合并为单 CLI）。逐步详述：
 
 - **步骤 0 `init.sh` —— 纯环境自检（node/pnpm/chromium/字体）**
   - 不再输出核心参数——`skill-root`/`url-name`/`url-working-path` 移交步骤 1 emit（修复逻辑不变）
@@ -59,7 +59,7 @@ U2M_DEBUG=1 node script/snapshot.mjs --url <url>
   - 登录检测 `snapshot-login.mjs` → 渐进滚动 `snapshot-scroll.mjs` → **重定向门** `snapshot-redirect.mjs` → 虚拟列表检测 `snapshot-detect.mjs`（跑在最终目标页上）→ 全保真快照 `snapshot-capture.mjs`
   - 重定向门（占优内容 iframe 检测）：共享 `page-detect-iframe.js` 判定规则（可导航 http(s)/可见 ≥200px/正文 ≥500 且 ≥3× 主文档，多帧取最长，**单次判定**——只判入口原页面、目标页不重判）；命中则 `snapshotLogin` 跳转目标页（登录检测复跑，跨域登录墙 viewer 开在内容页）+ 退化守卫（目标页正文 <50% 回退原页）+ 重新滚动；快照成功后写 `redirected_<原名>/redirect_to.yaml` marker，未命中清 stale
   - 全保真快照：注入 page-init.js + page-prepare.js，同源 iframe 合并 + 外部 CSS 内联 + 剥 JS + `<base>` + 资源 src 绝对化 + data-idx
-  - 输出核心参数 `skill-root`/`url-name`/`url-working-path`（url-name 经 `lib/env.mjs urlToDirName` 派生，与步骤 2-9 工作目录派生同一事实源；重定向页为 `redirected_` 前缀名）+ `redirect` 通报
+  - 输出核心参数 `skill-root`/`url-name`/`url-working-path`（url-name 经 `lib/env.mjs urlToDirName` 派生，与步骤 2-8 工作目录派生同一事实源；重定向页为 `redirected_` 前缀名）+ `redirect` 通报
   - 产物 `1_snapshot.html`
 
 - **步骤 2 `clean_snapshot.mjs` —— 结构清洗（单页两趟，样式计算仅限共享段标志预计算）**
@@ -73,7 +73,7 @@ U2M_DEBUG=1 node script/snapshot.mjs --url <url>
       - 豁免：table/pre/svg/style 子树与 h1-h3 整子树豁免 run 折叠；**H1/H2/H3 整子树豁免——标题是层级锚点，占位会让步骤 3 看不到真实标题文本，与 `<title>` 不占位同款 rationale（H4/H5/H6 仍按阈值占位，字面取 H1/H2/H3）**
       - 阻断：含 `[hidden]`/display:none 元素（三层语义：run 根自查、后代逐查含 math 根自身、祖先不查——FAQ hidden 块内 run 照折）或无源 math 的 run 阻断不折
       - **KaTeX 视觉孪生原子化（spec §10）**——`span.katex` 视为原子 math 节点、只在内部判源，katex-html 孪生（clip 隐藏 mathml/svg 伸展符号）免检且不入库（否则步骤 8 源与孪生双份输出）；void 元素（br/wbr）canonical 序列化不带闭合标签（`</br>` 被 jsdom 解析为第二个 br、换行翻倍）
-      - 步骤 8 `inline2md` 确定性转 markdown（含 `$$…$$`；**2026-09-11 强调归一（spec §11）**——同族嵌套强调并层（微信双层加粗：strong 套 bold span 归一产物）、边界空白/br 提升出元素、run 尾悬空 br 剥离、跨族嵌套换 `__`/`_` 备选定界符——旧「边界触 `*`/空白 → raw HTML 退化」被微信页批量触发（117 处字面 `<strong>`，且 `**a****b**` 四星连串触发 rule of 3 渲染出字面 `**`），归一后仅剩防御路径；消费端单点修复、canonical 序列化零改动，旧 `2_long_text.json` 重放步骤 8/9 即生效；**行内流空白折叠（spec §12）**——文本节点空白 run（含换行）折叠为单空格（浏览器 white-space:normal 语义），pretty-printed 源码在行内元素间的排版空白不再把值拆成多行，可见换行仍只来自 `<br>`）；原文进 `2_long_text.json`（两段 schema：`texts` 散文本纯文本 + `runs` 行内 run 规范化 HTML，单一计数器全局编号；table2md/code2md 的 expandLongText 只消费 `texts` 段——表格/pre 子树被 run 检测的位置条件排除、其内部永远只有散文本占位符，扁平展开表零改动）
+      - 步骤 8 `inline2md` 确定性转 markdown（含 `$$…$$`；**2026-09-11 强调归一（spec §11）**——同族嵌套强调并层（微信双层加粗：strong 套 bold span 归一产物）、边界空白/br 提升出元素、run 尾悬空 br 剥离、跨族嵌套换 `__`/`_` 备选定界符——旧「边界触 `*`/空白 → raw HTML 退化」被微信页批量触发（117 处字面 `<strong>`，且 `**a****b**` 四星连串触发 rule of 3 渲染出字面 `**`），归一后仅剩防御路径；消费端单点修复、canonical 序列化零改动，旧 `2_long_text.json` 重放步骤 8 即生效；**行内流空白折叠（spec §12）**——文本节点空白 run（含换行）折叠为单空格（浏览器 white-space:normal 语义），pretty-printed 源码在行内元素间的排版空白不再把值拆成多行，可见换行仍只来自 `<br>`）；原文进 `2_long_text.json`（两段 schema：`texts` 散文本纯文本 + `runs` 行内 run 规范化 HTML，单一计数器全局编号；table2md/code2md 的 expandLongText 只消费 `texts` 段——表格/pre 子树被 run 检测的位置条件排除、其内部永远只有散文本占位符，扁平展开表零改动）
     - **aria-label 值首末句截断（两趟共享同位执行）**——按完整句末标点 `。！？；`/`.!?;` 切句、不含逗号/顿号，≥3 句保留首句+`…`+末句、≤2 句原样；元数据不进恢复清单
     - 折叠统计预计算——hidden 规模与 pre 行数在占位**前**量原文挂 expando（量占位符语法串会虚高、换行被吞会塌缩为 1 行）
   - **趟 1 styled** = SVG 瘦身 + 属性白名单 + meta charset 注入：
@@ -167,11 +167,11 @@ U2M_DEBUG=1 node script/snapshot.mjs --url <url>
     - callout/提示框走 blockquote、单层包装的「代码块+标题/说明」走 code+p、文本可表达的卡片组走列表/小表
     - 装饰不是截图理由，仅 markdown 无法表达的视觉模块（图表/图解/空间表意拼贴/多层级块样式模块、嵌套表/单元格内块级内容）才走 trans2img
 
-- **步骤 8 `screenshot_trans.mjs` —— 占位符还原 + 图片下载 + trans2img 截图**
+- **步骤 8 `render_markdown.mjs` —— 占位符还原 + 图片下载 + trans2img 截图 + 骨架渲染 markdown（终态步骤）**
   - 占位符还原（纯 Node 阶段，顺序 LONG_TEXT → TABLE → CODE）：
     1. LONG_TEXT：把 `2_long_text.json` 两段的 `runs` 逐 k 经 `lib/inline2md.mjs` 转成 markdown 值（异常退回 textContent 纯文本 + warning）、与 `texts` 合并为扁平解析表，再把步骤 7 骨架里所有 `{{LONG_TEXT_k[|suffix]}}` 替换为解析表值（emit 增 `runsResolved`），写出同结构的 `8_resolved_skeleton.json`——trans2img 数组透传
     2. TABLE——`{{TABLE_k[|...]}}` 还原（LONG_TEXT 之后——成功路径表 markdown 已预展开无 LONG_TEXT 占位、失败路径表值已是具体 markdown 不匹配）：查 `2_tables.json` 把 `table` 条值中的 `{{TABLE_k}}` 替换为预计算 markdown，未定义/失败 k 保留字面记 `failedTables`（不阻断）
-    3. CODE——`{{CODE_k}}` 还原（TABLE 之后）——**精确匹配**而非子串扫描（代码内容字面含 `{{CODE_n}}` 是真实场景，介绍本管线的文档会跨块错替）：只处理 code 键整体引用（字符串 `"{{CODE_k}}"` 整体物化为 `{lang, content}`、对象 `{content:"{{CODE_k}}"}` 替换 content + lang 覆写，lang 一律取 `2_code.json` 值），未定义/failed k 保留字面记 `failedCodes`（不阻断；残留由步骤 9 守卫响亮报错）
+    3. CODE——`{{CODE_k}}` 还原（TABLE 之后）——**精确匹配**而非子串扫描（代码内容字面含 `{{CODE_n}}` 是真实场景，介绍本管线的文档会跨块错替）：只处理 code 键整体引用（字符串 `"{{CODE_k}}"` 整体物化为 `{lang, content}`、对象 `{content:"{{CODE_k}}"}` 替换 content + lang 覆写，lang 一律取 `2_code.json` 值），未定义/failed k 保留字面记 `failedCodes`（残留由渲染守卫响亮报错）
   - emit 增 `runsResolved`/`tablesResolved`/`failedTables`/`codesResolved`/`failedCodes`
   - 图片下载：用 `context.request`（共享代理与登录态）按文档序解包 `![img](url)` 括号内 URL 去重下载 http(s) 图片到 `assets/images/`——命名规则在 `lib/download_images.mjs` 头注：优先 URL 文件名、冲突带编号、扩展名按 content-type、失败保留原 URL 且记入 `failedImages`，成功者只换括号内 URL 把 img 值改写为 `![img](assets/images/x)`（保留 alt）后重写文件
   - trans2img 截图：扫骨架校验 trans2img 条目为非空正整数 ID 数组，走 **live 重渲染 + 严校验 + 快照兜底 + 逐条目择优**：
@@ -181,16 +181,14 @@ U2M_DEBUG=1 node script/snapshot.mjs --url <url>
     - 几何层 `page-reveal-hidden.js` 逐 id 四段：①纵向强制展开（display:none→block、visibility、opacity、`[hidden]`、max-height/height 塌缩）②横向裁剪 reveal（祖先链 overflow-x 裁剪且 clientWidth<scrollWidth → overflow:visible，走到 html 含 body/html）③留白扩盒（四边 20px 呼吸位——每侧 padding +20/负 margin −20 抵消，内容像素级零移动零重排；显式宽高/max-* 钉盒致内容缩水时自愈补 width/height = 原盒+40px；data-u2m-pad 防重入；在遮挡扫描前执行保证环区干净）④非亲族遮挡者隐藏（fixed/sticky 一律、其余盒相交即 `visibility:hidden`，可见后代一并覆写，亲族保留）
     - 盒无效或截图失败换另一页再试、有界 10s 超时不整页挂死、仍失败汇总 error 列出 id，emit 以 `source: live|snapshot|mixed` 如实标注
     - 链上每个 id 各写一张 `assets/trans/{id}.webp`（2x 分辨率，全部保留），随后逐条目按 boundingBox 择优——宽度优先 → 等宽选高 → 全同选最外层（数组首位），把条目 value 回写为选中路径后重写 resolved skeleton
-
-- **步骤 9 `render_skeleton.mjs` —— 骨架回填为 markdown**
-  - 纯 Node 读 `8_resolved_skeleton.json`——value 已带行外语法：
+  - 骨架渲染 markdown（纯 Node 终态轮，浏览器关闭之后、emit 之前——所有成功路径含 `skipped: no_trans2img` 都执行）：`lib/skeleton2md.mjs` 的 `convertSkeleton` 把最终 resolved skeleton 转为 markdown 块（原步骤 9 `render_skeleton.mjs` 逻辑，2026-09-11 合并时抽 lib）：
     - `h1-h6`/`blockquote` 以 key 为准规范化重建（剥 value 自带 `#`/`>` 前缀后按 key 级别重建，LLM 漏写/写错级别也能纠正）
     - `p`/`ul`/`ol`/`table`/`img` 透传
-    - `code` 加 `{lang}` 围栏——围栏 backtick 自适应（围栏严格长于内容最长反引号连续串，GFM 不可闭合）+ lang 剥离非法字符 + 残留守卫（value 仍为字符串 = 未还原的 `{{CODE_}}` 引用 → error 提示先跑步骤 8，镜像 trans2img 守卫）
-    - `trans2img`（此时已是步骤 8 回写的选中路径）→ `![](assets/trans/{id}.webp)`、仍为数组则 error 提示先跑步骤 8
-  - 块间空行、文件以换行收尾，产物 `9_markdown.md`
+    - `code` 加 `{lang}` 围栏——围栏 backtick 自适应（围栏严格长于内容最长反引号连续串，GFM 不可闭合）+ lang 剥离非法字符 + 残留守卫（value 仍为字符串 = 未还原的 `{{CODE_}}` 引用（failedCodes）→ error，镜像 trans2img 守卫）
+    - `trans2img`（此时已是择优回写的选中路径）→ `![](assets/trans/{id}.webp)`、仍为数组则 error（管线内部错误——同进程择优回写先行）
+    - 块间空行、文件以换行收尾，产物 `8_markdown.md`（最终产物），emit 增 `markdownPath`/`bytes`/`blocks`
 
-**工作目录。** 所有 CLI 只收 `--url`，经 `lib/env.mjs urlDir(url)` 自行派生工作目录（步骤 1 emit 输出 `url-name`/`url-working-path`）。每个 URL 对应 `working/<净化URL>/`；**占优内容 iframe 页面（步骤 1 重定向门判定）的专属目录为 `redirected_<原名>`**，目录内 `redirect_to.yaml`（内容 `to: <目标URL>`）是定位 marker——`urlDir()` 一次 existsSync 间接，步骤 2-9 无感知；marker 只在快照成功后写入（检测未命中时清除 stale）。所有步骤产物直接在 `<url-dir>/` 根目录（`1_snapshot.html`、`2_clean_snapshot.html`、`2_clean_style_snapshot.html`、`2_long_text.json`、`2_tables.json`、`2_code.json`、`3_key_ids.json`、`4_styled_extract.html`、`5_juice_styles.html`、`6_article.html`、`6_article_chunk_X_of_N.html`（>60KB 时）、`7_skeleton.json`、`7_skeleton_chunk_X_of_N.json`（分割时）、`8_resolved_skeleton.json`、`9_markdown.md`）；表格失败诊断在 `<url-dir>/logs/tables/{k}_{dataIdx}.log`，代码块失败诊断在 `<url-dir>/logs/codes/{k}_{dataIdx}.log`；截图在 `<url-dir>/assets/trans/{id}.webp`，下载图片在 `<url-dir>/assets/images/<name>`；净化先剥 `http(s)://` 前缀（目录名从域名开始），其余非 `[A-Za-z0-9.-]` 替换为 `_`，超 120 字符截断 + sha256 前 8 位十六进制后缀；同域名 http/https 派生同一目录。`U2M_WORKING_ROOT` 覆盖根目录（所有测试用它隔离）。`working/cookies/storage_state.json` 是唯一全局登录态——仅 `snapshot-login.mjs` 写入（cookie 按 name|domain|path 去重、localStorage 按 origin+name、读取时剔除过期）；转换脚本只读。`working/cookies/login_decisions_skips.json` 是跳过记忆（`{hostname: [信号名,...]}`，仅弱信号入档）——同样仅 `snapshot-login.mjs` 读写；旧版 `login_decisions.json`（信号级 `"login"|"skip"` 对象格式）已废弃，代码不读不写、磁盘遗留自然失效。
+**工作目录。** 所有 CLI 只收 `--url`，经 `lib/env.mjs urlDir(url)` 自行派生工作目录（步骤 1 emit 输出 `url-name`/`url-working-path`）。每个 URL 对应 `working/<净化URL>/`；**占优内容 iframe 页面（步骤 1 重定向门判定）的专属目录为 `redirected_<原名>`**，目录内 `redirect_to.yaml`（内容 `to: <目标URL>`）是定位 marker——`urlDir()` 一次 existsSync 间接，步骤 2-8 无感知；marker 只在快照成功后写入（检测未命中时清除 stale）。所有步骤产物直接在 `<url-dir>/` 根目录（`1_snapshot.html`、`2_clean_snapshot.html`、`2_clean_style_snapshot.html`、`2_long_text.json`、`2_tables.json`、`2_code.json`、`3_key_ids.json`、`4_styled_extract.html`、`5_juice_styles.html`、`6_article.html`、`6_article_chunk_X_of_N.html`（>60KB 时）、`7_skeleton.json`、`7_skeleton_chunk_X_of_N.json`（分割时）、`8_resolved_skeleton.json`（调试中间产物）、`8_markdown.md`（最终产物））；表格失败诊断在 `<url-dir>/logs/tables/{k}_{dataIdx}.log`，代码块失败诊断在 `<url-dir>/logs/codes/{k}_{dataIdx}.log`；截图在 `<url-dir>/assets/trans/{id}.webp`，下载图片在 `<url-dir>/assets/images/<name>`；净化先剥 `http(s)://` 前缀（目录名从域名开始），其余非 `[A-Za-z0-9.-]` 替换为 `_`，超 120 字符截断 + sha256 前 8 位十六进制后缀；同域名 http/https 派生同一目录。`U2M_WORKING_ROOT` 覆盖根目录（所有测试用它隔离）。`working/cookies/storage_state.json` 是唯一全局登录态——仅 `snapshot-login.mjs` 写入（cookie 按 name|domain|path 去重、localStorage 按 origin+name、读取时剔除过期）；转换脚本只读。`working/cookies/login_decisions_skips.json` 是跳过记忆（`{hostname: [信号名,...]}`，仅弱信号入档）——同样仅 `snapshot-login.mjs` 读写；旧版 `login_decisions.json`（信号级 `"login"|"skip"` 对象格式）已废弃，代码不读不写、磁盘遗留自然失效。
 
 **浏览器上下文**：`snapshot.mjs` 启动单个 chromium 实例贯穿步骤 1 全流程。route-abort `resourceType === 'media'`；`bypassCSP: true`（否则严格 CSP 站点会在 addScriptTag 处杀死 Node 工作流）；viewport 1280×3000；`U2M_PROXY` 环境变量控制代理（未设置继承系统代理 / `direct` 绕过 / URL 显式钉住——真实冒烟曾因系统代理隧道失败报 ERR_TUNNEL_CONNECTION_FAILED 而加，实现于 `script/lib/browser.mjs` 的 `proxyLaunchOptions`）。步骤 8 自起同参数浏览器（外加 `deviceScaleFactor: 2` 原生 2x 截图）：页 A `file://` 渲染快照、页 B 重渲染原 URL（storageState 复用登录态），进程内用完即关。浏览器/viewer 一律在最终 emit **之前**关闭（emit 会退出进程，顺序错了会留孤儿 chromium）。
 

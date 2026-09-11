@@ -36,8 +36,8 @@ test('page-reveal-hidden.js: 函数可被 evaluate 格式调用', () => {
   assert.doesNotThrow(() => new Function('return ' + wrapped));
 });
 
-test('screenshot_trans.mjs: 无参数时输出 usage_error', async () => {
-  const script = path.resolve('script/screenshot_trans.mjs');
+test('render_markdown.mjs: 无参数时输出 usage_error', async () => {
+  const script = path.resolve('script/render_markdown.mjs');
   const r = await runScript(process.execPath, [script]);
   assert.equal(r.code, 2);
   assert.equal(JSON.parse(r.stdout).status, 'usage_error');
@@ -112,9 +112,9 @@ function setupTmp(name, { snapshot = SNAPSHOT, skeleton = SKELETON, longText = L
   return { tmpRoot, urlDir, assetsDir };
 }
 
-test('screenshot_trans.mjs: live 不可达时快照兜底截图 + resolved skeleton + source 字段', async () => {
+test('render_markdown.mjs: live 不可达时快照兜底截图 + resolved skeleton + source 字段', async () => {
   const { tmpRoot, urlDir, assetsDir } = setupTmp('ok');
-  const script = path.resolve('script/screenshot_trans.mjs');
+  const script = path.resolve('script/render_markdown.mjs');
   const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
     env: { U2M_WORKING_ROOT: tmpRoot, U2M_DEBUG: '1' },
     timeoutMs: 60000,
@@ -157,13 +157,13 @@ test('screenshot_trans.mjs: live 不可达时快照兜底截图 + resolved skele
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('screenshot_trans.mjs: 择优按宽度优先——内层更宽时选内层', async () => {
+test('render_markdown.mjs: 择优按宽度优先——内层更宽时选内层', async () => {
   const { tmpRoot, urlDir } = setupTmp('innerwider', {
     snapshot: SNAPSHOT_INNER_WIDER,
     skeleton: [{ trans2img: [30, 31] }],
     keyIds: { titleId: null, descriptionIds: [], paragraphIds: [31], dumpIds: [] },
   });
-  const script = path.resolve('script/screenshot_trans.mjs');
+  const script = path.resolve('script/render_markdown.mjs');
   const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 60000,
@@ -180,13 +180,13 @@ test('screenshot_trans.mjs: 择优按宽度优先——内层更宽时选内层'
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('screenshot_trans.mjs: 宽高全同的平局选最外层', async () => {
+test('render_markdown.mjs: 宽高全同的平局选最外层', async () => {
   const { tmpRoot, urlDir } = setupTmp('tie', {
     snapshot: SNAPSHOT_TIE,
     skeleton: [{ trans2img: [40, 41] }],
     keyIds: { titleId: null, descriptionIds: [], paragraphIds: [41], dumpIds: [] },
   });
-  const script = path.resolve('script/screenshot_trans.mjs');
+  const script = path.resolve('script/render_markdown.mjs');
   const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 60000,
@@ -229,13 +229,13 @@ const SNAPSHOT_MAXHEIGHT = `<!DOCTYPE html>
 <p data-idx="60">结尾段落。</p>
 </body></html>`;
 
-test('screenshot_trans.mjs: display:none 折叠模块强制展开后出图，不再挂死 error', async () => {
+test('render_markdown.mjs: display:none 折叠模块强制展开后出图，不再挂死 error', async () => {
   const { tmpRoot, urlDir, assetsDir } = setupTmp('accordion', {
     snapshot: SNAPSHOT_ACCORDION,
     skeleton: [{ trans2img: [50, 51, 52] }],
     keyIds: { titleId: 1, descriptionIds: [], paragraphIds: [60], dumpIds: [] },
   });
-  const script = path.resolve('script/screenshot_trans.mjs');
+  const script = path.resolve('script/render_markdown.mjs');
   const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 120000,
@@ -266,13 +266,13 @@ test('screenshot_trans.mjs: display:none 折叠模块强制展开后出图，不
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('screenshot_trans.mjs: max-height:0 裁剪模块强制展开后出真实内容，而非空白图', async () => {
+test('render_markdown.mjs: max-height:0 裁剪模块强制展开后出真实内容，而非空白图', async () => {
   const { tmpRoot, urlDir, assetsDir } = setupTmp('maxheight', {
     snapshot: SNAPSHOT_MAXHEIGHT,
     skeleton: [{ trans2img: [71, 72] }],
     keyIds: { titleId: 1, descriptionIds: [], paragraphIds: [60], dumpIds: [] },
   });
-  const script = path.resolve('script/screenshot_trans.mjs');
+  const script = path.resolve('script/render_markdown.mjs');
   const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 120000,
@@ -311,13 +311,13 @@ const SNAPSHOT_CONTENTS = `<!DOCTYPE html>
 <p data-idx="60">结尾段落。</p>
 </body></html>`;
 
-test('screenshot_trans.mjs: display:contents 透明包装跳过不报错，视觉由链上内层承载', async () => {
+test('render_markdown.mjs: display:contents 透明包装跳过不报错，视觉由链上内层承载', async () => {
   const { tmpRoot, urlDir, assetsDir } = setupTmp('contents', {
     snapshot: SNAPSHOT_CONTENTS,
     skeleton: [{ trans2img: [83, 84] }],
     keyIds: { titleId: 1, descriptionIds: [], paragraphIds: [60], dumpIds: [] },
   });
-  const script = path.resolve('script/screenshot_trans.mjs');
+  const script = path.resolve('script/render_markdown.mjs');
   const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 120000,
@@ -338,13 +338,13 @@ test('screenshot_trans.mjs: display:contents 透明包装跳过不报错，视�
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('screenshot_trans.mjs: 条目全部 id 结构性无盒时报 error 指明条目', async () => {
+test('render_markdown.mjs: 条目全部 id 结构性无盒时报 error 指明条目', async () => {
   const { tmpRoot } = setupTmp('contents-only', {
     snapshot: SNAPSHOT_CONTENTS,
     skeleton: [{ trans2img: [83] }],
     keyIds: { titleId: 1, descriptionIds: [], paragraphIds: [60], dumpIds: [] },
   });
-  const script = path.resolve('script/screenshot_trans.mjs');
+  const script = path.resolve('script/render_markdown.mjs');
   const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 120000,
@@ -391,13 +391,13 @@ const SNAPSHOT_WIDE = `<!DOCTYPE html>
 <p data-idx="60">结尾段落。</p>
 </body></html>`;
 
-test('screenshot_trans.mjs: 超宽表格横向 reveal 截全 + 遮挡者隐藏 + 亲族保留', async () => {
+test('render_markdown.mjs: 超宽表格横向 reveal 截全 + 遮挡者隐藏 + 亲族保留', async () => {
   const { tmpRoot, urlDir, assetsDir } = setupTmp('wide', {
     snapshot: SNAPSHOT_WIDE,
     skeleton: [{ trans2img: [91, 92] }],
     keyIds: { titleId: 1, descriptionIds: [], paragraphIds: [2, 60], dumpIds: [98] },
   });
-  const script = path.resolve('script/screenshot_trans.mjs');
+  const script = path.resolve('script/render_markdown.mjs');
   try {
     const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
       env: { U2M_WORKING_ROOT: tmpRoot },
@@ -434,8 +434,8 @@ test('screenshot_trans.mjs: 超宽表格横向 reveal 截全 + 遮挡者隐藏 +
   }
 });
 
-test('screenshot_trans.mjs: trans2img value 非法（旧格式/空数组/非整数）时报 error', async () => {
-  const script = path.resolve('script/screenshot_trans.mjs');
+test('render_markdown.mjs: trans2img value 非法（旧格式/空数组/非整数）时报 error', async () => {
+  const script = path.resolve('script/render_markdown.mjs');
   const cases = [
     { name: 'oldstr', skeleton: [{ trans2img: '10' }] },
     { name: 'empty', skeleton: [{ trans2img: [] }] },
@@ -455,8 +455,8 @@ test('screenshot_trans.mjs: trans2img value 非法（旧格式/空数组/非整�
   }
 });
 
-test('screenshot_trans.mjs: 3_key_ids.json 非四键契约时报 error（旧五键文件/键重叠/非法成员）', async () => {
-  const script = path.resolve('script/screenshot_trans.mjs');
+test('render_markdown.mjs: 3_key_ids.json 非四键契约时报 error（旧五键文件/键重叠/非法成员）', async () => {
+  const script = path.resolve('script/render_markdown.mjs');
   const cases = [
     // 旧五键文件：无 paragraphIds → 拒收并指回步骤 3
     { name: 'oldfive', keyIds: { titleIds: [1], descriptionIds: [], standaloneIds: [], listFlowIds: [2, 20], listFlowDeleteIds: [] }, match: 'paragraphIds' },
@@ -480,11 +480,11 @@ test('screenshot_trans.mjs: 3_key_ids.json 非四键契约时报 error（旧五�
   }
 });
 
-test('screenshot_trans.mjs: 无 trans2img 条目时 skipped 但仍输出 resolved skeleton', async () => {
+test('render_markdown.mjs: 无 trans2img 条目时 skipped 但仍输出 resolved skeleton', async () => {
   const { tmpRoot, urlDir, assetsDir } = setupTmp('skip', {
     skeleton: [{ h1: '# 标题' }, { p: '{{LONG_TEXT_5}}' }],
   });
-  const script = path.resolve('script/screenshot_trans.mjs');
+  const script = path.resolve('script/render_markdown.mjs');
   const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 60000,
@@ -505,11 +505,11 @@ test('screenshot_trans.mjs: 无 trans2img 条目时 skipped 但仍输出 resolve
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('screenshot_trans.mjs: id 在快照也未命中时报 error', async () => {
+test('render_markdown.mjs: id 在快照也未命中时报 error', async () => {
   const { tmpRoot } = setupTmp('miss', {
     skeleton: [{ trans2img: [999] }],
   });
-  const script = path.resolve('script/screenshot_trans.mjs');
+  const script = path.resolve('script/render_markdown.mjs');
   const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 60000,
@@ -521,7 +521,7 @@ test('screenshot_trans.mjs: id 在快照也未命中时报 error', async () => {
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('screenshot_trans.mjs: code 条目 content 内的占位符同样还原', async () => {
+test('render_markdown.mjs: code 条目 content 内的占位符同样还原', async () => {
   const { tmpRoot, urlDir } = setupTmp('code', {
     skeleton: [
       { h1: '# 标题' },
@@ -529,7 +529,7 @@ test('screenshot_trans.mjs: code 条目 content 内的占位符同样还原', as
       { code: { lang: 'python', content: '{{LONG_TEXT_6}}' } },
     ],
   });
-  const script = path.resolve('script/screenshot_trans.mjs');
+  const script = path.resolve('script/render_markdown.mjs');
   const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 60000,
@@ -546,13 +546,11 @@ test('screenshot_trans.mjs: code 条目 content 内的占位符同样还原', as
     { code: { lang: 'python', content: '重要内容' } },
   ], 'code 对象的 content 占位符应被还原');
 
-  // 步骤 9 端到端：围栏内是还原后的代码，而非字面占位符
-  const r9 = await runScript(process.execPath, [path.resolve('script/render_skeleton.mjs'), '--url', LIVE_URL], {
-    env: { U2M_WORKING_ROOT: tmpRoot },
-    timeoutMs: 30000,
-  });
-  assert.equal(r9.code, 0, `stderr: ${r9.stderr}`);
-  const md = fs.readFileSync(path.join(urlDir, '9_markdown.md'), 'utf8');
+  // skipped 路径同样产出最终 markdown（emit 含三字段、文件落盘）
+  assert.equal(out.markdownPath, path.join(urlDir, '8_markdown.md'));
+  assert.equal(typeof out.bytes, 'number');
+  assert.equal(typeof out.blocks, 'number');
+  const md = fs.readFileSync(path.join(urlDir, '8_markdown.md'), 'utf8');
   assert.ok(md.includes('# 标题'), 'h1 应以 key 重建出 # 前缀');
   assert.ok(md.includes('```python\n重要内容\n```'), '最终 markdown 应含还原后的代码围栏');
   assert.ok(!md.includes('{{LONG_TEXT'), '最终 markdown 不应残留字面占位符');
@@ -560,12 +558,12 @@ test('screenshot_trans.mjs: code 条目 content 内的占位符同样还原', as
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('screenshot_trans.mjs: code 条目引用未定义编号时报 error', async () => {
+test('render_markdown.mjs: code 条目引用未定义编号时报 error', async () => {
   const { tmpRoot } = setupTmp('coderef', {
     skeleton: [{ code: { content: '{{LONG_TEXT_999}}' } }],
     longText: { texts: { '5': '其他文本' }, runs: {} },
   });
-  const script = path.resolve('script/screenshot_trans.mjs');
+  const script = path.resolve('script/render_markdown.mjs');
   const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 60000,
@@ -577,8 +575,8 @@ test('screenshot_trans.mjs: code 条目引用未定义编号时报 error', async
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('screenshot_trans.mjs: 缺前置产物时报 error', async () => {
-  const script = path.resolve('script/screenshot_trans.mjs');
+test('render_markdown.mjs: 缺前置产物时报 error', async () => {
+  const script = path.resolve('script/render_markdown.mjs');
 
   // 缺步骤 1（1_snapshot.html）
   const noSnap = setupTmp('nosnap', { snapshot: null });
@@ -639,7 +637,7 @@ function startImageServer() {
     resolve({ base: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((r) => server.close(r)) })));
 }
 
-test('screenshot_trans.mjs: img 条目下载到 assets/images/（解包 ![img](url)、冲突编号、同 URL 去重、失败保留原值）', async () => {
+test('render_markdown.mjs: img 条目下载到 assets/images/（解包 ![img](url)、冲突编号、同 URL 去重、失败保留原值）', async () => {
   const srv = await startImageServer();
   const { tmpRoot, urlDir, assetsDir } = setupTmp('imgs', {
     skeleton: [
@@ -652,7 +650,7 @@ test('screenshot_trans.mjs: img 条目下载到 assets/images/（解包 ![img](u
       { p: '{{LONG_TEXT_5}}' },
     ],
   });
-  const script = path.resolve('script/screenshot_trans.mjs');
+  const script = path.resolve('script/render_markdown.mjs');
   try {
     const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
       env: { U2M_WORKING_ROOT: tmpRoot },
@@ -683,13 +681,8 @@ test('screenshot_trans.mjs: img 条目下载到 assets/images/（解包 ![img](u
       { p: '段落一文本内容' },
     ], '成功下载的 img 应改写为本地路径（保留 alt），失败保留原值');
 
-    // 步骤 9 直接可渲染
-    const r9 = await runScript(process.execPath, [path.resolve('script/render_skeleton.mjs'), '--url', LIVE_URL], {
-      env: { U2M_WORKING_ROOT: tmpRoot },
-      timeoutMs: 30000,
-    });
-    assert.equal(r9.code, 0, `stderr: ${r9.stderr}`);
-    const md = fs.readFileSync(path.join(urlDir, '9_markdown.md'), 'utf8');
+    // 同轮产出最终 markdown
+    const md = fs.readFileSync(path.join(urlDir, '8_markdown.md'), 'utf8');
     assert.ok(md.includes('![img](assets/images/cover.png)'), 'markdown 应引用本地图片');
     assert.ok(md.includes(`![img](${srv.base}/missing.png)`), '失败图片保留远端引用');
   } finally {
@@ -698,7 +691,7 @@ test('screenshot_trans.mjs: img 条目下载到 assets/images/（解包 ![img](u
   }
 });
 
-test('screenshot_trans.mjs: trans2img 与 img 混合时截图、下载同轮完成', async () => {
+test('render_markdown.mjs: trans2img 与 img 混合时截图、下载同轮完成', async () => {
   const srv = await startImageServer();
   const { tmpRoot, urlDir, assetsDir } = setupTmp('mix', {
     skeleton: [
@@ -707,7 +700,7 @@ test('screenshot_trans.mjs: trans2img 与 img 混合时截图、下载同轮完�
       { trans2img: [9, 10] },
     ],
   });
-  const script = path.resolve('script/screenshot_trans.mjs');
+  const script = path.resolve('script/render_markdown.mjs');
   try {
     const r = await runScript(process.execPath, [script, '--url', LIVE_URL], {
       env: { U2M_WORKING_ROOT: tmpRoot },
@@ -732,7 +725,7 @@ test('screenshot_trans.mjs: trans2img 与 img 混合时截图、下载同轮完�
   }
 });
 
-test('screenshot_trans: {{TABLE_k}} 还原为 2_tables.json 的 markdown', async () => {
+test('render_markdown: {{TABLE_k}} 还原为 2_tables.json 的 markdown', async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-st-table-'));
   const url = 'https://example.com/table-restore';
   const dir = path.join(tmpRoot, urlToDirName(url));
@@ -750,7 +743,7 @@ test('screenshot_trans: {{TABLE_k}} 还原为 2_tables.json 的 markdown', async
     { table: '{{TABLE_2}}' },
     { table: '| 已是 | 具体 |\n| --- | --- |\n| md | ! |' },
   ], null, 2));
-  const r = await runScript(process.execPath, [path.resolve('script/screenshot_trans.mjs'), '--url', url],
+  const r = await runScript(process.execPath, [path.resolve('script/render_markdown.mjs'), '--url', url],
     { env: { U2M_WORKING_ROOT: tmpRoot }, timeoutMs: 60000 });
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);
@@ -767,33 +760,53 @@ test('screenshot_trans: {{TABLE_k}} 还原为 2_tables.json 的 markdown', async
 // + 7_skeleton，无 trans2img/img 条目——浏览器阶段不触发、早退 emit）
 import { setupCodeRestore } from '../helpers/code-restore.mjs';
 
-test('screenshot_trans: {{CODE_k}} 字符串引用整体物化为 {lang, content}（lang 取 JSON）', async () => {
+test('render_markdown: {{CODE_k}} 字符串引用整体物化为 {lang, content}（lang 取 JSON）', async () => {
   const { tmpRoot, url } = setupCodeRestore('strref', [
     { code: '{{CODE_1}}' },
     { p: '段落' },
     { code: { lang: 'wrong', content: '{{CODE_2}}' } },   // 对象形态兼容 + lang 覆写
     { code: { lang: 'python', content: 'print(1)' } },     // LLM 自转不动
-    { code: '{{CODE_9}}' },                                 // 未定义/failed k → failedCodes
     { code: { lang: 'js', content: 'const x = "{{CODE_1}} inline"' } }, // 中段子串不替换
   ]);
   try {
     const r = await runScript(process.execPath,
-      [path.resolve('script/screenshot_trans.mjs'), '--url', url],
+      [path.resolve('script/render_markdown.mjs'), '--url', url],
       { env: { U2M_WORKING_ROOT: tmpRoot }, timeoutMs: 60000 });
     assert.equal(r.code, 0, `stderr: ${r.stderr}`);
     const out = JSON.parse(r.stdout);
     assert.equal(out.codesResolved, 2);
-    assert.deepEqual(out.failedCodes, ['9']);
+    assert.deepEqual(out.failedCodes, []);
     const resolved = JSON.parse(fs.readFileSync(out.resolvedSkeleton, 'utf8'));
     assert.deepEqual(resolved[0].code, { lang: 'javascript', content: 'const a = 1;\nconst b = 2;' });
     assert.deepEqual(resolved[2].code, { lang: 'tsx', content: 'system: `...`' }, '对象形态替换 content 且 lang 覆写');
     assert.deepEqual(resolved[3].code, { lang: 'python', content: 'print(1)' }, '自转条目不动');
-    assert.equal(resolved[4].code, '{{CODE_9}}', '未定义 k 保留字面');
-    assert.equal(resolved[5].code.content, 'const x = "{{CODE_1}} inline"', '中段子串不替换（精确匹配语义）');
+    assert.equal(resolved[4].code.content, 'const x = "{{CODE_1}} inline"', '中段子串不替换（精确匹配语义）');
+    const md = fs.readFileSync(path.join(path.dirname(out.resolvedSkeleton), '8_markdown.md'), 'utf8');
+    assert.ok(md.includes('```javascript\nconst a = 1;\nconst b = 2;\n```'), '物化 code 同轮落 markdown 围栏');
   } finally { fs.rmSync(tmpRoot, { recursive: true, force: true }); }
 });
 
-test('screenshot_trans: runs 段经 inline2md 转 markdown 合并还原 + runsResolved + 步骤 9 端到端', async () => {
+test('render_markdown: 未定义/failed k 的 code 残留 → 渲染守卫 error（emit 前已写出 resolved skeleton）', async () => {
+  const { tmpRoot, url } = setupCodeRestore('residual', [
+    { code: '{{CODE_9}}' },                                 // 未定义/failed k → failedCodes
+  ]);
+  try {
+    const r = await runScript(process.execPath,
+      [path.resolve('script/render_markdown.mjs'), '--url', url],
+      { env: { U2M_WORKING_ROOT: tmpRoot }, timeoutMs: 60000 });
+    assert.equal(r.code, 1);
+    const out = JSON.parse(r.stdout);
+    assert.equal(out.status, 'error');
+    assert.ok(out.reason.includes('未还原的代码占位符'), `reason 应指向代码占位符残留: ${out.reason}`);
+    // 失败前 resolved skeleton 已落盘（占位符还原结果可供诊断）
+    const urlDir = path.join(tmpRoot, urlToDirName(url));
+    const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
+    assert.equal(resolved[0].code, '{{CODE_9}}', '未定义 k 保留字面');
+    assert.ok(!fs.existsSync(path.join(urlDir, '8_markdown.md')), '不应产出 markdown');
+  } finally { fs.rmSync(tmpRoot, { recursive: true, force: true }); }
+});
+
+test('render_markdown: runs 段经 inline2md 转 markdown 合并还原 + runsResolved + markdown 端到端', async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-st-runs-'));
   const url = 'https://example.com/run-restore';
   const dir = path.join(tmpRoot, urlToDirName(url));
@@ -815,7 +828,7 @@ test('screenshot_trans: runs 段经 inline2md 转 markdown 合并还原 + runsRe
     { p: '{{LONG_TEXT_3}}' },
   ], null, 2));
   try {
-    const r = await runScript(process.execPath, [path.resolve('script/screenshot_trans.mjs'), '--url', url],
+    const r = await runScript(process.execPath, [path.resolve('script/render_markdown.mjs'), '--url', url],
       { env: { U2M_WORKING_ROOT: tmpRoot }, timeoutMs: 60000 });
     assert.equal(r.code, 0, `stderr: ${r.stderr}`);
     const out = JSON.parse(r.stdout);
@@ -824,11 +837,8 @@ test('screenshot_trans: runs 段经 inline2md 转 markdown 合并还原 + runsRe
     assert.equal(resolved[0].p, '这是**关键**：见[文档](https://example.com/d)，命令 `u2m --run`。');
     assert.equal(resolved[1].p, '散文本原文');
     assert.equal(resolved[2].p, '公式 $x^2$ 成立。');
-    // 步骤 8→9 端到端（spec §7）：p 值透传落盘，行内语法原样到达 markdown
-    const r9 = await runScript(process.execPath, [path.resolve('script/render_skeleton.mjs'), '--url', url],
-      { env: { U2M_WORKING_ROOT: tmpRoot }, timeoutMs: 60000 });
-    assert.equal(r9.code, 0, `stderr: ${r9.stderr}`);
-    const md = fs.readFileSync(path.join(dir, '9_markdown.md'), 'utf8');
+    // 端到端（spec §7）：p 值透传落盘，行内语法原样到达 markdown
+    const md = fs.readFileSync(path.join(dir, '8_markdown.md'), 'utf8');
     assert.ok(md.includes('这是**关键**：见[文档](https://example.com/d)，命令 `u2m --run`。'), md);
     assert.ok(md.includes('公式 $x^2$ 成立。'), md);
   } finally {
@@ -848,14 +858,14 @@ function setupChunksTmp(name, chunkMap, { skeleton = null } = {}) {
 }
 
 async function runTrans(tmpRoot) {
-  const script = path.resolve('script/screenshot_trans.mjs');
+  const script = path.resolve('script/render_markdown.mjs');
   return runScript(process.execPath, [script, '--url', LIVE_URL], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
 }
 
-test('screenshot_trans.mjs: 分片按 X 序合并 + chunksMerged 通报', async () => {
+test('render_markdown.mjs: 分片按 X 序合并 + chunksMerged 通报', async () => {
   const { tmpRoot, urlDir } = setupChunksTmp('merge-ok', {
     '7_skeleton_chunk_1_of_3.json': [{ p: '一' }, { p: '二' }],
     '7_skeleton_chunk_2_of_3.json': [{ h1: '# 标题' }],
@@ -872,7 +882,7 @@ test('screenshot_trans.mjs: 分片按 X 序合并 + chunksMerged 通报', async 
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('screenshot_trans.mjs: 缺片报 error 列缺失号', async () => {
+test('render_markdown.mjs: 缺片报 error 列缺失号', async () => {
   const { tmpRoot } = setupChunksTmp('merge-missing', {
     '7_skeleton_chunk_1_of_3.json': [{ p: '一' }],
     '7_skeleton_chunk_3_of_3.json': [{ p: '三' }],
@@ -885,7 +895,7 @@ test('screenshot_trans.mjs: 缺片报 error 列缺失号', async () => {
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('screenshot_trans.mjs: N 不一致报 error 列冲突文件', async () => {
+test('render_markdown.mjs: N 不一致报 error 列冲突文件', async () => {
   const { tmpRoot } = setupChunksTmp('merge-nmismatch', {
     '7_skeleton_chunk_1_of_2.json': [{ p: '一' }],
     '7_skeleton_chunk_2_of_3.json': [{ p: '二' }],
@@ -896,7 +906,7 @@ test('screenshot_trans.mjs: N 不一致报 error 列冲突文件', async () => {
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('screenshot_trans.mjs: 坏 JSON / 非数组报 error 指明文件', async () => {
+test('render_markdown.mjs: 坏 JSON / 非数组报 error 指明文件', async () => {
   const a = setupChunksTmp('merge-badjson', {
     '7_skeleton_chunk_1_of_2.json': '{oops',
     '7_skeleton_chunk_2_of_2.json': [{ p: '二' }],
@@ -916,7 +926,7 @@ test('screenshot_trans.mjs: 坏 JSON / 非数组报 error 指明文件', async (
   fs.rmSync(b.tmpRoot, { recursive: true, force: true });
 });
 
-test('screenshot_trans.mjs: 7_skeleton.json 存在时优先（忽略分片、无 chunksMerged）', async () => {
+test('render_markdown.mjs: 7_skeleton.json 存在时优先（忽略分片、无 chunksMerged）', async () => {
   const { tmpRoot } = setupChunksTmp('merge-priority', {
     '7_skeleton_chunk_1_of_2.json': [{ p: '分片内容' }],
     '7_skeleton_chunk_2_of_2.json': [{ p: '分片内容2' }],
@@ -929,7 +939,7 @@ test('screenshot_trans.mjs: 7_skeleton.json 存在时优先（忽略分片、无
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('screenshot_trans.mjs: 无骨架无分片报 error 提示步骤 7', async () => {
+test('render_markdown.mjs: 无骨架无分片报 error 提示步骤 7', async () => {
   const { tmpRoot } = setupChunksTmp('merge-none', {}, { skeleton: null });
   const r = await runTrans(tmpRoot);
   assert.equal(r.code, 1);

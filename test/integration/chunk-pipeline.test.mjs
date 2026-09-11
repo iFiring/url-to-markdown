@@ -8,7 +8,7 @@ import { urlToDirName } from '../../script/lib/env.mjs';
 
 // 40 个 ~1.85KB 段落块 + h1 ≈ 74KB；阈值 60KB → 分 2 块。
 // 链路：步骤 6（真实 chromium）→ 合成步骤 7 分片 → 步骤 8（无 img/trans
-// 纯 Node 路径，死端口 URL）→ 步骤 9 渲染。
+// 纯 Node 路径，死端口 URL，合并 + 渲染 markdown）。
 const PARAS = Array.from({ length: 40 }, (_, i) =>
   `<p style="font-size: 16px" data-idx="${100 + i}">${'段'.repeat(600)}</p>`);
 const JUICED = `<!DOCTYPE html>
@@ -21,7 +21,7 @@ const KEY_IDS = {
 };
 const URL = 'http://127.0.0.1:9/chunk-chain'; // 死端口：步骤 8 无 img/trans 不触网
 
-test('分块链路：步骤 6 分割 → 分片骨架 → 步骤 8 合并 → 步骤 9 渲染', async () => {
+test('分块链路：步骤 6 分割 → 分片骨架 → 步骤 8 合并 + 渲染 markdown', async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-chunk-chain-'));
   const urlDir = path.join(tmpRoot, urlToDirName(URL));
   fs.mkdirSync(urlDir, { recursive: true });
@@ -45,20 +45,17 @@ test('分块链路：步骤 6 分割 → 分片骨架 → 步骤 8 合并 → �
       JSON.stringify([{ p: `分片${x}专属内容` }]));
   }
 
-  // 步骤 8：合并 + 还原
-  const r8 = await runScript(process.execPath, [path.resolve('script/screenshot_trans.mjs'), '--url', URL], { env, timeoutMs: 60000 });
+  // 步骤 8：合并 + 还原 + 渲染
+  const r8 = await runScript(process.execPath, [path.resolve('script/render_markdown.mjs'), '--url', URL], { env, timeoutMs: 60000 });
   assert.equal(r8.code, 0, `stderr: ${r8.stderr}`);
   const out8 = JSON.parse(r8.stdout);
   assert.equal(out8.status, 'ok');
   assert.equal(out8.chunksMerged, N);
   assert.equal(out8.skipped, 'no_trans2img');
 
-  // 步骤 9：渲染
-  const r9 = await runScript(process.execPath, [path.resolve('script/render_skeleton.mjs'), '--url', URL], { env, timeoutMs: 30000 });
-  assert.equal(r9.code, 0, `stderr: ${r9.stderr}`);
-  const md = fs.readFileSync(path.join(urlDir, '9_markdown.md'), 'utf8');
+  const md = fs.readFileSync(path.join(urlDir, '8_markdown.md'), 'utf8');
   const order = Array.from({ length: N }, (_, i) => md.indexOf(`分片${i + 1}专属内容`));
-  for (const pos of order) assert.ok(pos >= 0, '9_markdown 应含全部分片内容');
+  for (const pos of order) assert.ok(pos >= 0, '8_markdown 应含全部分片内容');
   for (let i = 1; i < order.length; i++) {
     assert.ok(order[i] > order[i - 1], `分片内容应按块序排列: ${order}`);
   }

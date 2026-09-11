@@ -265,7 +265,7 @@ test('extract_article.mjs: 瘦身规则①——data-* 只留 data-idx 与 data-
 // 元素子其一为父另一为 span）整体替换消灭 katex-html 重复；裸 math 只换
 // <math> 本身；无 annotation 保留原树；带文字包装（p 91 直文本 "see "）
 // 孪生守卫拦截整体替换、回退只换 <math>——文字不随整体替换丢失。
-// $…$ 单美元内联形式（与参考页 9_markdown 既有约定一致）。annotation
+// $…$ 单美元内联形式（与参考页最终 markdown 既有约定一致）。annotation
 // 里的实体（&lt;）经 textContent 解码、序列化时重新转义
 const MATH_JUICED = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>公式</title></head><body><h1 data-idx="1">标题</h1><div data-idx="4"><p data-idx="5">设 <span data-idx="60"><span data-idx="61"><math data-idx="62"><semantics><mrow><mi>M</mi></mrow><annotation encoding="application/x-tex">M</annotation></semantics></math></span><span data-idx="63"><span data-idx="64">M</span></span></span> 为最小长度，</p><p data-idx="8">裸公式 <math data-idx="70"><semantics><mrow><mi>L</mi></mrow><annotation encoding="application/x-tex">L &lt; M</annotation></semantics></math> 成立，</p><p data-idx="9">无源公式 <math data-idx="80"><mrow><mi>x</mi></mrow></math> 保留。</p><p data-idx="10">带文字的包装 <span data-idx="90"><span data-idx="91">see <math data-idx="92"><semantics><mrow><mi>M</mi></mrow><annotation encoding="application/x-tex">M</annotation></semantics></math></span><span data-idx="93"><span data-idx="94">M</span></span></span> 尾部</p><p data-idx="11">未声明编码 <math data-idx="95"><semantics><mrow><mi>r</mi></mrow><annotation style="display: block;">r</annotation></semantics></math> 换，他声明 <math data-idx="96"><semantics><mrow><mi>q</mi></mrow><annotation encoding="application/mathml-presentation+xml">not-latex</annotation></semantics></math> 不换。</p></div></body></html>`;
@@ -341,7 +341,7 @@ test('extract_article.mjs: 瘦身规则③④——块内残留按钮清理、bu
 
 // 瘦身规则⑤：scheme ∉ {http,https,mailto,tel} 的 <a> 解包（codex:/
 // javascript: 等应用协议——参考页 codex:// 单个 ~1KB URL-encoded prompt
-// 曾漏进 9_markdown.md）；http(s)/mailto 与无协议（相对/#锚点）保留
+// 曾漏进最终 markdown）；http(s)/mailto 与无协议（相对/#锚点）保留
 const HREF_JUICED = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>链接</title></head><body><h1 data-idx="1">标题</h1><div data-idx="4"><p data-idx="5"><a href="codex://threads/new?prompt=%E6%8F%90%E7%A4%BA" data-idx="30">深问</a>、<a href="https://example.com/a" data-idx="31">正常链</a>、<a href="mailto:x@example.com" data-idx="32">邮件</a>、<a href="javascript:void(0)" data-idx="33">假链</a>、<a href="#anchor" data-idx="34">锚点</a>。</p></div></body></html>`;
 
