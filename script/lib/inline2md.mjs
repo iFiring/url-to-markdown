@@ -13,6 +13,13 @@
 //    中断构造）；
 //  - code span 内部与 math 源照抄不转义：code span 内反斜杠是字面字符
 //    （转义即可见损坏），math 源 `\alpha` 不可翻倍。
+//  - 行内流空白折叠（2026-09-11，spec §12）：文本节点空白 run（含换行）
+//    折叠为单空格——浏览器 white-space:normal 语义（与 code span/math 源
+//    换行折叠同 rationale）。runs 是纯行内内容（pre 子树被 run 检测排除），
+//    文本节点换行从不产生可见换行；pretty-printed 源码在行内元素间夹的
+//    排版空白（换行+缩进）原样穿透会把 markdown 值拆成多行。可见换行只
+//    来自 <br>（BR 分支不经 escapeText）；不 trim run 首尾——占位符与骨架
+//    短文本拼接时空白承载词间距，残余双空格渲染时自折叠。
 //
 // 强调归一（2026-09-11，spec §5.4 修订）：微信类编辑器产出「双层加粗」
 // （`<strong>` 套 font-weight:bold span，canonical 归一后成 strong 直接嵌
@@ -52,16 +59,16 @@ function longestTickRun(s) {
   return runs ? Math.max(...runs.map((t) => t.length)) : 0;
 }
 
-// 文本节点转义。state.lineStart 跨元素线程：换行/br 置 true，空白保持
-// true（CommonMark 允许 ≤3 前导空格的中断），任何非空白输出置 false。
-// 元素包装（如 ** 前缀）后内层文本可能残留旧 lineStart → 过度转义，
-// 渲染透明、无害；宁可过度不漏（漏 = 块结构被破坏）。
+// 文本节点转义。state.lineStart 跨元素线程：br 置 true（文本换行已折叠、
+// 不再触发行首），空白保持 true（CommonMark 允许 ≤3 前导空格的中断），
+// 任何非空白输出置 false。元素包装（如 ** 前缀）后内层文本可能残留旧
+// lineStart → 过度转义，渲染透明、无害；宁可过度不漏（漏 = 块结构被破坏）。
 function escapeText(text, state) {
+  // 行内流空白折叠（spec §12）：空白 run（含换行）→ 单空格，`\r` 一并归一
+  text = text.replace(/[ \t\r\n]+/g, ' ');
   let out = '';
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
-    if (c === '\n') { out += '\n'; state.lineStart = true; continue; }
-    if (c === '\r') continue; // 归一：\r\n 按 \n（canonical 来自浏览器，防御）
     if (state.lineStart && LINE_START_ESCAPE.has(c)) {
       out += '\\' + c; state.lineStart = false; continue;
     }
