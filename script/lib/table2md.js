@@ -1,6 +1,6 @@
 // script/lib/table2md.js
 // 引擎选择器：预展开表内 {{LONG_TEXT_k|...}} → 调 self|turndown 引擎 →
-// 存 2_tables.json schema + 失败落 logs/tables/ 诊断日志。
+// 存 1_tables.json schema + 失败落 logs/tables/ 诊断日志。
 import fs from 'node:fs/promises';
 import path from 'node:path';
 

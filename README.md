@@ -5,7 +5,7 @@
 - 使用：把单个 URL 的正文转为 Markdown 文件
 - 不使用：批量爬取、站点镜像；登录态存于 IndexedDB / Service Worker 的站点
 
-操作手册（步骤 0-6 决策表、错误处理）见 [SKILL.md](SKILL.md)；面向 Claude Code 的开发约定与架构说明见 [CLAUDE.md](CLAUDE.md)。
+操作手册（步骤 0-5 决策表、错误处理）见 [SKILL.md](SKILL.md)；面向 Claude Code 的开发约定与架构说明见 [CLAUDE.md](CLAUDE.md)。
 
 ## Meta Data
 
@@ -26,12 +26,12 @@ description: "将 URL（网页）的主体内容转换成 Markdown；在需要�
 - **Playwright**（chromium）——无头抓取、CDP Screencast 登录中继、元素 2x 截图
 - **juice**——CSS 级联引擎，把 `<style>` 规则内联进元素 style 属性
 - **ws**——Screencast viewer 的 WebSocket 中继
-- 语义分派（步骤 3 关键 ID 识别 / 步骤 5 markdown 骨架）由 LLM agent 按 SKILL.md 手册完成，不依赖 readability / turndown 类转换库
+- 语义分派（步骤 2 关键 ID 识别 / 步骤 4 markdown 骨架）由 LLM agent 按 SKILL.md 手册完成，不依赖 readability / turndown 类转换库
 
 ## 项目结构
 
 ```text
-SKILL.md                 # Skill 主体文件（步骤 0-6 操作手册）
+SKILL.md                 # Skill 主体文件（步骤 0-5 操作手册）
 CLAUDE.md                # 面向 Claude Code 的开发约定
 README.md                # 本文件
 script/                  # CLI 脚本
@@ -43,36 +43,36 @@ pnpm-lock.yaml
 
 working/                 # 运行时工作目录（gitignore，仅保留骨架）
   cookies/               # 所有访问过 URL 的登录态公共存储（storage_state.json + login_decisions_skips.json）
-  <url-path>/            # 该 URL 步骤 1-6 的全部产物
+  <url-path>/            # 该 URL 步骤 1-5 的全部产物
   redirected_<url-path>/ # iframe 重定向页的专属目录（内含 redirect_to.yaml 标记）
     assets/
-      images/            # 步骤 6 下载的正文图片
-      trans/             # 步骤 6 的 trans2img 截图（WebP，2x 分辨率）
+      images/            # 步骤 5 下载的正文图片
+      trans/             # 步骤 5 的 trans2img 截图（WebP，2x 分辨率）
     1_snapshot.html
-    2_clean_snapshot.html / 2_clean_style_snapshot.html / 2_long_text.json
-    3_key_ids.json
-    4_extract.html / 4_juice.html   # 步骤 4 调试中间产物（裁剪视图 / 纯内联视图）
-    4_article.html       # 文章视图（>60KB 时另产出分块）
-    5_skeleton.json
-    6_resolved_skeleton.json
-    6_markdown.md        # 最终产物
+    1_clean_snapshot.html / 1_clean_style_snapshot.html / 1_long_text.json
+    1_tables.json / 1_code.json
+    2_key_ids.json
+    3_extract.html / 3_juice.html   # 步骤 3 调试中间产物（裁剪视图 / 纯内联视图）
+    3_article.html       # 文章视图（>60KB 时另产出分块）
+    4_skeleton.json
+    5_resolved_skeleton.json
+    5_markdown.md        # 最终产物
 ```
 
-`<url-path>` 由 URL 净化生成：先剥 `http(s)://` 前缀（目录名从域名开始），其余非 `[A-Za-z0-9.-]` 替换为 `_`，超 120 字符截断 + sha256(URL) 前 8 位十六进制后缀。同域名的 http/https 两版派生同一目录。内嵌占优内容 iframe 的页面（步骤 1 重定向门命中）目录名为 `redirected_<原名>`——目录内 `redirect_to.yaml` marker 供步骤 2-6 定位，调用方式不变。
+`<url-path>` 由 URL 净化生成：先剥 `http(s)://` 前缀（目录名从域名开始），其余非 `[A-Za-z0-9.-]` 替换为 `_`，超 120 字符截断 + sha256(URL) 前 8 位十六进制后缀。同域名的 http/https 两版派生同一目录。内嵌占优内容 iframe 的页面（步骤 1 重定向门命中）目录名为 `redirected_<原名>`——目录内 `redirect_to.yaml` marker 供后续步骤定位，调用方式不变。
 
-## 核心流程（步骤 0-6）
+## 核心流程（步骤 0-5）
 
-步骤 0-2、4、6 只运行脚本并按 stdout 的 `status` 分支；步骤 3、5 由 agent（LLM）做语义处理。
+步骤 0、1、3、5 只运行脚本并按 stdout 的 `status` 分支；步骤 2、4 由 agent（LLM）做语义处理。
 
 | 步骤 | 执行者 | 命令 | 产物 |
 |---|---|---|---|
 | 0 环境初始化 | 脚本 | `bash script/init.sh` | 环境就绪（node/pnpm/chromium/字体；纯环境自检，无参数） |
-| 1 快照下载 | 脚本 | `node script/snapshot.mjs --url <url>` | `1_snapshot.html`；输出核心参数 `skill-root`/`url-name`/`url-working-path`（重定向页为 `redirected_` 特殊名）+ `redirect` 通报 |
-| 2 结构清洗 | 脚本 | `node script/clean_snapshot.mjs --url <url>` | `2_clean_snapshot.html`、`2_clean_style_snapshot.html`、`2_long_text.json` |
-| 3 关键 ID 识别 | **agent** | 读 `2_clean_snapshot.html` | `3_key_ids.json` |
-| 4 文章视图渲染 | 脚本 | `node script/render_article.mjs --url <url>` | `4_article.html`（>60KB 时另产出分块 `4_article_chunk_X_of_N.html`，emit `chunks` 驱动步骤 5 派发模式）；调试中间产物 `4_extract.html` / `4_juice.html` 同轮落盘 |
-| 5 markdown 骨架 | **agent** | 读 `4_article.html`（分割时按 `chunks.files` 并行派发子代理、各写 `5_skeleton_chunk_X_of_N.json`） | `5_skeleton.json` / `5_skeleton_chunk_X_of_N.json` |
-| 6 还原 + 下载 + 截图 + 渲染 | 脚本 | `node script/render_markdown.mjs --url <url>` | `6_markdown.md`（最终产物）、`6_resolved_skeleton.json`、`assets/images/`、`assets/trans/`（入口自动检测并合并分片骨架） |
+| 1 快照下载 + 结构清洗 | 脚本 | `node script/snapshot.mjs --url <url>` | `1_snapshot.html` + 清洗产物 `1_clean_snapshot.html`、`1_clean_style_snapshot.html`、`1_long_text.json`、`1_tables.json`、`1_code.json`（2026-09-11 起原步骤 1/2 合并为单 CLI）；输出核心参数 `skill-root`/`url-name`/`url-working-path`（重定向页为 `redirected_` 特殊名）+ `redirect` 通报 |
+| 2 关键 ID 识别 | **agent** | 读 `1_clean_snapshot.html` | `2_key_ids.json` |
+| 3 文章视图渲染 | 脚本 | `node script/render_article.mjs --url <url>` | `3_article.html`（>60KB 时另产出分块 `3_article_chunk_X_of_N.html`，emit `chunks` 驱动步骤 4 派发模式）；调试中间产物 `3_extract.html` / `3_juice.html` 同轮落盘 |
+| 4 markdown 骨架 | **agent** | 读 `3_article.html`（分割时按 `chunks.files` 并行派发子代理、各写 `4_skeleton_chunk_X_of_N.json`） | `4_skeleton.json` / `4_skeleton_chunk_X_of_N.json` |
+| 5 还原 + 下载 + 截图 + 渲染 | 脚本 | `node script/render_markdown.mjs --url <url>` | `5_markdown.md`（最终产物）、`5_resolved_skeleton.json`、`assets/images/`、`assets/trans/`（入口自动检测并合并分片骨架） |
 
 各步骤的 `status` 分支决策表、骨架词汇表与约束见 SKILL.md；各脚本的技术细节见对应脚本头部注释。
 
@@ -83,17 +83,17 @@ working/                 # 运行时工作目录（gitignore，仅保留骨架�
 - **登录态**：`working/cookies/storage_state.json` 是唯一全局登录态，仅步骤 1 的登录流程写入（cookie 按 name|domain|path 去重、localStorage 按 origin+name、读取时剔除过期）；转换脚本只读。需要人工登录时弹出 CDP Screencast viewer（无头 chromium → HTTP+WS 页面，JS/CSS 全内联）。
 - **登录检测两级制（2026-09-07 v2）**：强信号 = 密码框 / **登录入口点击探测确认**（点击候选入口后出现全屏弹窗（表单+按钮，≥50% 视口）或页面跳转）单独判定需登录；弱信号（URL 特征 / 标题正文关键词 / 重定向 / SPA 等待 / 登录按钮可见但点击无确认）≥2 合议。cookieMissing 信号已删除（匿名会话 cookie 假阴性）。viewer 的「跳过登录」经确认框后把本次命中的**弱信号名**记入 `working/cookies/login_decisions_skips.json`（`{hostname: [信号]}`）——后续命中**全部**在记忆内才整体豁免（emit `loginSkippedByMemory` 如实通报），出现新信号时记忆内信号照常计票；强信号永不记忆、跳过仅本次生效。重置裁决删除对应条目；旧版 `login_decisions.json` 已废弃不读。探测点开的弹窗/跳转在跳过或无需登录时自动还原（gotoSettled 原 URL），快照恒抓干净页。
 - **虚拟列表检测**：仅渲染可见窗口的页面无法全文转化，步骤 1 命中即终止（`reason=virtual_list`），不写快照。
-- **长文本占位（两级折叠）**：步骤 2 把超阈值（16 汉字/12 词）的内容替换为 `{{LONG_TEXT_k|n_chars}}` / `{{LONG_TEXT_k|n_words}}`，agent 只见结构不见内容，步骤 6 机械还原——语义判断不携带全文，token 可控。折叠单位两级：**极大纯行内 run**（段落内文本与 strong/em/code/a/math 等行内元素混排的整段内容，原文以规范化 canonical HTML 入库，步骤 6 经 `lib/inline2md.mjs` 确定性转 markdown 行内语法含 `$…$` 公式——行内格式不再依赖 LLM 转录）与**散文本节点**（夹在块级子元素之间，原文纯文本入库）。占位分两趟执行：带样式版带编号（还原链消费），清洗版无编号 `{{LONG_TEXT|n_chars}}`（唯一消费者步骤 3 只看结构+体量）；原文进 `2_long_text.json` 恢复清单（`texts` 散文本 + `runs` 行内 run 两段 schema），还原链只走带样式版路径。
-- **trans2img live 重渲染截图**：`data-idx` 按文档序编号是 prepare 后 DOM 的纯函数——步骤 6 按 `--url` 参数重渲染原页面并重注入同一套标记脚本，两次渲染结构一致则 id 精确对位；与快照侧逐 id 签名严校验（假阴性偏向，宁降级不出错图），失配或重渲染失败自动降级快照渲染兜底，`source` 字段如实标注来源。
-- **核心参数单一事实源**：`<url-name>` 由 `lib/env.mjs urlToDirName(url)` 派生（非 `[A-Za-z0-9.-]` → `_`，超 120 字符截断 + sha256 前 8 位后缀）——步骤 1 的 emit 与步骤 2-6 的工作目录派生共用同一实现，保证目录名恒一致；重定向门命中的页面目录名为 `redirected_<原名>`（marker 定位）。
-- **iframe 重定向门（步骤 1）**：「壳页 + 占优内容 iframe」页面在滚动后检测每个 iframe（可导航 http(s)/可见 ≥200px/正文 ≥500 且 ≥3× 主文档、多帧取最长，同源跨域皆可），命中则跳转 frame 真实 URL 原生续跑登录检测/滚动/虚拟列表/快照——样式保真与内部滚动天然成立；目标页独立打开退化（<50% 正文）自动回退原页。判定单次执行（只判入口原页面），marker 落盘、步骤 2-6 读盘定位。
-- **清洗版瘦身**：步骤 2 对 `2_clean_snapshot.html` 走「单页两趟 + 机械规则」（K1 class 语义过滤、K2 属性白名单——URL/aria 清空、hidden 裸属性折叠 `{{HIDDEN_TAG|n_chars;构成}}`、table/pre 折叠、空白压缩、空壳 span 拆包、**K11 纯视图折叠**——可视模块内部「div+行内元素+文本」极大子树与 p>行内 段落整棵折为 `{{VIEW_TEXT|n_chars/n_words}}`、壳保留，行内允许集 = a/strong/em/code/br/MathML 等行内文本类元素、img/块级标签仍阻断），样式计算仅限共享段标志预计算、无 juice/检测管线；清洗版唯一消费者是步骤 3（携带无编号 LONG_TEXT 占位与 VIEW_TEXT 折叠），一切还原走带样式版——正文与带样式版零丢失、**边界 chrome 清除（2026-09-09）**——D1 脊柱占优比较删除（文本量 rank1 恒豁免、p≥5/main 停止下探、内容守卫）+ 链限制 CSS 隐藏/dialog/浮层折叠（`{{HIDDEN_TAG}}`/`{{DIALOG_TAG}}`/`{{OVERLAY_TAG}}`，正文流深处隐藏内容保活），微信样本净瘦 ≈26%
-- **astro 解包两趟共享 + 带样式版属性白名单**：`astro-` 前缀脚手架标签（astro-island/slot 等，携带巨量序列化 props）两趟都解包——脚手架不再流进步骤 4-5（曾实测文章视图残留 59 个 astro 标签、27KB 属性噪音）；带样式版另有属性白名单（22 静态属性 = clean K2 八属性 + style/href/src/width/height + 内容信号 colspan/rowspan/start/aria-label/data-src/srcset/datetime/open/lang，`<style>` 标签豁免）+ **`<style>` 选择器引用属性的动态保留集**（删属性即断 juice 级联——曾实测 article-1 丢 45 条 border/background/display 声明）。主流框架中仅 Astro 在 SSR 产物留持久化自定义标签（Vue/Nuxt/Qwik 等走属性或 script，由白名单/步骤 1 覆盖），解包集钉在 `astro-` 前缀、永不外溢到真实 web component（GitHub/YouTube 的内容型自定义标签）
-- **@layer 级联层解包（步骤 4 轮 B 前置）**：Tailwind v4 站点把工具类规则全包在 `@layer utilities` 里而 juice 不进层——不解包则卡片边框/圆角/背景等工具类样式零内联（实测某站点 56% 的 CSS 在层内、带样式元素仅 579 个）。步骤 4 内联前先在浏览器侧解包（块形层体原位递归提升、`@layer a, b;` 层序声明丢弃，DOM 圈选不误伤正文代码示例），`:root` 变量定义随层提升后 juice 把已定义 var() 解析为具体值——实测同站点带样式元素 579 → 2632
-- **函数值真实化（步骤 4 轮 B）**：juice 对多级 var 链的递归解析会弄丢 color-mix 颜色空间参数（产出非法值、浏览器整条丢弃），@property 注册变量与 calc() 保持函数引用——步骤 4 收集残留声明对，在原始样式页（完整 CSS+class+@property）取 getComputedStyle 计算值替换（无值则删净），终态零 var()/color-mix()/calc()，全部是浏览器计算出的真实值
-- **隐藏声明剥离（步骤 4 轮 B 前置）**：收起的元素（手风琴面板/折叠区/抽屉）在计算样式前展开——CSSOM 只删 display:none/visibility:hidden 声明本身，规则其余声明保留，自然 display:flex/grid/table 等结构信号完整流进步骤 5（不盲改 block）；`[hidden]` 摘属性、var 驱动收起兜底覆写。实测参考页 27 处 display:none 清零，展开元素带自然布局
-- **零值声明过滤（步骤 4 轮 B finalize）**：白名单内值等于全元素初始值的声明删除——边框按"边"语义判无效（宽 0 或样式 none 的边整条不可见，三件全删），Tailwind preflight 被 juice 内联出的海量 `border: 0px solid` 即此类；实信号（非零边框/圆角+背景、flex、font-size/weight 相对对比）全保留。实测参考页内联视图约 -26%
-- **文章视图瘦身 pass（步骤 4 轮 C）**：迁移后同页内存往返执行六条结构规则——data-* 白名单清理、MathML→LaTeX（KaTeX 双胞胎整体替换）、无文本/纯符号 button 与空 svg 删除、有文本 button 解包、非白名单协议 `<a>` 解包（codex:// 营销链接不再漏进产物）、空壳 span 迭代拆包（语法高亮 token 塌缩为纯文本）。保护集跳过 key 元素、`1_snapshot` 零接触。实测参考页文章视图 239.5KB → 110.5KB
+- **长文本占位（两级折叠）**：步骤 1 把超阈值（16 汉字/12 词）的内容替换为 `{{LONG_TEXT_k|n_chars}}` / `{{LONG_TEXT_k|n_words}}`，agent 只见结构不见内容，步骤 5 机械还原——语义判断不携带全文，token 可控。折叠单位两级：**极大纯行内 run**（段落内文本与 strong/em/code/a/math 等行内元素混排的整段内容，原文以规范化 canonical HTML 入库，步骤 5 经 `lib/inline2md.mjs` 确定性转 markdown 行内语法含 `$…$` 公式——行内格式不再依赖 LLM 转录）与**散文本节点**（夹在块级子元素之间，原文纯文本入库）。占位分两趟执行：带样式版带编号（还原链消费），清洗版无编号 `{{LONG_TEXT|n_chars}}`（唯一消费者步骤 2 只看结构+体量）；原文进 `1_long_text.json` 恢复清单（`texts` 散文本 + `runs` 行内 run 两段 schema），还原链只走带样式版路径。
+- **trans2img live 重渲染截图**：`data-idx` 按文档序编号是 prepare 后 DOM 的纯函数——步骤 5 按 `--url` 参数重渲染原页面并重注入同一套标记脚本，两次渲染结构一致则 id 精确对位；与快照侧逐 id 签名严校验（假阴性偏向，宁降级不出错图），失配或重渲染失败自动降级快照渲染兜底，`source` 字段如实标注来源。
+- **核心参数单一事实源**：`<url-name>` 由 `lib/env.mjs urlToDirName(url)` 派生（非 `[A-Za-z0-9.-]` → `_`，超 120 字符截断 + sha256 前 8 位后缀）——步骤 1 的 emit 与步骤 2-5 的工作目录派生共用同一实现，保证目录名恒一致；重定向门命中的页面目录名为 `redirected_<原名>`（marker 定位）。
+- **iframe 重定向门（步骤 1）**：「壳页 + 占优内容 iframe」页面在滚动后检测每个 iframe（可导航 http(s)/可见 ≥200px/正文 ≥500 且 ≥3× 主文档、多帧取最长，同源跨域皆可），命中则跳转 frame 真实 URL 原生续跑登录检测/滚动/虚拟列表/快照——样式保真与内部滚动天然成立；目标页独立打开退化（<50% 正文）自动回退原页。判定单次执行（只判入口原页面），marker 落盘、后续步骤经 `urlDir()` 读盘定位。
+- **清洗版瘦身**：步骤 1 对 `1_clean_snapshot.html` 走「单页两趟 + 机械规则」（K1 class 语义过滤、K2 属性白名单——URL/aria 清空、hidden 裸属性折叠 `{{HIDDEN_TAG|n_chars;构成}}`、table/pre 折叠、空白压缩、空壳 span 拆包、**K11 纯视图折叠**——可视模块内部「div+行内元素+文本」极大子树与 p>行内 段落整棵折为 `{{VIEW_TEXT|n_chars/n_words}}`、壳保留，行内允许集 = a/strong/em/code/br/MathML 等行内文本类元素、img/块级标签仍阻断），样式计算仅限共享段标志预计算、无 juice/检测管线；清洗版唯一消费者是步骤 2（携带无编号 LONG_TEXT 占位与 VIEW_TEXT 折叠），一切还原走带样式版——正文与带样式版零丢失、**边界 chrome 清除（2026-09-09）**——D1 脊柱占优比较删除（文本量 rank1 恒豁免、p≥5/main 停止下探、内容守卫）+ 链限制 CSS 隐藏/dialog/浮层折叠（`{{HIDDEN_TAG}}`/`{{DIALOG_TAG}}`/`{{OVERLAY_TAG}}`，正文流深处隐藏内容保活），微信样本净瘦 ≈26%
+- **astro 解包两趟共享 + 带样式版属性白名单**：`astro-` 前缀脚手架标签（astro-island/slot 等，携带巨量序列化 props）两趟都解包——脚手架不再流进步骤 3-4（曾实测文章视图残留 59 个 astro 标签、27KB 属性噪音）；带样式版另有属性白名单（22 静态属性 = clean K2 八属性 + style/href/src/width/height + 内容信号 colspan/rowspan/start/aria-label/data-src/srcset/datetime/open/lang，`<style>` 标签豁免）+ **`<style>` 选择器引用属性的动态保留集**（删属性即断 juice 级联——曾实测 article-1 丢 45 条 border/background/display 声明）。主流框架中仅 Astro 在 SSR 产物留持久化自定义标签（Vue/Nuxt/Qwik 等走属性或 script，由白名单/步骤 1 覆盖），解包集钉在 `astro-` 前缀、永不外溢到真实 web component（GitHub/YouTube 的内容型自定义标签）
+- **@layer 级联层解包（步骤 3 轮 B 前置）**：Tailwind v4 站点把工具类规则全包在 `@layer utilities` 里而 juice 不进层——不解包则卡片边框/圆角/背景等工具类样式零内联（实测某站点 56% 的 CSS 在层内、带样式元素仅 579 个）。步骤 3 内联前先在浏览器侧解包（块形层体原位递归提升、`@layer a, b;` 层序声明丢弃，DOM 圈选不误伤正文代码示例），`:root` 变量定义随层提升后 juice 把已定义 var() 解析为具体值——实测同站点带样式元素 579 → 2632
+- **函数值真实化（步骤 3 轮 B）**：juice 对多级 var 链的递归解析会弄丢 color-mix 颜色空间参数（产出非法值、浏览器整条丢弃），@property 注册变量与 calc() 保持函数引用——步骤 3 收集残留声明对，在原始样式页（完整 CSS+class+@property）取 getComputedStyle 计算值替换（无值则删净），终态零 var()/color-mix()/calc()，全部是浏览器计算出的真实值
+- **隐藏声明剥离（步骤 3 轮 B 前置）**：收起的元素（手风琴面板/折叠区/抽屉）在计算样式前展开——CSSOM 只删 display:none/visibility:hidden 声明本身，规则其余声明保留，自然 display:flex/grid/table 等结构信号完整流进步骤 4（不盲改 block）；`[hidden]` 摘属性、var 驱动收起兜底覆写。实测参考页 27 处 display:none 清零，展开元素带自然布局
+- **零值声明过滤（步骤 3 轮 B finalize）**：白名单内值等于全元素初始值的声明删除——边框按"边"语义判无效（宽 0 或样式 none 的边整条不可见，三件全删），Tailwind preflight 被 juice 内联出的海量 `border: 0px solid` 即此类；实信号（非零边框/圆角+背景、flex、font-size/weight 相对对比）全保留。实测参考页内联视图约 -26%
+- **文章视图瘦身 pass（步骤 3 轮 C）**：迁移后同页内存往返执行六条结构规则——data-* 白名单清理、MathML→LaTeX（KaTeX 双胞胎整体替换）、无文本/纯符号 button 与空 svg 删除、有文本 button 解包、非白名单协议 `<a>` 解包（codex:// 营销链接不再漏进产物）、空壳 span 迭代拆包（语法高亮 token 塌缩为纯文本）。保护集跳过 key 元素、`1_snapshot` 零接触。实测参考页文章视图 239.5KB → 110.5KB
 
 ### 环境变量
 
@@ -103,7 +103,7 @@ working/                 # 运行时工作目录（gitignore，仅保留骨架�
 | `U2M_PROXY` | 代理控制：不设则继承系统代理 / `direct` 绕过 / URL 显式钉住 |
 | `U2M_DEBUG` | 非空时各 CLI 向 stderr 输出 `[dbg +N.NNs]` 调试行（阶段耗时、输入输出字节数、登录检测信号、滚动轮次、逐图下载、`[net]` 打开页面（document 导航，含重定向/登录跳转）的请求头与响应头（裸行无前缀，子资源不记），反爬诊断用） |
 | `U2M_FONTCONFIG_CONF` / `U2M_FONT_DIR` | 覆盖 init.sh（仅 Linux）fontconfig 配置与字体目录的探测路径；测试在任意宿主模拟 Linux 环境用 |
-| `U2M_ARTICLE_SPLIT_THRESHOLD` | 文章视图超过该字节数（默认 61440）时物理分块，步骤 5 并行派发子代理 |
+| `U2M_ARTICLE_SPLIT_THRESHOLD` | 文章视图超过该字节数（默认 61440）时物理分块，步骤 4 并行派发子代理 |
 | `U2M_ARTICLE_CHUNK_MAX` | 分块主内容字节上限（默认 40960，上下文侧不计；巨段落块独立成块、尾块 <5 块合并为例外） |
 
 ## 测试
@@ -122,15 +122,15 @@ pnpm test:all             # 全量
 | 阶段 | 内容 | 进度 |
 |------|------|------|
 | 项目结构 | 目录 / package / `init.sh` 环境自检 | 已完成 |
-| 步骤 1 `snapshot.mjs` | 登录检测 + 渐进滚动 + 重定向门 + 虚拟列表检测 + 全保真快照（单 chromium 贯穿）；emit 核心参数 | 已完成 |
-| 步骤 2 `clean_snapshot.mjs` | 结构清洗（单页两趟：astro 解包共享 + 带样式版属性白名单 + 清洗版 K1-K9 极致瘦身） | 已完成 |
-| 步骤 3 / 5 agent 语义操作 | key_ids 识别 / markdown 骨架生成（SKILL.md 手册） | 已完成 |
-| 步骤 4 `render_article.mjs` | 样式裁剪 → juice 内联 → 文章视图提取 + 瘦身 + 分块（2026-09-11 起原步骤 4/5/6 合并为单 CLI，单 chromium 三轮贯穿） | 已完成 |
-| 步骤 6 `render_markdown.mjs` | 占位符还原 + 图片下载 + trans2img 截图 + 骨架渲染 markdown（2026-09-11 起原步骤 8/9 合并为单 CLI） | 已完成 |
-| 测试 | 单测 + 集成 167 项 | 已完成 |
+| 步骤 1 `snapshot.mjs` | 快照下载 + 结构清洗（单 chromium 七阶段：登录检测 + 渐进滚动 + 重定向门 + 虚拟列表检测 + 全保真快照 + 两趟清洗；2026-09-11 起原步骤 1/2 合并为单 CLI，新增 `--from-snapshot` 重放与 `--table-engine`）；emit 核心参数 | 已完成 |
+| 步骤 2 / 4 agent 语义操作 | key_ids 识别 / markdown 骨架生成（SKILL.md 手册） | 已完成 |
+| 步骤 3 `render_article.mjs` | 样式裁剪 → juice 内联 → 文章视图提取 + 瘦身 + 分块（2026-09-11 起原步骤 4/5/6 合并为单 CLI，单 chromium 三轮贯穿） | 已完成 |
+| 步骤 5 `render_markdown.mjs` | 占位符还原 + 图片下载 + trans2img 截图 + 骨架渲染 markdown（2026-09-11 起原步骤 8/9 合并为单 CLI） | 已完成 |
+| 测试 | 单测 382 + 集成 67 项 | 已完成 |
 | 真实 URL 冒烟 | 手动清单 `test/smoke/SMOKE.md` | 场景 1 已记录通过（产生于旧双稿管线，新管线待重验）；场景 2/3 待人工 |
 | 2026-08-29 | 步骤 5/6 文章视图瘦身（零值过滤 + 六条结构规则） | ✅ |
 | 2026-09-07 | iframe 重定向转换（占优内容 iframe → frame 真实 URL；`redirected_` 目录 + marker；步骤 0 瘦身、核心参数移交步骤 1） | ✅ |
 | 2026-09-09 | 文章视图分块（>60KB 物理分割为 ≤40KB 分块 + 三侧只读上下文标记；步骤 7 并行派发子代理、步骤 8 入口合并分片） | ✅ |
 | 2026-09-11 | 步骤 8/9 合并为单 CLI `render_markdown.mjs`（终态步骤：还原 + 下载 + 截图 + 渲染一气呵成，最终产物 `8_markdown.md`；渲染逻辑抽 `lib/skeleton2md.mjs`） | ✅ |
 | 2026-09-11 | 步骤 4/5/6 合并为单 CLI `render_article.mjs`（单 chromium 三轮：裁剪 → 内联 → 提取+瘦身+分块），后续步骤重编号 7→5、8→6，最终产物改 `6_markdown.md` | ✅ |
+| 2026-09-11 | 步骤 1/2 合并为单 CLI `snapshot.mjs`（单 chromium 七阶段：五阶段抓取 + 清洗两趟双 context；清洗主体平移 `lib/clean-snapshot.mjs`，新增 `--from-snapshot` 重放与 `--table-engine`），后续步骤重编号 3→2、4→3、5→4、6→5，最终产物改 `5_markdown.md` | ✅ |

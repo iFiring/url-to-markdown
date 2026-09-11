@@ -1,13 +1,13 @@
 /**
- * 步骤 5 前置：隐藏声明剥离。在浏览器 evaluate 中执行，就地改写 DOM/CSSOM
+ * 步骤 3 轮 B 前置：隐藏声明剥离。在浏览器 evaluate 中执行，就地改写 DOM/CSSOM
  * 后返回统计——收起的元素（手风琴收起面板、折叠区、抽屉）展开为可见，
- * 内容与自然样式流进步骤 5。
+ * 内容与自然样式流入后续 juice 内联。
  * 三层剥除（隐藏来源全覆盖）：
  *  1. 样式表层（class 规则与 <style> 规则的统一载体）：CSSOM 递归遍历全部
  *     样式表规则（含 @media / 嵌套块），删除 display:none / visibility:hidden
  *     声明——只删隐藏声明，规则其余声明保留：`.row{display:flex}` +
  *     `.collapse{display:none}` 的元素剥除后自然恢复 display:flex（不是
- *     display:block 盲改），flex/grid 结构信号完整流到步骤 5。
+ *     display:block 盲改），flex/grid 结构信号完整流到 juice 内联。
  *  2. 内联 style 属性：同样经 CSSOM 删（其余声明保留）。
  *  3. 兜底层：剥完仍 computed 隐藏的来源——
  *     - 裸 hidden 属性（UA 的 [hidden]{display:none} 不在可遍历的作者样式

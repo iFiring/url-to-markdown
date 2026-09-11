@@ -40,12 +40,12 @@ async function runClean(tmpRoot, url, env = {}) {
   const dir = path.join(tmpRoot, urlToDirName(url));
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, '1_snapshot.html'), SNAPSHOT);
-  const r = await runScript(process.execPath, [path.resolve('script/clean_snapshot.mjs'), '--url', url],
+  const r = await runScript(process.execPath, [path.resolve('script/snapshot.mjs'), '--url', url, '--from-snapshot'],
     { env: { ...env, U2M_WORKING_ROOT: tmpRoot }, timeoutMs: 60000 });
   return { r, dir };
 }
 
-test('表格管线：步骤 2 产 2_tables.json + logs，成功/失败计数正确', async () => {
+test('表格管线：步骤 1 产 1_tables.json + logs，成功/失败计数正确', async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-integ-table-'));
   const url = 'https://example.com/tables';
   const { r, dir } = await runClean(tmpRoot, url, { U2M_TABLE_ENGINE: 'self' });
@@ -55,8 +55,8 @@ test('表格管线：步骤 2 产 2_tables.json + logs，成功/失败计数正�
     assert.equal(out.tables.total, 3);
     assert.equal(out.tables.ok, 2, '简单表 + 跨行跨列表成功');
     assert.equal(out.tables.failed, 1, '无表头表失败');
-    assert.ok(fs.existsSync(path.join(dir, '2_tables.json')));
-    const tj = JSON.parse(fs.readFileSync(path.join(dir, '2_tables.json'), 'utf8'));
+    assert.ok(fs.existsSync(path.join(dir, '1_tables.json')));
+    const tj = JSON.parse(fs.readFileSync(path.join(dir, '1_tables.json'), 'utf8'));
     // 跨行跨列表（k=2）成功、3 列（时间 + 上午 colspan2 = 3 列）
     assert.equal(tj['2'].status, 'ok');
     assert.equal(tj['2'].cols, 3);
@@ -82,16 +82,16 @@ test('表格管线：成功表 styled 折叠、失败表 styled 保 live + data-
   } finally { fs.rmSync(tmpRoot, { recursive: true, force: true }); }
 });
 
-test('表格管线：步骤 6 {{TABLE_k}} 还原 + GFM markdown 输出', async () => {
+test('表格管线：步骤 5 {{TABLE_k}} 还原 + GFM markdown 输出', async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-integ-table-'));
   const url = 'https://example.com/tables';
   const { r, dir } = await runClean(tmpRoot, url, { U2M_TABLE_ENGINE: 'self' });
   try {
     assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-    // 注入 3_key_ids（h1=1 标题、p=2 段落块）+ 5_skeleton（模拟步骤 5 LLM）
-    fs.writeFileSync(path.join(dir, '3_key_ids.json'),
+    // 注入 2_key_ids（h1=1 标题、p=2 段落块）+ 4_skeleton（模拟步骤 4 LLM）
+    fs.writeFileSync(path.join(dir, '2_key_ids.json'),
       JSON.stringify({ titleId: 1, descriptionIds: [], paragraphIds: [2], dumpIds: [] }));
-    fs.writeFileSync(path.join(dir, '5_skeleton.json'), JSON.stringify([
+    fs.writeFileSync(path.join(dir, '4_skeleton.json'), JSON.stringify([
       { h1: '# 表格测试' },
       { p: '简单 2 列表：' },
       { table: '{{TABLE_1}}' },
@@ -100,7 +100,7 @@ test('表格管线：步骤 6 {{TABLE_k}} 还原 + GFM markdown 输出', async (
       { p: '无表头表（落步骤7 自转）：' },
       { table: '| A | B |\n| --- | --- |\n| C | D |' },
     ], null, 2));
-    // 步骤 6：还原 + 渲染
+    // 步骤 5：还原 + 渲染
     const r8 = await runScript(process.execPath, [path.resolve('script/render_markdown.mjs'), '--url', url],
       { env: { U2M_WORKING_ROOT: tmpRoot }, timeoutMs: 60000 });
     assert.equal(r8.code, 0, `stderr: ${r8.stderr}`);

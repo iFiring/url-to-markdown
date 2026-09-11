@@ -17,7 +17,7 @@ async function runClean(snapshot, urlPath = 'chrome-hid', env = {}) {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, '1_snapshot.html'), snapshot);
   const r = await runScript(process.execPath,
-    [path.resolve(thisDir, '../../script/clean_snapshot.mjs'), '--url', url],
+    [path.resolve(thisDir, '../../script/snapshot.mjs'), '--url', url, '--from-snapshot'],
     { env: { ...env, U2M_WORKING_ROOT: tmpRoot }, timeoutMs: 60000 });
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);

@@ -7,7 +7,6 @@ import { runScript } from '../helpers/run-script.mjs';
 import { startFixtureServer } from '../helpers/fixture-server.mjs';
 
 const snapshotScript = path.resolve('script/snapshot.mjs');
-const cleanScript = path.resolve('script/clean_snapshot.mjs');
 let server;
 let tmpRoot;
 
@@ -21,7 +20,7 @@ after(() => {
   if (tmpRoot) fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('snapshot.mjs: 静态文章页 → ok + 1_snapshot.html', async () => {
+test('snapshot.mjs: 静态文章页 → ok + 快照与全部清洗产物（单命令）', async () => {
   const url = `${server.url}/static-article.html`;
   const r = await runScript(process.execPath, [snapshotScript, '--url', url], {
     env: { U2M_WORKING_ROOT: tmpRoot },
@@ -37,6 +36,14 @@ test('snapshot.mjs: 静态文章页 → ok + 1_snapshot.html', async () => {
   const html = fs.readFileSync(out.snapshot, 'utf8');
   assert.ok(html.includes('data-idx'), '应含 data-idx');
   assert.ok(!html.includes('<script'), '不应含 script 标签');
+
+  // 合并验收：原步骤 1/2 串联的全部产物由单次 spawn 产出
+  assert.ok(out.cleanedSnapshot.endsWith('1_clean_snapshot.html'), `cleanedSnapshot 应为 1_clean_snapshot.html: ${out.cleanedSnapshot}`);
+  assert.ok(fs.existsSync(out.styledSnapshot), '1_clean_style_snapshot.html 应存在');
+  assert.ok(fs.existsSync(out.tablesJson), '1_tables.json 应存在');
+  assert.ok(fs.existsSync(out.codeJson), '1_code.json 应存在');
+  assert.ok(typeof out.chrome === 'object' && out.chrome !== null, 'emit 应含 chrome 统计对象');
+  assert.ok(typeof out.longTextCount === 'object' && typeof out.longTextCount.total === 'number', 'emit 应含 longTextCount');
 });
 
 // 请求头日志（反爬诊断）：只记「打开的页面」——主 frame 的 document 导航

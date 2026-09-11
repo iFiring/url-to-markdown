@@ -11,14 +11,14 @@ import { inlineRunToMarkdown } from '../../script/lib/inline2md.mjs';
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
 const scriptPath = path.resolve(thisDir, '../../script/lib/page-clean-snapshot.js');
 
-/** 瘦身规则测试基座：手写 1_snapshot 夹具 → 子进程跑真 clean_snapshot.mjs → 读回两版产物。 */
+/** 瘦身规则测试基座：手写 1_snapshot 夹具 → 子进程以 --from-snapshot 跑 snapshot.mjs 清洗阶段 → 读回两版产物。 */
 async function runClean(snapshot, urlPath = 'slim-article', env = {}) {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-clean-slim-'));
   const url = `https://example.com/${urlPath}`;
   const dir = path.join(tmpRoot, urlToDirName(url));
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, '1_snapshot.html'), snapshot);
-  const r = await runScript(process.execPath, [path.resolve('script/clean_snapshot.mjs'), '--url', url], {
+  const r = await runScript(process.execPath, [path.resolve('script/snapshot.mjs'), '--url', url, '--from-snapshot'], {
     env: { ...env, U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 60000,
   });
@@ -44,15 +44,7 @@ test('page-clean-snapshot.js: 函数可被 evaluate 格式调用', () => {
   assert.doesNotThrow(() => new Function('return ' + wrapped));
 });
 
-test('clean_snapshot.mjs: 无参数时输出 usage_error', async () => {
-  const script = path.resolve('script/clean_snapshot.mjs');
-  const r = await runScript(process.execPath, [script]);
-  assert.equal(r.code, 2);
-  const out = JSON.parse(r.stdout);
-  assert.equal(out.status, 'usage_error');
-});
-
-test('clean_snapshot.mjs: 对 article-1 快照执行清洗', async () => {
+test('snapshot.mjs --from-snapshot: 对 article-1 快照执行清洗', async () => {
   // 准备临时目录，手动放入一个测试快照
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-clean-'));
   const url = 'https://example.com/test-article';
@@ -63,8 +55,8 @@ test('clean_snapshot.mjs: 对 article-1 快照执行清洗', async () => {
   const fixture = fs.readFileSync(path.resolve('test/fixtures/article-1.html'), 'utf8');
   fs.writeFileSync(path.join(urlDir, '1_snapshot.html'), fixture);
 
-  const script = path.resolve('script/clean_snapshot.mjs');
-  const r = await runScript(process.execPath, [script, '--url', url], {
+  const script = path.resolve('script/snapshot.mjs');
+  const r = await runScript(process.execPath, [script, '--url', url, '--from-snapshot'], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
@@ -76,10 +68,10 @@ test('clean_snapshot.mjs: 对 article-1 快照执行清洗', async () => {
   const cleaned = fs.readFileSync(out.cleanedSnapshot, 'utf8');
   assert.ok(!cleaned.includes('style='), '不应含 style 属性');
   assert.ok(!cleaned.includes('<style'), '不应含 <style> 标签');
-  assert.ok(cleaned.includes('{{LONG_TEXT|'), '清洗版恢复长文本占位（无编号——步骤 3 只看结构+体量）');
+  assert.ok(cleaned.includes('{{LONG_TEXT|'), '清洗版恢复长文本占位（无编号——步骤 2 只看结构+体量）');
   assert.ok(/<svg data-idx="[0-9]+"><\/svg>/.test(cleaned) || !cleaned.includes('<svg'), 'SVG 壳保留 data-idx');
 
-  // head 里的 meta/link（charset/viewport/preconnect/og:* 等）对步骤 3 的结构识别
+  // head 里的 meta/link（charset/viewport/preconnect/og:* 等）对步骤 2 的结构识别
   // 是纯噪声，全部删除；title 保留作识别线索
   assert.ok(!cleaned.includes('<meta'), '不应含 <meta> 标签');
   assert.ok(!cleaned.includes('<link'), '不应含 <link> 标签');
@@ -89,7 +81,7 @@ test('clean_snapshot.mjs: 对 article-1 快照执行清洗', async () => {
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('clean_snapshot.mjs: 空元素级联删除，有内容的元素保留', async () => {
+test('snapshot.mjs --from-snapshot: 空元素级联删除，有内容的元素保留', async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-clean-empty-'));
   const url = 'https://example.com/empty-article';
   const urlDir = path.join(tmpRoot, urlToDirName(url));
@@ -115,8 +107,8 @@ test('clean_snapshot.mjs: 空元素级联删除，有内容的元素保留', asy
 </body></html>`;
   fs.writeFileSync(path.join(urlDir, '1_snapshot.html'), snapshot);
 
-  const script = path.resolve('script/clean_snapshot.mjs');
-  const r = await runScript(process.execPath, [script, '--url', url], {
+  const script = path.resolve('script/snapshot.mjs');
+  const r = await runScript(process.execPath, [script, '--url', url, '--from-snapshot'], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
@@ -144,7 +136,7 @@ test('clean_snapshot.mjs: 空元素级联删除，有内容的元素保留', asy
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('clean_snapshot.mjs: 删除 nav/footer/form 及 role 等价物，正文保留', async () => {
+test('snapshot.mjs --from-snapshot: 删除 nav/footer/form 及 role 等价物，正文保留', async () => {
   // 页面骨架标签（导航/页脚/表单）不属于文章正文，整体删除——含
   // role 伪装变体与 <article> 内嵌 footer；只含骨架标签的包装容器随之级联清除
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-clean-skel-'));
@@ -167,8 +159,8 @@ test('clean_snapshot.mjs: 删除 nav/footer/form 及 role 等价物，正文保�
 </body></html>`;
   fs.writeFileSync(path.join(urlDir, '1_snapshot.html'), snapshot);
 
-  const script = path.resolve('script/clean_snapshot.mjs');
-  const r = await runScript(process.execPath, [script, '--url', url], {
+  const script = path.resolve('script/snapshot.mjs');
+  const r = await runScript(process.execPath, [script, '--url', url, '--from-snapshot'], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
@@ -203,7 +195,7 @@ test('clean_snapshot.mjs: 删除 nav/footer/form 及 role 等价物，正文保�
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('clean_snapshot.mjs: 删除 video/audio 与残余表单控件，header/aside 保留', async () => {
+test('snapshot.mjs --from-snapshot: 删除 video/audio 与残余表单控件，header/aside 保留', async () => {
   // 媒体播放器与 form 外残余控件（搜索框/下拉/对话框）不是文章正文；
   // header/aside 是正文结构（hero 含主标题、章节 header+aside 交替），必须保留
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-clean-media-'));
@@ -228,8 +220,8 @@ test('clean_snapshot.mjs: 删除 video/audio 与残余表单控件，header/asid
 </body></html>`;
   fs.writeFileSync(path.join(urlDir, '1_snapshot.html'), snapshot);
 
-  const script = path.resolve('script/clean_snapshot.mjs');
-  const r = await runScript(process.execPath, [script, '--url', url], {
+  const script = path.resolve('script/snapshot.mjs');
+  const r = await runScript(process.execPath, [script, '--url', url, '--from-snapshot'], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
@@ -355,9 +347,9 @@ test('K6: 嵌套表格的行列不计入外层——行归属按最近 table 判
   } finally { cleanup(); }
 });
 
-test('clean_snapshot.mjs: 按钮保留——button 与 role="button" 两版都不再删除', async () => {
+test('snapshot.mjs --from-snapshot: 按钮保留——button 与 role="button" 两版都不再删除', async () => {
   // 2026-08-25 起按钮不再整删：FAQ 折叠头 / CTA / 卡片式 role=button 常是
-  // 内容载体，整删或按字数取舍都会误伤正文——一律保留，交步骤 3 语义判断。
+  // 内容载体，整删或按字数取舍都会误伤正文——一律保留，交步骤 2 语义判断。
   const r = await runClean(`<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
@@ -392,9 +384,9 @@ test('clean_snapshot.mjs: 按钮保留——button 与 role="button" 两版都�
   r.cleanup();
 });
 
-test('clean_snapshot.mjs: 纯空白文本节点（缩进）不占位', async () => {
+test('snapshot.mjs --from-snapshot: 纯空白文本节点（缩进）不占位', async () => {
   // 回归：父元素开标签与子元素之间的缩进空白（>16 字符）曾被占位成
-  // {{LONG_TEXT_k|N_CHARS}}，凭空给步骤 3 的 LLM 捏造"父子之间存在长文本"。
+  // {{LONG_TEXT_k|N_CHARS}}，凭空给步骤 2 的 LLM 捏造"父子之间存在长文本"。
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-clean-ws-'));
   const url = 'https://example.com/ws-article';
   const urlDir = path.join(tmpRoot, urlToDirName(url));
@@ -411,8 +403,8 @@ test('clean_snapshot.mjs: 纯空白文本节点（缩进）不占位', async () 
 </body></html>`;
   fs.writeFileSync(path.join(urlDir, '1_snapshot.html'), snapshot);
 
-  const script = path.resolve('script/clean_snapshot.mjs');
-  const r = await runScript(process.execPath, [script, '--url', url], {
+  const script = path.resolve('script/snapshot.mjs');
+  const r = await runScript(process.execPath, [script, '--url', url, '--from-snapshot'], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
@@ -431,7 +423,7 @@ test('clean_snapshot.mjs: 纯空白文本节点（缩进）不占位', async () 
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('clean_snapshot.mjs: 中英文分标准占位，并生成 2_long_text.json 恢复清单', async () => {
+test('snapshot.mjs --from-snapshot: 中英文分标准占位，并生成 1_long_text.json 恢复清单', async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-clean-lang-'));
   const url = 'https://example.com/lang-article';
   const urlDir = path.join(tmpRoot, urlToDirName(url));
@@ -454,8 +446,8 @@ test('clean_snapshot.mjs: 中英文分标准占位，并生成 2_long_text.json 
 </body></html>`;
   fs.writeFileSync(path.join(urlDir, '1_snapshot.html'), snapshot);
 
-  const script = path.resolve('script/clean_snapshot.mjs');
-  const r = await runScript(process.execPath, [script, '--url', url], {
+  const script = path.resolve('script/snapshot.mjs');
+  const r = await runScript(process.execPath, [script, '--url', url, '--from-snapshot'], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
@@ -473,7 +465,7 @@ test('clean_snapshot.mjs: 中英文分标准占位，并生成 2_long_text.json 
   assert.ok(cleaned.includes(enShort), '12 词英文不应占位（即使字符数 > 16）');
   assert.ok(cleaned.includes(zhShort), '16 字中文不应占位');
 
-  // 2_long_text.json：占位编号 → 原文映射（run 折叠后——纯文本段落均整段
+  // 1_long_text.json：占位编号 → 原文映射（run 折叠后——纯文本段落均整段
   // 入 runs 段，canonical 片段 = 原文本身）
   assert.ok(out.longText, 'emit 应含 longText 恢复清单路径');
   const longTexts = JSON.parse(fs.readFileSync(out.longText, 'utf8'));
@@ -483,7 +475,7 @@ test('clean_snapshot.mjs: 中英文分标准占位，并生成 2_long_text.json 
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('clean_snapshot.mjs: 带样式快照保留样式，SVG 瘦身为壳，占位符与清洗版严格一致', async () => {
+test('snapshot.mjs --from-snapshot: 带样式快照保留样式，SVG 瘦身为壳，占位符与清洗版严格一致', async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-clean-styled-'));
   const url = 'https://example.com/styled-article';
   const urlDir = path.join(tmpRoot, urlToDirName(url));
@@ -504,8 +496,8 @@ test('clean_snapshot.mjs: 带样式快照保留样式，SVG 瘦身为壳，占�
 </body></html>`;
   fs.writeFileSync(path.join(urlDir, '1_snapshot.html'), snapshot);
 
-  const script = path.resolve('script/clean_snapshot.mjs');
-  const r = await runScript(process.execPath, [script, '--url', url], {
+  const script = path.resolve('script/snapshot.mjs');
+  const r = await runScript(process.execPath, [script, '--url', url, '--from-snapshot'], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 30000,
   });
@@ -536,7 +528,7 @@ test('clean_snapshot.mjs: 带样式快照保留样式，SVG 瘦身为壳，占�
   assert.ok(!styled.includes(svgLong) && !styled.includes('<text'), '带样式版不应残留 SVG 子元素与文本');
 
   // 占位形态分两版（2026-09-03 修订）：带样式版带编号 {{LONG_TEXT_k|n_unit}}
-  // （还原链消费），清洗版无编号 {{LONG_TEXT|n_unit}}——唯一消费者是步骤 3，
+  // （还原链消费），清洗版无编号 {{LONG_TEXT|n_unit}}——唯一消费者是步骤 2，
   // 只看结构+体量信号；阈值/豁免两趟同源，规模后缀逐一对应
   const phs = (h) => (h.match(/\{\{LONG_TEXT_\d+\|\d+_[a-z]+\}\}/g) || []).map((s) => s.replace(/^.*\|/, '')).sort();
   const phc = (h) => (h.match(/\{\{LONG_TEXT\|\d+_[a-z]+\}\}/g) || []).map((s) => s.replace(/^.*\|/, '')).sort();
@@ -760,7 +752,7 @@ test('K7: OpenAI 槽壳形态全链路——传播后 mixed_signal 单信号跳�
   // 回归（2026-09-03，developers.openai.com prompt-caching k=5/6）：槽壳
   // .syntax-highlighter-line-numbers display:block 但 us:auto（us:none 只在
   // 数字 span，class 级 CSS）→ 旧实现 bc 计壳=1 与 \n 信号矛盾 →
-  // mixed_signal_mismatch 误杀落步骤 5。<!-- --> 为注释节点三处信号不可见，
+  // mixed_signal_mismatch 误杀落步骤 4。<!-- --> 为注释节点三处信号不可见，
   // 夹具保留以钉死。修复：isGutter 容器传播 → 壳整棵视为槽、bc=0 单信号跳过。
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title>
@@ -791,7 +783,7 @@ test('P0: pre 内空白 token span 不被空元素级联删除——shiki 逐 to
   // 行内 span 当空壳删掉，丢失空格致 constclient=newOpenAI()。pre 子树内
   // 空白是语义内容（<pre> 白空保留是 HTML 语义），应计为内容、不删。
   // 级联在两趟共享段执行（收集之前）——CODE 管线后 ok 块在两版折叠，空白
-  // 保真改由 2_code.json 内容断言（比看 span 存活更强的端到端断言：空格
+  // 保真改由 1_code.json 内容断言（比看 span 存活更强的端到端断言：空格
   // 若被级联吞掉会直接出现在提取内容里）。
   // 对照：Prism 式（裸空白文本节点夹在 span 之间）cascade 只删空元素、不删
   // 文本节点，本就无此 bug；块级仅含空白的元素仍删（既有「空元素级联删除」
@@ -820,7 +812,7 @@ test('P0: pre 内含换行的空白 token span 不被删除——换行保留', 
   // 用户点名的换行形态：shiki 把换行也包成 <span>\n</span>（逐 token），
   // cascade trim 判空会删掉该 span 丢换行。pre 子树内空白（含换行）一律
   // 计为内容。对照：span 间裸换行（Prism 式）cascade 本就不删（只删空元素）。
-  // CODE 管线后 ok 块两版折叠——换行保真改由 2_code.json 内容断言（span
+  // CODE 管线后 ok 块两版折叠——换行保真改由 1_code.json 内容断言（span
   // 若被级联删除，换行丢失会直接出现在提取内容里）。
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
@@ -945,13 +937,13 @@ test('R4+R5: astro 包装解包；安全位置空白删除、行内间空白保�
     // 行内相邻文本/元素之间的空白保留
     const inline = cleaned.match(/<p data-idx="9">([\s\S]*?)<\/p>/)[1];
     assert.ok(inline.includes('x <a') && inline.includes('> z'), `行内间空白应保留: ${JSON.stringify(inline)}`);
-    // 2026-08-28 起 astro 解包两趟共享：带样式版同样解包（脚手架不流进步骤 4-7）
+    // 2026-08-28 起 astro 解包两趟共享：带样式版同样解包（脚手架不流进步骤 3-5）
     assert.ok(!/<astro-[a-z]/.test(styled), '带样式版 astro 包装同样解包');
     assert.ok(styled.includes('data-idx="3"') && styled.includes('data-idx="5"'), '带样式版子元素上提保留');
   } finally { cleanup(); }
 });
 
-test('守卫: 长文本占位形态分两版——styled 带编号、clean 无编号且规模对应，步骤 2 不再 import juice', async () => {
+test('守卫: 长文本占位形态分两版——styled 带编号、clean 无编号且规模对应，清洗模块不再 import juice', async () => {
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
@@ -965,8 +957,8 @@ test('守卫: 长文本占位形态分两版——styled 带编号、clean 无�
     assert.equal(phc(cleaned).length, 1, '清洗版保留无编号占位');
     assert.equal(phc(cleaned)[0].replace('{{LONG_TEXT|', ''), phs(styled)[0].replace(/^.*\|/, ''), '规模后缀两版一致');
     assert.equal(out.longTextCount.total, 1, '恢复清单从 styled 趟占位产出');
-    const src = fs.readFileSync(path.resolve(thisDir, '../../script/clean_snapshot.mjs'), 'utf8');
-    assert.ok(!src.includes("from 'juice'"), '步骤 2 不再 import juice');
+    const src = fs.readFileSync(path.resolve(thisDir, '../../script/lib/clean-snapshot.mjs'), 'utf8');
+    assert.ok(!src.includes("from 'juice'"), '清洗模块不再 import juice');
   } finally { cleanup(); }
 });
 
@@ -1044,7 +1036,7 @@ test('行内结构保留——icon span 内 svg、短文本不经任何折叠', 
   } finally { cleanup(); }
 });
 
-test('<title> 不占位——长中文标题保留作步骤 3 识别线索', async () => {
+test('<title> 不占位——长中文标题保留作步骤 2 识别线索', async () => {
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>提示缓存使用指南与最佳实践完全详解手册</title></head>
 <body>
@@ -1058,9 +1050,9 @@ test('<title> 不占位——长中文标题保留作步骤 3 识别线索', asy
   } finally { cleanup(); }
 });
 
-test('H1/H2/H3 整子树豁免占位——长标题原文保留作步骤 3 识别线索；H4 仍占位', async () => {
+test('H1/H2/H3 整子树豁免占位——长标题原文保留作步骤 2 识别线索；H4 仍占位', async () => {
   // 与 <title> 不占位同款 rationale：H1/H2/H3 是标题层级锚点，占位成
-  // {{LONG_TEXT_k|n_chars}} 会让步骤 3 的 LLM 看不到真实标题文本、无从判
+  // {{LONG_TEXT_k|n_chars}} 会让步骤 2 的 LLM 看不到真实标题文本、无从判
   // 标题层级与 key id 取舍。豁免整子树（嵌套 span/a 等后代文本节点一并豁免，
   // 子树结构原样保留）；H4/H5/H6 仍按阈值占位（字面取 H1/H2/H3）。
   const zhH2 = '汉'.repeat(17);     // 17 字 > 16 → 若不豁免会占位
@@ -1103,9 +1095,9 @@ test('H1/H2/H3 整子树豁免占位——长标题原文保留作步骤 3 识�
 
 test('K10: 空壳 span 拆包（仅 clean）——仅 data-idx 的 span 解包、带 class 保留、嵌套迭代拆净、占位符集合与 styled 一致', async () => {
   // clean 趟 K2 剥掉 style/class 后，「只剩 data-idx」的 span 是纯行内包装，
-  // 对步骤 3 key id 识别无语义；K10 解包把子节点并入（可选中）父块——内容不
+  // 对步骤 2 key id 识别无语义；K10 解包把子节点并入（可选中）父块——内容不
   // 丢、只粒度变粗，省 step 3 输入字节。带样式版保留这些 span（其 style 携
-  // font-weight/color 供步骤 5-7），故只 clean 趟执行；孪生 id 集由「相等」
+  // font-weight/color 供步骤 3-5），故只 clean 趟执行；孪生 id 集由「相等」
   // 放宽为 clean ⊆ styled（step 3 在子集挑、step 4 在超集查恒命中）。
   const long = '这是一段超过十六个汉字的长文本用于占位';
   const snapshot = `<!DOCTYPE html>
@@ -1134,7 +1126,7 @@ test('K10: 空壳 span 拆包（仅 clean）——仅 data-idx 的 span 解包�
     const p9 = cleaned.match(/<p data-idx="9">([\s\S]*?)<\/p>/)[1];
     assert.ok(/\{\{LONG_TEXT\|\d+_chars\}\}/.test(p9), `占位符应落到 <p>: ${p9}`);
     assert.ok(!/<span/.test(p9), '包占位符的裸 span 应拆包');
-    // 带样式版保留短文本段落内的 span（其 style 供步骤 5-7）；长文本段（p9）
+    // 带样式版保留短文本段落内的 span（其 style 供步骤 3-5）；长文本段（p9）
     // run 折叠后整段占位、内部 span 随折消失（canonical HTML 入 runs 段）
     assert.ok(styled.includes('data-idx="3"') && styled.includes('data-idx="7"'), '带样式版应保留短文本段的 span');
     assert.ok(!styled.includes('data-idx="10"') && /<p data-idx="9">\{\{LONG_TEXT_1\|19_chars\}\}<\/p>/.test(styled),
@@ -1147,8 +1139,8 @@ test('K10: 空壳 span 拆包（仅 clean）——仅 data-idx 的 span 解包�
 });
 
 test('S1: astro- 前缀解包提升至两趟——带样式版同样解包，LONG_TEXT 编号不受影响', async () => {
-  // 2026-08-28 起 K4 从清洗版独占提升为两趟共享：带样式版是步骤 4-7 的输入源，
-  // astro 脚手架（含巨量 props 属性）曾一路流进 4_article.html（LLM 输入）。
+  // 2026-08-28 起 K4 从清洗版独占提升为两趟共享：带样式版是步骤 3-5 的输入源，
+  // astro 脚手架（含巨量 props 属性）曾一路流进 3_article.html（LLM 输入）。
   // 枚举扩展为 astro- 前缀匹配——该前缀是框架保留命名空间，static-slot 变体一并解包。
   const longZh = '这是一段放在岛屿里的超长中文文本，用于验证占位编号不受解包扰动。';
   const snapshot = `<!DOCTYPE html>
@@ -1181,7 +1173,7 @@ test('S1: astro- 前缀解包提升至两趟——带样式版同样解包，LON
 
 test('S2: 带样式版属性白名单——22 个内容/级联属性存活，脚手架属性删净，<style> 豁免', async () => {
   // 带样式版保留集 = clean K2 八属性 + style/href/src/width/height（juice 输入、
-  // 步骤 5 链接/图片 URL 源、img 权重信号）+ 内容信号属性（colspan/rowspan/
+  // 步骤 4 链接/图片 URL 源、img 权重信号）+ 内容信号属性（colspan/rowspan/
   // start/aria-label/data-src/srcset/datetime/open/lang——跨格表格、ol 起始
   // 编号、icon-only 可达名、懒加载 URL、details 展开态、语言信号）。
   // <style> 标签整体豁免（media 等级联线索），注入的 meta charset 在白名单
@@ -1202,7 +1194,7 @@ test('S2: 带样式版属性白名单——22 个内容/级联属性存活，脚
   const { styled, cleanup } = await runClean(snapshot, 's2-styled-attrs');
   try {
     const a = styled.match(/<a data-idx="2"[^>]*>/)[0];
-    assert.ok(a.includes('href="https://example.com/x"'), `href 应保留（步骤 5 链接源）: ${a}`);
+    assert.ok(a.includes('href="https://example.com/x"'), `href 应保留（步骤 4 链接源）: ${a}`);
     assert.ok(a.includes('aria-label="链接说明"'), `aria-label 应保留（icon-only 可达名）: ${a}`);
     assert.ok(!/target|rel=|data-v-/.test(a), `a 的脚手架属性应删净: ${a}`);
     const img = styled.match(/<img data-idx="3"[^>]*>/)[0];
@@ -1216,7 +1208,7 @@ test('S2: 带样式版属性白名单——22 个内容/级联属性存活，脚
     }
     assert.ok(!/tabindex|draggable/.test(div), `白名单外属性应删净: ${div}`);
     const td = styled.match(/<td data-idx="6"[^>]*>/)[0];
-    assert.ok(td.includes('colspan="2"') && td.includes('rowspan="3"'), `跨格信号应保留（步骤 5 判复杂表格→trans2img）: ${td}`);
+    assert.ok(td.includes('colspan="2"') && td.includes('rowspan="3"'), `跨格信号应保留（步骤 4 判复杂表格→trans2img）: ${td}`);
     assert.ok(styled.includes('<ol data-idx="7" start="5"'), 'ol start 应保留（起始编号）');
     assert.ok(/<details data-idx="9" open/.test(styled), 'details open 应保留（展开态）');
     assert.ok(styled.includes('datetime="2026-08-28"'), 'time datetime 应保留（日期原文）');
@@ -1225,7 +1217,7 @@ test('S2: 带样式版属性白名单——22 个内容/级联属性存活，脚
     assert.ok(/<style[^>]*data-astro-raw/.test(styled), '<style> 标签属性整体豁免');
     assert.ok(styled.includes('.x{color:red}'), '<style> 文本保留');
     // html lang 保留（render_article 照抄语言信号）；meta charset 注入在白名单之后
-    assert.ok(/<html lang="zh-CN">/.test(styled), 'html lang 应保留（语言信号，步骤 6 照抄）');
+    assert.ok(/<html lang="zh-CN">/.test(styled), 'html lang 应保留（语言信号，步骤 5 照抄）');
     assert.ok(/<head><meta charset="utf-8">/.test(styled), 'meta charset 注入在白名单后仍存活');
   } finally { cleanup(); }
 });
@@ -1266,14 +1258,14 @@ test('带样式版注入 <meta charset="utf-8">——清洗版不注入', async 
 });
 
 
-test('table 占位符：成功表 styled 折叠为 {{TABLE_k}}、2_tables.json 存 markdown', async () => {
+test('table 占位符：成功表 styled 折叠为 {{TABLE_k}}、1_tables.json 存 markdown', async () => {
   const snap = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head><body>
     <table data-idx="5"><thead><tr><th>S</th><th>I</th></tr></thead><tbody><tr><td>m</td><td>L</td></tr></tbody></table>
     </body></html>`;
   const r = await runClean(snap, 'ok-table', { U2M_TABLE_ENGINE: 'self' });
   try {
     assert.match(r.styled, /\{\{TABLE_1\|2×2\}\}/, 'styled 成功表折叠');
-    const tablesJson = JSON.parse(fs.readFileSync(path.join(path.dirname(r.out.cleanedSnapshot), '2_tables.json'), 'utf8'));
+    const tablesJson = JSON.parse(fs.readFileSync(path.join(path.dirname(r.out.cleanedSnapshot), '1_tables.json'), 'utf8'));
     assert.equal(tablesJson['1'].status, 'ok');
     assert.match(tablesJson['1'].markdown, /\| S \| I \|/);
     assert.equal(r.out.tables.ok, 1);
@@ -1315,13 +1307,13 @@ test('table 占位符：--table-engine / U2M_TABLE_ENGINE 选 turndown', async (
     </body></html>`;
   const r = await runClean(snap, 'engine-flag', { U2M_TABLE_ENGINE: 'turndown' });
   try {
-    const tablesJson = JSON.parse(fs.readFileSync(path.join(path.dirname(r.out.cleanedSnapshot), '2_tables.json'), 'utf8'));
+    const tablesJson = JSON.parse(fs.readFileSync(path.join(path.dirname(r.out.cleanedSnapshot), '1_tables.json'), 'utf8'));
     assert.equal(tablesJson['1'].engine, 'turndown');
     assert.equal(tablesJson['1'].status, 'ok');
   } finally { r.cleanup(); }
 });
 
-test('CODE 占位符：shiki 形态两版折叠 + 2_code.json + emit 计数', async () => {
+test('CODE 占位符：shiki 形态两版折叠 + 1_code.json + emit 计数', async () => {
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
@@ -1370,7 +1362,7 @@ test('CODE 占位符：ra 形态（grid 行容器零 \\n）行数修正——不
 test('K11: 纯视图文本折叠——纯 div 树需内部 div>6、文本量 ≥8 汉字；不达标不折、styled 不动', async () => {
   // 2026-09-03 门槛修订：仅折叠「结构脚手架明显 + 文本量达标」的纯视图子树——
   // 纯 div 树内部 div > 6；文本量 ≥8 汉字 / ≥6 词（英文）。短文本、结构单薄的
-  // 子树保留原样（步骤 3 的判读信号）。
+  // 子树保留原样（步骤 2 的判读信号）。
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
@@ -1458,8 +1450,8 @@ test('K11: 含 LT 模块整棵折叠——LT 随折吞没（clean ⊆ styled）�
   // 2026-09-03 三次修订去 LT 限制 + 四次修订顺序重排：clean 趟 K11 先于 LT
   // 占位执行——含长文本的纯视图模块整棵折叠（长文本原文随折吞没、不再以 LT
   // 形态露面），幸存文本节点再按阈值占位且无编号（{{LONG_TEXT|n_unit}}——
-  // 唯一消费者步骤 3 只看结构+体量）。孪生守卫取「clean LT 规模后缀 ⊆
-  // styled」；还原链走带样式版路径不受影响（LT 原文在 2_long_text.json 与
+  // 唯一消费者步骤 2 只看结构+体量）。孪生守卫取「clean LT 规模后缀 ⊆
+  // styled」；还原链走带样式版路径不受影响（LT 原文在 1_long_text.json 与
   // 带样式版中）。纯 LT 文本行（结构门槛 0 内部元素）依旧不折。
   const longZh = '这是一段超过十六个汉字的模块内长文本用于验证折叠行为。';
   const longP = '这是一段同样超过十六个汉字的独立长文本用于对照不折叠。';
@@ -1582,8 +1574,8 @@ test('K11: 行内允许集扩展——strong/em/b/i/code/br/a 混排不再阻断
 test('K11: MathML 整棵放行——含行内公式的 span 树可折、内部 mi/mo 不逐一检查', async () => {
   // 2026-09-03 四次修订：math 加入行内允许集且整棵放行（KaTeX 的 MathML 孪生
   // 含 mi/mo/mn/annotation 等私有结构，逐一检查必假阴性）。此前 math 阻断纯性、
-  // 公式段落永不折；LaTeX 还原链不受影响——步骤 6 的 math 消费走带样式版路径，
-  // clean 版唯一消费者步骤 3 不看公式内部。
+  // 公式段落永不折；LaTeX 还原链不受影响——步骤 5 的 math 消费走带样式版路径，
+  // clean 版唯一消费者步骤 2 不看公式内部。
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
@@ -1724,7 +1716,7 @@ test('run 折叠：math 有源整段折叠（极简形态）+ display 判定 + �
     assert.ok(runs.some((r) => r.includes('<math display="block"><annotation encoding="application/x-tex">')),
       '.katex-display 祖先 → display="block"');
     // 无源：run 不折——styled 保留 <math> 原树与 <mi> 结构（现状链路，
-    // 步骤 6 才是 math 消费者），散文本折叠照旧
+    // 步骤 5 才是 math 消费者），散文本折叠照旧
     assert.ok(styled.includes('<mi>x</mi>'), '无源 math 原树保留');
   } finally { cleanup(); }
 });
@@ -1798,7 +1790,7 @@ test('run 折叠：KaTeX 视觉孪生原子化——canonical 只入极简 math�
       'runs 段无任何孪生痕迹');
     assert.match(styled, /<p data-idx="2">\{\{LONG_TEXT_1\|\d+_chars\}\}<\/p>/,
       'styled：整段占位（壳保留 data-idx）');
-    // 往返钉住：步骤 6 转换器对 canonical 产出单份 $…$，无孪生重复
+    // 往返钉住：步骤 5 转换器对 canonical 产出单份 $…$，无孪生重复
     const md = inlineRunToMarkdown(lt.runs['1']);
     assert.equal(md, '质能方程 $E=mc^2$ 之后的说明文字继续补足十六个汉字的长度要求哦。');
   } finally { cleanup(); }
@@ -1806,7 +1798,7 @@ test('run 折叠：KaTeX 视觉孪生原子化——canonical 只入极简 math�
 
 test('run 序列化：void 元素 br/wbr 不带闭合标签——浏览器→jsdom 往返不产生双硬换行', async () => {
   // HTML5 解析规则把 `</br>` 当 `<br>` 起始标签重建：canonical 若序列化为
-  // `<br></br>`，步骤 6 jsdom 回读得到两个 br → 每个换行渲染成两个（地址/
+  // `<br></br>`，步骤 5 jsdom 回读得到两个 br → 每个换行渲染成两个（地址/
   // 签名/诗歌类高频形态）。void 元素必须输出无闭合标签形态。
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>

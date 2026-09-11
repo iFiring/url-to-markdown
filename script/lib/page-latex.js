@@ -1,6 +1,6 @@
 /**
  * LaTeX 原文提取（共享页面脚本）。从 MathML 元素取原始 LaTeX 源，供
- * 步骤 6 瘦身规则②（page-slim-article.js）整体替换为 $…$ 文本。
+ * 步骤 3 轮 C 瘦身规则②（page-slim-article.js）整体替换为 $…$ 文本。
  * 分级信任（高度还原原则）：
  *  - 声明了 encoding="application/x-tex" 的 <annotation>：信（KaTeX 标准）
  *  - <script type="math/tex"> 子元素 / 前邻 script：信（声明形态）

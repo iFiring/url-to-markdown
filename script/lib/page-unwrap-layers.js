@@ -1,10 +1,10 @@
 /**
- * 步骤 5 预处理：解包 <style> 里的 @layer 级联层。在浏览器 evaluate 中
+ * 步骤 3 轮 B 预处理：解包 <style> 里的 @layer 级联层。在浏览器 evaluate 中
  * 执行，返回处理后的整页 HTML（<!DOCTYPE html> + outerHTML）。
  * 为什么需要：Tailwind v4 把工具类规则包在 `@layer utilities { … }` 里
  * （真实站点 developers.openai.com 实测 56% 的 CSS 在层内），而 juice 不
  * 进入 @layer 块——不解包则层内规则一条都内联不进去，只靠工具类表达
- * 样式的元素（卡片边框/圆角/背景）在步骤 5 后一丝样式不剩，步骤 5 LLM
+ * 样式的元素（卡片边框/圆角/背景）在轮 B 后一丝样式不剩，步骤 4 LLM
  * 丢失「这是个带边框的视觉模块」结构信号。
  * 处理（对每个 <style> 的文本）：
  *   - 块形 `@layer <name>? { … }`：递归解包层体后原位替换（内层规则提升

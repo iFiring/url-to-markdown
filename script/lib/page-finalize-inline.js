@@ -1,5 +1,5 @@
 /**
- * 步骤 5 页面内清场函数。在浏览器 evaluate 中执行，签名
+ * 步骤 3 轮 B 页面内清场函数。在浏览器 evaluate 中执行，签名
  * __u2mFinalizeInline(computedMap)——computedMap 来自
  * page-collect-fn-values.js + page-resolve-computed.js 的函数值真实化管线
  * （{ "<data-idx>": { "<prop>": "<计算值>" } }），可为空对象。
@@ -12,8 +12,8 @@
  *     五个方向 longhand；对齐全族/gap/order/flex 长手/grid placement
  *     全部出白名单；overflow 三件（overflow/overflow-x/y）2026-09-09
  *     同批出白名单）、transform、font-size 与
- *     font-weight（步骤 5 LLM 判标题层级的信号）、
- *     position:absolute（步骤 5 LLM 判特殊定位元素的信号——浮层/装饰/
+ *     font-weight（步骤 4 LLM 判标题层级的信号）、
+ *     position:absolute（步骤 4 LLM 判特殊定位元素的信号——浮层/装饰/
  *     trans2img 候选；按值门控项有二：position 仅 absolute 存活
  *     （relative/fixed/sticky/static 一律删）、display 见 1.9）；长属性
  *     按前缀匹配覆盖（如 border- 前缀同时覆盖 border-radius 等长属性）。
@@ -27,7 +27,7 @@
  *     交互（cursor、user-select）、动画（transition、animation）、厂商
  *     前缀、自定义属性；值为 inherit 的声明同样删除。清空后移除 style
  *     属性。白名单按属性判定而非按元素——行内元素（如高亮 span）的背景
- *     同样保留；唯一元素级例外是 <img>：宽高保留（步骤 5 LLM 判图片权重
+ *     同样保留；唯一元素级例外是 <img>：宽高保留（步骤 4 LLM 判图片权重
  *     的信号——小图标 / 大图 / 图片组）。
  *  1.5 函数值替换：声明值含 var()/color-mix()/calc() 时——白名单内且
  *     computedMap 有该元素该属性的计算值 → setProperty(真实值)（浏览器
@@ -43,7 +43,7 @@
  *     transparent（含 rgba(0,0,0,0) 计算形）、background-image:none、
  *     border-image 初始值（简写展开的五个 longhand，四边全灭才删）、
  *     radius:0px、transform:none、<img> 宽高值 auto
- *     （auto 是初始值无信号量，真实像素宽高保留——步骤 5 图片权重信号）。
+ *     （auto 是初始值无信号量，真实像素宽高保留——步骤 4 图片权重信号）。
  *     flex 布局信号不是零值，保留；font-size/weight 见 1.11 继承等值修剪。
  *     函数值替换出的初始值同受此表过滤——替换整趟先落定（1.5），过滤
  *     在落定后的块上整趟跑（带 var 的简写在 CSSOM 里 longhand 读作空串，
@@ -74,7 +74,7 @@
  *  1.11 继承等值 font 修剪：font-size/font-weight 是继承属性——声明与
  *     继承有效值相等的是纯重复，删（normal≡400、bold≡700、medium≡16px
  *     归一比较，最近祖先声明链上溯、根默认 16px/400）。只删重复、对比点
- *     全保留：bold 下的 400 重置、17px 下的 18px 等步骤 5 需要的层级/
+ *     全保留：bold 下的 400 重置、17px 下的 18px 等步骤 4 需要的层级/
  *     强调信号零损失；em/%/bolder 等不可比形态保守保留。修剪与顺序无关：
  *     只删与有效值相等的声明，祖先行修剪后有效值不变
  *  2. 删除全部 <style> 标签与 class 属性
@@ -97,7 +97,7 @@ function __u2mFinalizeInline(computedMap) {
     'grid-auto-flow': 1, 'grid-template-columns': 1, 'grid-template-rows': 1,
     // overflow 三件 2026-09-09 同批出白名单（滚动裁剪不再是保留信号）
     'transform': 1,
-    // 字体类仅留这两个：步骤 5 LLM 判 div→h2 层级的信号
+    // 字体类仅留这两个：步骤 4 LLM 判 div→h2 层级的信号
     'font-size': 1, 'font-weight': 1
   };
   function keep(prop) {
@@ -107,7 +107,7 @@ function __u2mFinalizeInline(computedMap) {
     }
     return false;
   }
-  // position 按值门控：仅 absolute 保留（步骤 5 特殊定位元素信号）。
+  // position 按值门控：仅 absolute 保留（步骤 4 特殊定位元素信号）。
   // 其余 position 值（relative/fixed/sticky/static）不在此返 true，落入
   // 第二趟「不在白名单」删除。val 取该趟已落定的值——第一趟用解析后的
   // real（var() 驱动时按计算值判定，与其他白名单属性解析 var() 一致），
@@ -264,10 +264,10 @@ function __u2mFinalizeInline(computedMap) {
   }
   var styled = document.querySelectorAll('[style]');
   for (var i = 0; i < styled.length; i++) {
-    // pre 子树内样式对最终 markdown 无语义——仅文本与 data-language 是步骤 5
+    // pre 子树内样式对最终 markdown 无语义——仅文本与 data-language 是步骤 4
     // 所需。高亮 token span 携 font-weight/background/border 等白名单内幸存
-    // 样式，若流进步骤 5 会让 LLM 误产 **bold** 损坏代码。pre 子树内直接剥净
-    // 全部内联样式（跳过白名单/函数值/零值三趟），token span 变 bare 由步骤 6
+    // 样式，若流进步骤 4 会让 LLM 误产 **bold** 损坏代码。pre 子树内直接剥净
+    // 全部内联样式（跳过白名单/函数值/零值三趟），token span 变 bare 由轮 C 瘦身
     // 规则⑥（既有、不改）解包为纯文本。pre 外的 font-weight（标题层级信号）
     // 不受影响、仍按白名单保留。
     if (styled[i].closest('pre')) {
@@ -277,14 +277,14 @@ function __u2mFinalizeInline(computedMap) {
     // table 子树内全部内联样式删净（表格占位符设计）：成功表已折叠为文本节点、
     // 无 [style] 单元格子树 → 此分支对它们 no-op；仅命中失败 live 表
     //（data-u2m-table="fail" 或 styled 趟保留 live 的表）——剥净 border/
-    // background/box-shadow 等，到 4_article.html 只剩结构+文本+长文本占位符
-    // 供步骤 5 LLM 语义还原。
+    // background/box-shadow 等，到 3_article.html 只剩结构+文本+长文本占位符
+    // 供步骤 4 LLM 语义还原。
     if (styled[i].closest('table')) {
       styled[i].removeAttribute('style');
       continue;
     }
     var st = styled[i].style;
-    // 唯一元素级例外：<img> 的宽高保留——步骤 5 LLM 判图片权重的
+    // 唯一元素级例外：<img> 的宽高保留——步骤 4 LLM 判图片权重的
     // 语义信号（小图标 / 大图 / 图片组）；值为 inherit 的照样删
     var isImg = styled[i].tagName === 'IMG';
     var idx = styled[i].getAttribute('data-idx');

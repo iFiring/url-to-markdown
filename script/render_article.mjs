@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 /**
- * render_article.mjs —— 步骤 4：文章视图渲染（原步骤 4/5/6 合并，2026-09-11）。
- * 读 2_clean_style_snapshot.html 与 3_key_ids.json（四键契约
+ * render_article.mjs —— 步骤 3：文章视图渲染（原步骤 4/5/6 合并为单 CLI，
+ * 2026-09-11；同日步骤 1/2 合并后重编号为步骤 3）。
+ * 读 1_clean_style_snapshot.html 与 2_key_ids.json（四键契约
  * titleId/descriptionIds/paragraphIds/dumpIds，校验与 paragraphIds 嵌套展开
  * 共享 lib/key-ids.mjs），单个 chromium 实例三轮处理一气呵成，产出文章视图
- * 4_article.html（写入该 URL 的工作目录）。超过
+ * 3_article.html（写入该 URL 的工作目录）。超过
  * U2M_ARTICLE_SPLIT_THRESHOLD（默认 60KB）时另产出分块
- * 4_article_chunk_X_of_N.html（lib/chunk-article.mjs 纯函数分块，spec
+ * 3_article_chunk_X_of_N.html（lib/chunk-article.mjs 纯函数分块，spec
  * 2026-09-09——第 2 块起带只读上下文；✅/❌ 转换边界标记每块恒在：首块 ✅
  * 紧跟 body 开标签、末块 ❌ 紧贴 </body>）。
  *
@@ -60,7 +61,7 @@
  *     page-slim-article.js）：
  *     - 块模型迁移：titleId/descriptionIds/paragraphIds 块全部按元素本身
  *       迁移（完整子树一字不动）；裸文本无 data-idx 不可标记、不迁——
- *       带裸文本的容器由步骤 3 整体标块兜底
+ *       带裸文本的容器由步骤 2 整体标块兜底
  *     - 去重：同一元素被指名两次只出现一次；title/description 落在段落
  *       块子树内合法——最外层优先嵌套去重；排序按文档序
  *       （compareDocumentPosition）统一迁入
@@ -69,9 +70,9 @@
  *     - 新 <body> 带阅读布局内联样式 max-width: 768px; margin: 4rem auto
  *
  * 产物:
- *   4_extract.html —— 轮 A 裁剪视图（调试中间产物，emit 不报）
- *   4_juice.html   —— 轮 B 纯内联视图（调试中间产物，emit 不报）
- *   4_article.html [+ 4_article_chunk_X_of_N.html] —— 终态文章视图
+ *   3_extract.html —— 轮 A 裁剪视图（调试中间产物，emit 不报）
+ *   3_juice.html   —— 轮 B 纯内联视图（调试中间产物，emit 不报）
+ *   3_article.html [+ 3_article_chunk_X_of_N.html] —— 终态文章视图
  *
  * stdout 输出（有且仅有一行 JSON，日志一律走 stderr）:
  *   {"status":"ok","article":"...","elementCount":N,"removedCount":R,
@@ -126,21 +127,21 @@ async function main() {
   if (!url) return usage('用法: render_article.mjs --url <url>');
 
   const dir = urlDir(url);
-  const styledPath = path.join(dir, '2_clean_style_snapshot.html');
-  const keyIdsPath = path.join(dir, '3_key_ids.json');
+  const styledPath = path.join(dir, '1_clean_style_snapshot.html');
+  const keyIdsPath = path.join(dir, '2_key_ids.json');
 
   if (!fs.existsSync(styledPath)) {
-    return emitError(`找不到 ${styledPath}，请先运行步骤 2`);
+    return emitError(`找不到 ${styledPath}，请先运行步骤 1`);
   }
   if (!fs.existsSync(keyIdsPath)) {
-    return emitError(`找不到 ${keyIdsPath}，请先运行步骤 3`);
+    return emitError(`找不到 ${keyIdsPath}，请先运行步骤 2`);
   }
 
   const keyIds = JSON.parse(await fsPromises.readFile(keyIdsPath, 'utf8'));
 
   // 四键契约校验（开浏览器前拦截形状与自相矛盾输入）与 paragraphIds
   // 嵌套展开（数组 = 子段落流 → 扁平块清单）共享 lib/key-ids.mjs——
-  // 本步骤与步骤 6 render_markdown 读同一文件、同一校验事实源
+  // 本步骤与步骤 5 render_markdown 读同一文件、同一校验事实源
   const parsed = parseKeyIds(keyIds);
   if (parsed.error) return emitError(parsed.error);
   const { titleId, descriptionIds, blockIds, dumpIds } = parsed;
@@ -178,7 +179,7 @@ async function main() {
       await browser.close();
       browser = null;
       return emitError(
-        `key id 在带样式快照中未命中: ${extract.missing.join(', ')}（key_ids 与快照不匹配，请重跑步骤 3）`,
+        `key id 在带样式快照中未命中: ${extract.missing.join(', ')}（key_ids 与快照不匹配，请重跑步骤 2）`,
         1
       );
     }
@@ -187,12 +188,12 @@ async function main() {
       await browser.close();
       browser = null;
       return emitError(
-        `dumpIds 与 key 元素冲突: dump ${extract.conflict.dump} 是 key ${extract.conflict.key} 的祖先（折叠会摧毁 key 子树），请重跑步骤 3`,
+        `dumpIds 与 key 元素冲突: dump ${extract.conflict.dump} 是 key ${extract.conflict.key} 的祖先（折叠会摧毁 key 子树），请重跑步骤 2`,
         1
       );
     }
 
-    const extractPath = path.join(dir, '4_extract.html');
+    const extractPath = path.join(dir, '3_extract.html');
     await fsPromises.writeFile(extractPath, extract.html, 'utf8');
     log(`样式视图裁剪完成: ${extractPath} (删除 ${extract.removed} 个元素, 折叠噪音 ${extract.dumpCollapsed} 个)`);
 
@@ -241,7 +242,7 @@ async function main() {
     }
     const final = await page.evaluate(`(${pageFinalizeFn})(${JSON.stringify(computedMap)})`);
 
-    const juicePath = path.join(dir, '4_juice.html');
+    const juicePath = path.join(dir, '3_juice.html');
     await fsPromises.writeFile(juicePath, final.html, 'utf8');
     log(`样式内联完成: ${juicePath} (${final.styledCount} 个元素带样式)`);
 
@@ -254,7 +255,7 @@ async function main() {
 
     if (migrated.missing) {
       // 防御分支：轮 A 已在同一批 id 上校验过命中，内联后丢失属管线
-      // 内部错误，不指路步骤 3
+      // 内部错误，不指路步骤 2
       await context.close();
       await browser.close();
       browser = null;
@@ -278,7 +279,7 @@ async function main() {
     );
 
     // 分块收集：与 slimHtml 同一 DOM 同一序列化器——每块 markup 与
-    // 4_article.html 逐字节一致（spec 2026-09-09 §3.2）
+    // 3_article.html 逐字节一致（spec 2026-09-09 §3.2）
     const children = await page.evaluate(
       '(() => [...document.body.children].map((el) => el.outerHTML))()'
     );
@@ -288,21 +289,21 @@ async function main() {
     await browser.close();
     browser = null;
 
-    const articlePath = path.join(dir, '4_article.html');
+    const articlePath = path.join(dir, '3_article.html');
     await fsPromises.writeFile(articlePath, slimHtml, 'utf8');
     log(`文章视图提取完成: ${articlePath} (${migrated.count} 个元素, 瘦身 ${JSON.stringify(slimStats)})`);
 
-    // ── stale 清理（spec §3.6）：重跑本步骤后任何已存在的步骤 5 骨架必然
+    // ── stale 清理（spec §3.6）：重跑本步骤后任何已存在的步骤 4 骨架必然
     //    失效；另一模式的旧分块 html 一并清理 ──
     for (const f of fs.readdirSync(dir)) {
-      if (f === '5_skeleton.json' || /^5_skeleton_chunk_\d+_of_\d+\.json$/.test(f)) {
+      if (f === '4_skeleton.json' || /^4_skeleton_chunk_\d+_of_\d+\.json$/.test(f)) {
         fs.rmSync(path.join(dir, f));
       }
     }
     const splitThreshold = posIntEnv('U2M_ARTICLE_SPLIT_THRESHOLD', DEFAULT_SPLIT_THRESHOLD);
     const chunkMax = posIntEnv('U2M_ARTICLE_CHUNK_MAX', DEFAULT_CHUNK_MAX);
     const { split, chunks: chunkFiles } = chunkArticle(slimHtml, children, { splitThreshold, chunkMax });
-    const CHUNK_HTML_RE = /^4_article_chunk_(\d+)_of_(\d+)\.html$/;
+    const CHUNK_HTML_RE = /^3_article_chunk_(\d+)_of_(\d+)\.html$/;
     for (const f of fs.readdirSync(dir)) {
       const cm = CHUNK_HTML_RE.exec(f);
       if (cm && (!split || Number(cm[1]) > chunkFiles.length)) fs.rmSync(path.join(dir, f));
@@ -310,7 +311,7 @@ async function main() {
     const chunkPaths = [];
     if (split) {
       for (const c of chunkFiles) {
-        const p = path.join(dir, `4_article_chunk_${c.x}_of_${c.n}.html`);
+        const p = path.join(dir, `3_article_chunk_${c.x}_of_${c.n}.html`);
         await fsPromises.writeFile(p, c.html, 'utf8');
         chunkPaths.push(p);
       }

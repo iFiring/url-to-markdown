@@ -11,14 +11,14 @@ async function runClean(tmpRoot, url) {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, '1_snapshot.html'),
     fs.readFileSync(path.resolve('test/fixtures/code-blocks.html')));
-  const r = await runScript(process.execPath, [path.resolve('script/clean_snapshot.mjs'), '--url', url],
+  const r = await runScript(process.execPath, [path.resolve('script/snapshot.mjs'), '--url', url, '--from-snapshot'],
     { env: { U2M_WORKING_ROOT: tmpRoot }, timeoutMs: 60000 });
   return { r, dir };
 }
 
 const URL = 'https://example.com/code-blocks';
 
-test('代码管线：2_code.json 各形态判定与内容（spec §6.3 验收基准）', async () => {
+test('代码管线：1_code.json 各形态判定与内容（spec §6.3 验收基准）', async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-integ-code-'));
   try {
     const { r, dir } = await runClean(tmpRoot, URL);
@@ -29,7 +29,7 @@ test('代码管线：2_code.json 各形态判定与内容（spec §6.3 验收基
     assert.equal(out.codes.ok, 8);
     assert.equal(out.codes.failed, 3);
 
-    const cj = JSON.parse(fs.readFileSync(path.join(dir, '2_code.json'), 'utf8'));
+    const cj = JSON.parse(fs.readFileSync(path.join(dir, '1_code.json'), 'utf8'));
     // b1 shiki：ok、lang、两行
     assert.equal(cj['1'].status, 'ok');
     assert.equal(cj['1'].lang, 'javascript');
@@ -88,14 +88,14 @@ test('代码管线：styled ok 折 / failed live，clean 恒折，k 对齐，dat
   } finally { fs.rmSync(tmpRoot, { recursive: true, force: true }); }
 });
 
-test('代码管线：步骤 6 精确匹配还原 + 自适应围栏（端到端）', async () => {
+test('代码管线：步骤 5 精确匹配还原 + 自适应围栏（端到端）', async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-integ-code-'));
   try {
     const { r, dir } = await runClean(tmpRoot, URL);
     assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-    fs.writeFileSync(path.join(dir, '3_key_ids.json'),
+    fs.writeFileSync(path.join(dir, '2_key_ids.json'),
       JSON.stringify({ titleId: 1, descriptionIds: [], paragraphIds: [120], dumpIds: [] }));
-    fs.writeFileSync(path.join(dir, '5_skeleton.json'), JSON.stringify([
+    fs.writeFileSync(path.join(dir, '4_skeleton.json'), JSON.stringify([
       { h1: '# 代码块形态测试' },
       { code: '{{CODE_1}}' },
       { code: '{{CODE_9}}' },                                    // 内容含 ``` 与字面 {{CODE_2}}
@@ -110,7 +110,7 @@ test('代码管线：步骤 6 精确匹配还原 + 自适应围栏（端到端�
     assert.deepEqual(out8.failedCodes, []);
     const resolved = JSON.parse(fs.readFileSync(out8.resolvedSkeleton, 'utf8'));
     assert.deepEqual(resolved[1].code, { lang: 'javascript', content: 'import OpenAI;\nconst client = 1;' });
-    // b9 的字面 {{CODE_2}} 不被误替换（2_code.json 里 2 号存在）
+    // b9 的字面 {{CODE_2}} 不被误替换（1_code.json 里 2 号存在）
     assert.ok(resolved[2].code.content.includes('{{CODE_2}} inline'));
     const md = fs.readFileSync(out8.markdownPath, 'utf8');
     // b9 内容含 ``` → 4 重围栏

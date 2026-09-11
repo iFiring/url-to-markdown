@@ -1,5 +1,5 @@
 /**
- * 步骤 6 元素签名（live 重渲染页与 1_snapshot 页共用）。
+ * 步骤 5 元素签名（live 重渲染页与 1_snapshot 页共用）。
  * 对给定 data-idx 列表计算 {tag, text, childCount} 签名：text 为折叠
  * 空白后截断 300 字符的 textContent。两侧用同一函数、Node 侧逐字段比对——
  * 全等才允许 live 截图，失配即降级快照兜底（假阴性偏向：时间戳/计数等

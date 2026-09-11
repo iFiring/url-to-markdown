@@ -10,7 +10,7 @@ const snapshotScript = path.resolve('script/snapshot.mjs');
 const transScript = path.resolve('script/render_markdown.mjs');
 
 // 可翻版的 live 夹具服务器：v1 → v2 在模块前插入新段落并改模块文本，
-// 使 data-idx 平移 + 签名失配 → 步骤 6 应自动降级快照兜底。
+// 使 data-idx 平移 + 签名失配 → 步骤 5 应自动降级快照兜底。
 // 内联 script 刻意保留：验证「剥 script 再标记」的确定性在两次渲染间成立。
 function startLiveServer() {
   let variant = 'v1';
@@ -63,7 +63,7 @@ after(() => {
   if (tmpRoot) fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('步骤 6 live 重渲染：同内容两次渲染 id 对位 → source:"live"；翻版失配 → 自动兜底 "snapshot"', async () => {
+test('步骤 5 live 重渲染：同内容两次渲染 id 对位 → source:"live"；翻版失配 → 自动兜底 "snapshot"', async () => {
   // ── 步骤 1：对 v1 页面抓快照 ──
   const r1 = await runScript(process.execPath, [snapshotScript, '--url', server.url], {
     env: { U2M_WORKING_ROOT: tmpRoot },
@@ -82,17 +82,17 @@ test('步骤 6 live 重渲染：同内容两次渲染 id 对位 → source:"live
   const moduleId = m[1] || m[2];
   assert.ok(Number(moduleId) > 0, `模块 id 应为正数: ${moduleId}`);
 
-  fs.writeFileSync(path.join(urlDir, '5_skeleton.json'), JSON.stringify([{ trans2img: [Number(moduleId)] }]));
-  fs.writeFileSync(path.join(urlDir, '2_long_text.json'), '{}');
-  // 步骤 3 产物（本夹具由测试代写，四键契约）：标题 1，块 = 模块前后两个段落
-  fs.writeFileSync(path.join(urlDir, '3_key_ids.json'), JSON.stringify({
+  fs.writeFileSync(path.join(urlDir, '4_skeleton.json'), JSON.stringify([{ trans2img: [Number(moduleId)] }]));
+  fs.writeFileSync(path.join(urlDir, '1_long_text.json'), '{}');
+  // 步骤 2 产物（本夹具由测试代写，四键契约）：标题 1，块 = 模块前后两个段落
+  fs.writeFileSync(path.join(urlDir, '2_key_ids.json'), JSON.stringify({
     titleId: 1,
     descriptionIds: [],
     paragraphIds: [Number(moduleId) - 1, Number(moduleId) + 1],
     dumpIds: [],
   }));
 
-  // ── 步骤 6（v1：live 重渲染结构一致 → id 对位、签名全等）──
+  // ── 步骤 5（v1：live 重渲染结构一致 → id 对位、签名全等）──
   const r2 = await runScript(process.execPath, [transScript, '--url', server.url], {
     env: { U2M_WORKING_ROOT: tmpRoot },
     timeoutMs: 90000,
@@ -109,7 +109,7 @@ test('步骤 6 live 重渲染：同内容两次渲染 id 对位 → source:"live
   assert.equal(buf.toString('ascii', 0, 4), 'RIFF', 'WebP RIFF header');
   assert.equal(buf.toString('ascii', 8, 12), 'WEBP', 'WebP WEBP signature');
 
-  // ── 翻版 → 步骤 6（v2：id 平移 + 文本变更 → 严校验失配 → 快照兜底）──
+  // ── 翻版 → 步骤 5（v2：id 平移 + 文本变更 → 严校验失配 → 快照兜底）──
   await server.flip();
   const r3 = await runScript(process.execPath, [transScript, '--url', server.url], {
     env: { U2M_WORKING_ROOT: tmpRoot },
@@ -123,6 +123,6 @@ test('步骤 6 live 重渲染：同内容两次渲染 id 对位 → source:"live
   assert.ok(fs.existsSync(webp), '兜底截图应覆盖写入');
 
   // resolved skeleton 同步产出：trans2img 回写为择优选中的截图路径
-  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '6_resolved_skeleton.json'), 'utf8'));
+  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '5_resolved_skeleton.json'), 'utf8'));
   assert.deepEqual(resolved, [{ trans2img: `assets/trans/${moduleId}.webp` }]);
 });

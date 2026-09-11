@@ -1,7 +1,7 @@
 /**
- * key-ids.mjs —— 3_key_ids.json 四键契约（titleId/descriptionIds/
+ * key-ids.mjs —— 2_key_ids.json 四键契约（titleId/descriptionIds/
  * paragraphIds/dumpIds）的共享解析与校验。
- * 步骤 3 产出的 key_ids 被步骤 4 render_article 与步骤 6 render_markdown 读取，校验规则
+ * 步骤 2 产出的 key_ids 被步骤 3 render_article 与步骤 5 render_markdown 读取，校验规则
  * 单一事实源在此：形状拦截（类型/正整数）、paragraphIds 嵌套展开
  * （数组 = 子段落流，展开为扁平块清单 blockIds——页面函数只收扁平
  * 清单，展开逻辑不分叉）、四键约束（titleId/descriptionIds 可与
@@ -14,7 +14,7 @@
  *   if (parsed.error) return emitError(parsed.error);
  *   const { titleId, descriptionIds, blockIds, dumpIds } = parsed;
  *
- * 返回 {error: string}（含「请重跑步骤 3」指路）或
+ * 返回 {error: string}（含「请重跑步骤 2」指路）或
  * {titleId, descriptionIds, blockIds, dumpIds}（titleId 归一为
  * number|null，缺省键归一为空数组）。
  */
@@ -23,10 +23,10 @@ export function parseKeyIds(keyIds) {
   const descriptionIds = Array.isArray(keyIds.descriptionIds) ? keyIds.descriptionIds : [];
   const dumpIds = Array.isArray(keyIds.dumpIds) ? keyIds.dumpIds : [];
   if (titleId !== null && !(Number.isInteger(titleId) && titleId > 0)) {
-    return { error: 'titleId 应为正整数或 null，请重跑步骤 3' };
+    return { error: 'titleId 应为正整数或 null，请重跑步骤 2' };
   }
   if (!Array.isArray(keyIds.paragraphIds) || keyIds.paragraphIds.length === 0) {
-    return { error: 'paragraphIds 为空（步骤 3 要求至少标一个段落块），请重跑步骤 3' };
+    return { error: 'paragraphIds 为空（步骤 2 要求至少标一个段落块），请重跑步骤 2' };
   }
   const blockIds = [];
   const invalidMembers = [];
@@ -39,7 +39,7 @@ export function parseKeyIds(keyIds) {
   })(keyIds.paragraphIds);
   if (invalidMembers.length > 0) {
     return {
-      error: `paragraphIds 含非法成员: ${invalidMembers.map((m) => JSON.stringify(m)).join(', ')}（段落块 ID 应为正整数，数组为子段落流），请重跑步骤 3`,
+      error: `paragraphIds 含非法成员: ${invalidMembers.map((m) => JSON.stringify(m)).join(', ')}（段落块 ID 应为正整数，数组为子段落流），请重跑步骤 2`,
     };
   }
 
@@ -61,7 +61,7 @@ export function parseKeyIds(keyIds) {
   for (const id of blockIds) collect(id, 'paragraphIds');
   for (const id of dumpIds) collect(id, 'dumpIds');
   if (dup.length > 0) {
-    return { error: `四键标记重叠: ${dup.join('; ')}（titleId/descriptionIds 可与 paragraphIds 重叠，其余不得），请重跑步骤 3` };
+    return { error: `四键标记重叠: ${dup.join('; ')}（titleId/descriptionIds 可与 paragraphIds 重叠，其余不得），请重跑步骤 2` };
   }
   return { titleId, descriptionIds, blockIds, dumpIds };
 }

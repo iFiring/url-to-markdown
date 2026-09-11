@@ -1,5 +1,5 @@
 // script/lib/download_images.mjs
-// 步骤 6 图片下载：把骨架 img 条目的远端图片落到 assets/images/。
+// 步骤 5 图片下载：把骨架 img 条目的远端图片落到 assets/images/。
 // 命名规则（沿用旧管线经验：扩展名按 content-type、失败保留原 URL）：
 //   - 优先用 URL 文件名（basename 去已知图片扩展名、百分号解码、清洗特殊字符）
 //   - 同名冲突带编号：cover.png → cover-1.png → cover-2.png（不同扩展名不冲突）
