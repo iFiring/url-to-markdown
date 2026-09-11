@@ -1,10 +1,11 @@
 /**
  * skeleton2md.mjs —— 骨架 → markdown 纯函数渲染（原步骤 9 render_skeleton.mjs
- * 的核心逻辑，2026-09-11 步骤 8/9 合并时平移抽 lib）。被步骤 8
+ * 的核心逻辑，2026-09-11 步骤 8/9 合并时平移抽 lib；同日步骤重编号后
+ * 步骤号为 5/6）。被步骤 6
  * render_markdown.mjs 在占位符还原 + 图片下载 + trans2img 择优回写之后调用。
  *
  * 转换规则（契约见 references/markdown_skeleton_guide.md：value 已带行外
- * 语法——#、>、- 、1.、![img](url) 由步骤 7 写好，行内 markdown 同理）：
+ * 语法——#、>、- 、1.、![img](url) 由步骤 5 写好，行内 markdown 同理）：
  *   h1-h6       以 key 为准重建：剥 value 自带 # 前缀（仅剥后随空白者，
  *               「#1 排行榜」这类正文不误伤）后按级别补 "#"*N——LLM 漏写
  *               /写错级别也能纠正
@@ -47,7 +48,7 @@ function entryToMarkdown(key, value) {
       // trans2img 守卫）。
       if (!value || typeof value !== 'object') {
         throw new Error(
-          `code 条目 value 应为 {lang, content} 对象，实际为: ${JSON.stringify(value)}——引用了未还原的代码占位符（2_code.json 中不存在或 failed），请按步骤 7 指南修正 7_skeleton.json 后重跑步骤 8`
+          `code 条目 value 应为 {lang, content} 对象，实际为: ${JSON.stringify(value)}——引用了未还原的代码占位符（2_code.json 中不存在或 failed），请按步骤 5 指南修正 5_skeleton.json 后重跑步骤 6`
         );
       }
       // lang 来自 data-language 属性链，可能携垃圾字符（反引号/换行会破坏围栏

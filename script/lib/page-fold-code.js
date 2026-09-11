@@ -3,7 +3,7 @@
 // detach，!parentNode 守卫自然跳过；含 pre 的表本就因嵌套块级内容判 failed
 // 保 live）。ok → data-language 提升 + 清空子树 + {{CODE_k|n_lines}} 文本
 // 节点（n_lines 取 2_code.json 修剪后行数）；failed → 保 live、打
-// data-u2m-code="fail"（诊断 + 步骤 7 信号；样式剥离由步骤 5 现有
+// data-u2m-code="fail"（诊断 + 步骤 5 信号；样式剥离由步骤 5 现有
 // closest('pre') 分支覆盖）。与 clean 趟 K7 的 map 折叠同形、k 一致。
 function __u2mFoldCode(resultByDataIdx) {
   var pres = document.querySelectorAll('pre');

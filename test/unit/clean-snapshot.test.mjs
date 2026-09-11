@@ -760,7 +760,7 @@ test('K7: OpenAI 槽壳形态全链路——传播后 mixed_signal 单信号跳�
   // 回归（2026-09-03，developers.openai.com prompt-caching k=5/6）：槽壳
   // .syntax-highlighter-line-numbers display:block 但 us:auto（us:none 只在
   // 数字 span，class 级 CSS）→ 旧实现 bc 计壳=1 与 \n 信号矛盾 →
-  // mixed_signal_mismatch 误杀落步骤 7。<!-- --> 为注释节点三处信号不可见，
+  // mixed_signal_mismatch 误杀落步骤 5。<!-- --> 为注释节点三处信号不可见，
   // 夹具保留以钉死。修复：isGutter 容器传播 → 壳整棵视为槽、bc=0 单信号跳过。
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title>
@@ -1148,7 +1148,7 @@ test('K10: 空壳 span 拆包（仅 clean）——仅 data-idx 的 span 解包�
 
 test('S1: astro- 前缀解包提升至两趟——带样式版同样解包，LONG_TEXT 编号不受影响', async () => {
   // 2026-08-28 起 K4 从清洗版独占提升为两趟共享：带样式版是步骤 4-7 的输入源，
-  // astro 脚手架（含巨量 props 属性）曾一路流进 6_article.html（LLM 输入）。
+  // astro 脚手架（含巨量 props 属性）曾一路流进 4_article.html（LLM 输入）。
   // 枚举扩展为 astro- 前缀匹配——该前缀是框架保留命名空间，static-slot 变体一并解包。
   const longZh = '这是一段放在岛屿里的超长中文文本，用于验证占位编号不受解包扰动。';
   const snapshot = `<!DOCTYPE html>
@@ -1181,7 +1181,7 @@ test('S1: astro- 前缀解包提升至两趟——带样式版同样解包，LON
 
 test('S2: 带样式版属性白名单——22 个内容/级联属性存活，脚手架属性删净，<style> 豁免', async () => {
   // 带样式版保留集 = clean K2 八属性 + style/href/src/width/height（juice 输入、
-  // 步骤 7 链接/图片 URL 源、img 权重信号）+ 内容信号属性（colspan/rowspan/
+  // 步骤 5 链接/图片 URL 源、img 权重信号）+ 内容信号属性（colspan/rowspan/
   // start/aria-label/data-src/srcset/datetime/open/lang——跨格表格、ol 起始
   // 编号、icon-only 可达名、懒加载 URL、details 展开态、语言信号）。
   // <style> 标签整体豁免（media 等级联线索），注入的 meta charset 在白名单
@@ -1202,7 +1202,7 @@ test('S2: 带样式版属性白名单——22 个内容/级联属性存活，脚
   const { styled, cleanup } = await runClean(snapshot, 's2-styled-attrs');
   try {
     const a = styled.match(/<a data-idx="2"[^>]*>/)[0];
-    assert.ok(a.includes('href="https://example.com/x"'), `href 应保留（步骤 7 链接源）: ${a}`);
+    assert.ok(a.includes('href="https://example.com/x"'), `href 应保留（步骤 5 链接源）: ${a}`);
     assert.ok(a.includes('aria-label="链接说明"'), `aria-label 应保留（icon-only 可达名）: ${a}`);
     assert.ok(!/target|rel=|data-v-/.test(a), `a 的脚手架属性应删净: ${a}`);
     const img = styled.match(/<img data-idx="3"[^>]*>/)[0];
@@ -1216,7 +1216,7 @@ test('S2: 带样式版属性白名单——22 个内容/级联属性存活，脚
     }
     assert.ok(!/tabindex|draggable/.test(div), `白名单外属性应删净: ${div}`);
     const td = styled.match(/<td data-idx="6"[^>]*>/)[0];
-    assert.ok(td.includes('colspan="2"') && td.includes('rowspan="3"'), `跨格信号应保留（步骤 7 判复杂表格→trans2img）: ${td}`);
+    assert.ok(td.includes('colspan="2"') && td.includes('rowspan="3"'), `跨格信号应保留（步骤 5 判复杂表格→trans2img）: ${td}`);
     assert.ok(styled.includes('<ol data-idx="7" start="5"'), 'ol start 应保留（起始编号）');
     assert.ok(/<details data-idx="9" open/.test(styled), 'details open 应保留（展开态）');
     assert.ok(styled.includes('datetime="2026-08-28"'), 'time datetime 应保留（日期原文）');
@@ -1224,7 +1224,7 @@ test('S2: 带样式版属性白名单——22 个内容/级联属性存活，脚
     assert.ok(/<style[^>]*media="screen"/.test(styled), '<style> 的 media 属性应豁免保留');
     assert.ok(/<style[^>]*data-astro-raw/.test(styled), '<style> 标签属性整体豁免');
     assert.ok(styled.includes('.x{color:red}'), '<style> 文本保留');
-    // html lang 保留（extract_article 照抄语言信号）；meta charset 注入在白名单之后
+    // html lang 保留（render_article 照抄语言信号）；meta charset 注入在白名单之后
     assert.ok(/<html lang="zh-CN">/.test(styled), 'html lang 应保留（语言信号，步骤 6 照抄）');
     assert.ok(/<head><meta charset="utf-8">/.test(styled), 'meta charset 注入在白名单后仍存活');
   } finally { cleanup(); }
@@ -1798,7 +1798,7 @@ test('run 折叠：KaTeX 视觉孪生原子化——canonical 只入极简 math�
       'runs 段无任何孪生痕迹');
     assert.match(styled, /<p data-idx="2">\{\{LONG_TEXT_1\|\d+_chars\}\}<\/p>/,
       'styled：整段占位（壳保留 data-idx）');
-    // 往返钉住：步骤 8 转换器对 canonical 产出单份 $…$，无孪生重复
+    // 往返钉住：步骤 6 转换器对 canonical 产出单份 $…$，无孪生重复
     const md = inlineRunToMarkdown(lt.runs['1']);
     assert.equal(md, '质能方程 $E=mc^2$ 之后的说明文字继续补足十六个汉字的长度要求哦。');
   } finally { cleanup(); }
@@ -1806,7 +1806,7 @@ test('run 折叠：KaTeX 视觉孪生原子化——canonical 只入极简 math�
 
 test('run 序列化：void 元素 br/wbr 不带闭合标签——浏览器→jsdom 往返不产生双硬换行', async () => {
   // HTML5 解析规则把 `</br>` 当 `<br>` 起始标签重建：canonical 若序列化为
-  // `<br></br>`，步骤 8 jsdom 回读得到两个 br → 每个换行渲染成两个（地址/
+  // `<br></br>`，步骤 6 jsdom 回读得到两个 br → 每个换行渲染成两个（地址/
   // 签名/诗歌类高频形态）。void 元素必须输出无闭合标签形态。
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>

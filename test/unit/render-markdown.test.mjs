@@ -47,7 +47,7 @@ test('render_markdown.mjs: 无参数时输出 usage_error', async () => {
 // 模块的截图边界链：[9]（无样式外层包裹，占满 body 宽）→ [10]（带背景/
 // 边框的模块容器，被 9 的 padding 收窄）→ [11]/[12] 内部装饰。
 // 链上 9 比 10 宽 → 择优应选 9 的截图。
-// --url 指向死端口 → 步骤 8 的 live 重渲染即时失败（ECONNREFUSED），
+// --url 指向死端口 → 步骤 6 的 live 重渲染即时失败（ECONNREFUSED），
 // 离线走快照兜底
 const SNAPSHOT = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>测试</title><base data-u2m-base="1" href="http://127.0.0.1:9/dead"></head><body>
@@ -106,7 +106,7 @@ function setupTmp(name, { snapshot = SNAPSHOT, skeleton = SKELETON, longText = L
   fs.mkdirSync(urlDir, { recursive: true });
   fs.mkdirSync(assetsDir, { recursive: true });
   if (snapshot !== null) fs.writeFileSync(path.join(urlDir, '1_snapshot.html'), snapshot);
-  if (skeleton !== null) fs.writeFileSync(path.join(urlDir, '7_skeleton.json'), JSON.stringify(skeleton));
+  if (skeleton !== null) fs.writeFileSync(path.join(urlDir, '5_skeleton.json'), JSON.stringify(skeleton));
   if (longText !== null) fs.writeFileSync(path.join(urlDir, '2_long_text.json'), JSON.stringify(longText));
   if (keyIds !== null) fs.writeFileSync(path.join(urlDir, '3_key_ids.json'), JSON.stringify(keyIds));
   return { tmpRoot, urlDir, assetsDir };
@@ -131,7 +131,7 @@ test('render_markdown.mjs: live 不可达时快照兜底截图 + resolved skelet
   assert.ok(keepLines.some((l) => /keep 命中 5$/.test(l)),
     `keep 集应命中全部四键内容 id + trans id（分类层调试行: ${keepLines.join(' | ') || '无'}）`);
   assert.equal(out.source, 'snapshot', 'live 重渲染失败（死端口）应整体走快照兜底');
-  assert.equal(out.resolvedSkeleton, path.join(urlDir, '8_resolved_skeleton.json'));
+  assert.equal(out.resolvedSkeleton, path.join(urlDir, '6_resolved_skeleton.json'));
 
   // 链上所有截图文件存在且为 WebP
   for (const id of [9, 10]) {
@@ -146,7 +146,7 @@ test('render_markdown.mjs: live 不可达时快照兜底截图 + resolved skelet
 
   // resolved skeleton：占位符全部还原；trans2img 择优回写为选中路径
   // （外层 9 占满 body 宽 > 被其 padding 收窄的 10 → 选 9）
-  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
+  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '6_resolved_skeleton.json'), 'utf8'));
   assert.deepEqual(resolved, [
     { h1: '# 标题' },
     { p: '段落一文本内容' },
@@ -173,7 +173,7 @@ test('render_markdown.mjs: 择优按宽度优先——内层更宽时选内层',
   assert.equal(out.status, 'ok');
   assert.equal(out.count, 2);
 
-  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
+  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '6_resolved_skeleton.json'), 'utf8'));
   assert.deepEqual(resolved, [{ trans2img: 'assets/trans/31.webp' }],
     '内层 31（900px）宽于外层 30（316px）→ 选 31');
 
@@ -196,7 +196,7 @@ test('render_markdown.mjs: 宽高全同的平局选最外层', async () => {
   assert.equal(out.status, 'ok');
   assert.equal(out.count, 2);
 
-  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
+  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '6_resolved_skeleton.json'), 'utf8'));
   assert.deepEqual(resolved, [{ trans2img: 'assets/trans/40.webp' }],
     '40/41 宽高一致 → 选数组首位（最外层）40');
 
@@ -206,7 +206,7 @@ test('render_markdown.mjs: 宽高全同的平局选最外层', async () => {
 // 手风琴折叠模块：站点 CSS 把 .body 折叠为 display:none——快照（样式内联）
 // 与 live 重渲染同为隐藏态。链上 50（手风琴项，含可见按钮）自身有盒、
 // 51（折叠 body）/52（模块）无布局盒。隐藏模块是步骤 2 检测、带样式版
-// 保真流到步骤 7 的合法 trans2img 标记——步骤 8 必须强制展开出图，
+// 保真流到步骤 5 的合法 trans2img 标记——步骤 6 必须强制展开出图，
 // 而不是 el.screenshot() 等可见 30s 超时把整次转换打成 error
 const SNAPSHOT_ACCORDION = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>折叠模块</title><base data-u2m-base="1" href="http://127.0.0.1:9/dead">
@@ -259,7 +259,7 @@ test('render_markdown.mjs: display:none 折叠模块强制展开后出图，不�
   // 择优：展开只发生在各 id 自己截图前、方向向上——50 截图时折叠的 51
   // 尚未展开（盒 = 按钮高度），51/52 展开后等高且更高 → 等宽选高选 51
   // （展开的内容包装，不含展开按钮，恰是模块语义主体）
-  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
+  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '6_resolved_skeleton.json'), 'utf8'));
   assert.deepEqual(resolved, [{ trans2img: 'assets/trans/51.webp' }],
     '折叠链强制展开后择优应回写路径（等宽选高 → 51）');
 
@@ -290,7 +290,7 @@ test('render_markdown.mjs: max-height:0 裁剪模块强制展开后出真实内�
   }
 
   // 展开后 71/72 等宽等高 → 平局选最外层 71
-  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
+  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '6_resolved_skeleton.json'), 'utf8'));
   assert.deepEqual(resolved, [{ trans2img: 'assets/trans/71.webp' }],
     '裁剪链强制展开后择优应回写路径（全同选最外层 → 71）');
 
@@ -331,7 +331,7 @@ test('render_markdown.mjs: display:contents 透明包装跳过不报错，视觉
   assert.ok(fs.existsSync(imgPath), `内层截图应存在: ${imgPath}`);
   assert.ok(!fs.existsSync(path.join(assetsDir, 'trans', '83.webp')), 'contents id 不应产出截图');
 
-  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
+  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '6_resolved_skeleton.json'), 'utf8'));
   assert.deepEqual(resolved, [{ trans2img: 'assets/trans/84.webp' }],
     '择优只能落在真实出图的 84 上');
 
@@ -409,7 +409,7 @@ test('render_markdown.mjs: 超宽表格横向 reveal 截全 + 遮挡者隐藏 + 
     assert.equal(out.count, 2, '链上 91、92 各截一张');
     assert.equal(out.source, 'snapshot', '死端口 → 快照兜底');
 
-    const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
+    const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '6_resolved_skeleton.json'), 'utf8'));
     assert.deepEqual(resolved, [{ trans2img: 'assets/trans/92.webp' }],
       '表格 2800px 宽于 wrap 640px → 择优选 92');
 
@@ -496,7 +496,7 @@ test('render_markdown.mjs: 无 trans2img 条目时 skipped 但仍输出 resolved
   assert.ok(!fs.existsSync(path.join(assetsDir, 'trans')), 'skipped 不应创建 trans 目录');
 
   // skipped 路径也应写出 resolved skeleton
-  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
+  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '6_resolved_skeleton.json'), 'utf8'));
   assert.deepEqual(resolved, [
     { h1: '# 标题' },
     { p: '段落一文本内容' },
@@ -539,7 +539,7 @@ test('render_markdown.mjs: code 条目 content 内的占位符同样还原', asy
   assert.equal(out.status, 'ok');
   assert.equal(out.skipped, 'no_trans2img');
 
-  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
+  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '6_resolved_skeleton.json'), 'utf8'));
   assert.deepEqual(resolved, [
     { h1: '# 标题' },
     { p: '段落一文本内容' },
@@ -547,10 +547,10 @@ test('render_markdown.mjs: code 条目 content 内的占位符同样还原', asy
   ], 'code 对象的 content 占位符应被还原');
 
   // skipped 路径同样产出最终 markdown（emit 含三字段、文件落盘）
-  assert.equal(out.markdownPath, path.join(urlDir, '8_markdown.md'));
+  assert.equal(out.markdownPath, path.join(urlDir, '6_markdown.md'));
   assert.equal(typeof out.bytes, 'number');
   assert.equal(typeof out.blocks, 'number');
-  const md = fs.readFileSync(path.join(urlDir, '8_markdown.md'), 'utf8');
+  const md = fs.readFileSync(path.join(urlDir, '6_markdown.md'), 'utf8');
   assert.ok(md.includes('# 标题'), 'h1 应以 key 重建出 # 前缀');
   assert.ok(md.includes('```python\n重要内容\n```'), '最终 markdown 应含还原后的代码围栏');
   assert.ok(!md.includes('{{LONG_TEXT'), '最终 markdown 不应残留字面占位符');
@@ -588,14 +588,14 @@ test('render_markdown.mjs: 缺前置产物时报 error', async () => {
   assert.ok(JSON.parse(r1.stdout).reason.includes('步骤 1'));
   fs.rmSync(noSnap.tmpRoot, { recursive: true, force: true });
 
-  // 缺步骤 7
+  // 缺步骤 5
   const noSkel = setupTmp('noskel', { skeleton: null });
   const r2 = await runScript(process.execPath, [script, '--url', LIVE_URL], {
     env: { U2M_WORKING_ROOT: noSkel.tmpRoot },
     timeoutMs: 60000,
   });
   assert.equal(r2.code, 1);
-  assert.ok(JSON.parse(r2.stdout).reason.includes('步骤 7'));
+  assert.ok(JSON.parse(r2.stdout).reason.includes('步骤 5'));
   fs.rmSync(noSkel.tmpRoot, { recursive: true, force: true });
 
   // 缺 2_long_text.json
@@ -670,7 +670,7 @@ test('render_markdown.mjs: img 条目下载到 assets/images/（解包 ![img](ur
       PIXEL_PNG.toString('base64'), '内容应为服务器返回的字节');
 
     // resolved skeleton：成功条目只换括号内 URL、保留 ![img] 形态，失败条目保留原值
-    const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
+    const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '6_resolved_skeleton.json'), 'utf8'));
     assert.deepEqual(resolved, [
       { h1: '# 标题' },
       { img: '![img](assets/images/cover.png)' },
@@ -682,7 +682,7 @@ test('render_markdown.mjs: img 条目下载到 assets/images/（解包 ![img](ur
     ], '成功下载的 img 应改写为本地路径（保留 alt），失败保留原值');
 
     // 同轮产出最终 markdown
-    const md = fs.readFileSync(path.join(urlDir, '8_markdown.md'), 'utf8');
+    const md = fs.readFileSync(path.join(urlDir, '6_markdown.md'), 'utf8');
     assert.ok(md.includes('![img](assets/images/cover.png)'), 'markdown 应引用本地图片');
     assert.ok(md.includes(`![img](${srv.base}/missing.png)`), '失败图片保留远端引用');
   } finally {
@@ -716,7 +716,7 @@ test('render_markdown.mjs: trans2img 与 img 混合时截图、下载同轮完�
     assert.ok(fs.existsSync(path.join(assetsDir, 'trans', '10.webp')), '模块容器截图应存在');
     assert.ok(fs.existsSync(path.join(assetsDir, 'images', 'cover.png')), '下载应存在');
 
-    const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
+    const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '6_resolved_skeleton.json'), 'utf8'));
     assert.equal(resolved[0].img, '![img](assets/images/cover.png)');
     assert.deepEqual(resolved[2], { trans2img: 'assets/trans/9.webp' }, 'trans2img 择优回写选中路径');
   } finally {
@@ -737,7 +737,7 @@ test('render_markdown: {{TABLE_k}} 还原为 2_tables.json 的 markdown', async 
     '2': { dataIdx: '6', markdown: null, status: 'failed', reason: 'no header', engine: 'self', rows: 1, cols: 1 },
   }, null, 2));
   fs.writeFileSync(path.join(dir, '3_key_ids.json'), JSON.stringify({ titleId: 1, descriptionIds: [], paragraphIds: [2], dumpIds: [] }));
-  fs.writeFileSync(path.join(dir, '7_skeleton.json'), JSON.stringify([
+  fs.writeFileSync(path.join(dir, '5_skeleton.json'), JSON.stringify([
     { h1: '# t' },
     { table: '{{TABLE_1}}' },
     { table: '{{TABLE_2}}' },
@@ -757,7 +757,7 @@ test('render_markdown: {{TABLE_k}} 还原为 2_tables.json 的 markdown', async 
 });
 
 // CODE 还原：准备最小工作目录（1_snapshot + 2_long_text + 2_code + 3_key_ids
-// + 7_skeleton，无 trans2img/img 条目——浏览器阶段不触发、早退 emit）
+// + 5_skeleton，无 trans2img/img 条目——浏览器阶段不触发、早退 emit）
 import { setupCodeRestore } from '../helpers/code-restore.mjs';
 
 test('render_markdown: {{CODE_k}} 字符串引用整体物化为 {lang, content}（lang 取 JSON）', async () => {
@@ -781,7 +781,7 @@ test('render_markdown: {{CODE_k}} 字符串引用整体物化为 {lang, content}
     assert.deepEqual(resolved[2].code, { lang: 'tsx', content: 'system: `...`' }, '对象形态替换 content 且 lang 覆写');
     assert.deepEqual(resolved[3].code, { lang: 'python', content: 'print(1)' }, '自转条目不动');
     assert.equal(resolved[4].code.content, 'const x = "{{CODE_1}} inline"', '中段子串不替换（精确匹配语义）');
-    const md = fs.readFileSync(path.join(path.dirname(out.resolvedSkeleton), '8_markdown.md'), 'utf8');
+    const md = fs.readFileSync(path.join(path.dirname(out.resolvedSkeleton), '6_markdown.md'), 'utf8');
     assert.ok(md.includes('```javascript\nconst a = 1;\nconst b = 2;\n```'), '物化 code 同轮落 markdown 围栏');
   } finally { fs.rmSync(tmpRoot, { recursive: true, force: true }); }
 });
@@ -800,9 +800,9 @@ test('render_markdown: 未定义/failed k 的 code 残留 → 渲染守卫 error
     assert.ok(out.reason.includes('未还原的代码占位符'), `reason 应指向代码占位符残留: ${out.reason}`);
     // 失败前 resolved skeleton 已落盘（占位符还原结果可供诊断）
     const urlDir = path.join(tmpRoot, urlToDirName(url));
-    const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
+    const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '6_resolved_skeleton.json'), 'utf8'));
     assert.equal(resolved[0].code, '{{CODE_9}}', '未定义 k 保留字面');
-    assert.ok(!fs.existsSync(path.join(urlDir, '8_markdown.md')), '不应产出 markdown');
+    assert.ok(!fs.existsSync(path.join(urlDir, '6_markdown.md')), '不应产出 markdown');
   } finally { fs.rmSync(tmpRoot, { recursive: true, force: true }); }
 });
 
@@ -822,7 +822,7 @@ test('render_markdown: runs 段经 inline2md 转 markdown 合并还原 + runsRes
   }));
   fs.writeFileSync(path.join(dir, '3_key_ids.json'),
     JSON.stringify({ titleId: 1, descriptionIds: [], paragraphIds: [2], dumpIds: [] }));
-  fs.writeFileSync(path.join(dir, '7_skeleton.json'), JSON.stringify([
+  fs.writeFileSync(path.join(dir, '5_skeleton.json'), JSON.stringify([
     { p: '{{LONG_TEXT_1}}' },
     { p: '{{LONG_TEXT_2}}' },
     { p: '{{LONG_TEXT_3}}' },
@@ -838,7 +838,7 @@ test('render_markdown: runs 段经 inline2md 转 markdown 合并还原 + runsRes
     assert.equal(resolved[1].p, '散文本原文');
     assert.equal(resolved[2].p, '公式 $x^2$ 成立。');
     // 端到端（spec §7）：p 值透传落盘，行内语法原样到达 markdown
-    const md = fs.readFileSync(path.join(dir, '8_markdown.md'), 'utf8');
+    const md = fs.readFileSync(path.join(dir, '6_markdown.md'), 'utf8');
     assert.ok(md.includes('这是**关键**：见[文档](https://example.com/d)，命令 `u2m --run`。'), md);
     assert.ok(md.includes('公式 $x^2$ 成立。'), md);
   } finally {
@@ -867,9 +867,9 @@ async function runTrans(tmpRoot) {
 
 test('render_markdown.mjs: 分片按 X 序合并 + chunksMerged 通报', async () => {
   const { tmpRoot, urlDir } = setupChunksTmp('merge-ok', {
-    '7_skeleton_chunk_1_of_3.json': [{ p: '一' }, { p: '二' }],
-    '7_skeleton_chunk_2_of_3.json': [{ h1: '# 标题' }],
-    '7_skeleton_chunk_3_of_3.json': [{ p: '三' }],
+    '5_skeleton_chunk_1_of_3.json': [{ p: '一' }, { p: '二' }],
+    '5_skeleton_chunk_2_of_3.json': [{ h1: '# 标题' }],
+    '5_skeleton_chunk_3_of_3.json': [{ p: '三' }],
   });
   const r = await runTrans(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
@@ -877,15 +877,15 @@ test('render_markdown.mjs: 分片按 X 序合并 + chunksMerged 通报', async (
   assert.equal(out.status, 'ok');
   assert.equal(out.skipped, 'no_trans2img');
   assert.equal(out.chunksMerged, 3);
-  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '8_resolved_skeleton.json'), 'utf8'));
+  const resolved = JSON.parse(fs.readFileSync(path.join(urlDir, '6_resolved_skeleton.json'), 'utf8'));
   assert.deepEqual(resolved, [{ p: '一' }, { p: '二' }, { h1: '# 标题' }, { p: '三' }]);
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
 test('render_markdown.mjs: 缺片报 error 列缺失号', async () => {
   const { tmpRoot } = setupChunksTmp('merge-missing', {
-    '7_skeleton_chunk_1_of_3.json': [{ p: '一' }],
-    '7_skeleton_chunk_3_of_3.json': [{ p: '三' }],
+    '5_skeleton_chunk_1_of_3.json': [{ p: '一' }],
+    '5_skeleton_chunk_3_of_3.json': [{ p: '三' }],
   });
   const r = await runTrans(tmpRoot);
   assert.equal(r.code, 1);
@@ -897,8 +897,8 @@ test('render_markdown.mjs: 缺片报 error 列缺失号', async () => {
 
 test('render_markdown.mjs: N 不一致报 error 列冲突文件', async () => {
   const { tmpRoot } = setupChunksTmp('merge-nmismatch', {
-    '7_skeleton_chunk_1_of_2.json': [{ p: '一' }],
-    '7_skeleton_chunk_2_of_3.json': [{ p: '二' }],
+    '5_skeleton_chunk_1_of_2.json': [{ p: '一' }],
+    '5_skeleton_chunk_2_of_3.json': [{ p: '二' }],
   });
   const r = await runTrans(tmpRoot);
   assert.equal(r.code, 1);
@@ -908,8 +908,8 @@ test('render_markdown.mjs: N 不一致报 error 列冲突文件', async () => {
 
 test('render_markdown.mjs: 坏 JSON / 非数组报 error 指明文件', async () => {
   const a = setupChunksTmp('merge-badjson', {
-    '7_skeleton_chunk_1_of_2.json': '{oops',
-    '7_skeleton_chunk_2_of_2.json': [{ p: '二' }],
+    '5_skeleton_chunk_1_of_2.json': '{oops',
+    '5_skeleton_chunk_2_of_2.json': [{ p: '二' }],
   });
   const ra = await runTrans(a.tmpRoot);
   assert.equal(ra.code, 1);
@@ -917,8 +917,8 @@ test('render_markdown.mjs: 坏 JSON / 非数组报 error 指明文件', async ()
   fs.rmSync(a.tmpRoot, { recursive: true, force: true });
 
   const b = setupChunksTmp('merge-notarray', {
-    '7_skeleton_chunk_1_of_2.json': { nope: 1 },
-    '7_skeleton_chunk_2_of_2.json': [{ p: '二' }],
+    '5_skeleton_chunk_1_of_2.json': { nope: 1 },
+    '5_skeleton_chunk_2_of_2.json': [{ p: '二' }],
   });
   const rb = await runTrans(b.tmpRoot);
   assert.equal(rb.code, 1);
@@ -926,23 +926,23 @@ test('render_markdown.mjs: 坏 JSON / 非数组报 error 指明文件', async ()
   fs.rmSync(b.tmpRoot, { recursive: true, force: true });
 });
 
-test('render_markdown.mjs: 7_skeleton.json 存在时优先（忽略分片、无 chunksMerged）', async () => {
+test('render_markdown.mjs: 5_skeleton.json 存在时优先（忽略分片、无 chunksMerged）', async () => {
   const { tmpRoot } = setupChunksTmp('merge-priority', {
-    '7_skeleton_chunk_1_of_2.json': [{ p: '分片内容' }],
-    '7_skeleton_chunk_2_of_2.json': [{ p: '分片内容2' }],
+    '5_skeleton_chunk_1_of_2.json': [{ p: '分片内容' }],
+    '5_skeleton_chunk_2_of_2.json': [{ p: '分片内容2' }],
   }, { skeleton: [{ p: '单文件内容' }] });
   const r = await runTrans(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);
   assert.equal(out.chunksMerged, undefined, '单文件路径不应有 chunksMerged');
-  assert.ok(!fs.readFileSync(path.join(tmpRoot, urlToDirName(LIVE_URL), '8_resolved_skeleton.json'), 'utf8').includes('分片内容'));
+  assert.ok(!fs.readFileSync(path.join(tmpRoot, urlToDirName(LIVE_URL), '6_resolved_skeleton.json'), 'utf8').includes('分片内容'));
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-test('render_markdown.mjs: 无骨架无分片报 error 提示步骤 7', async () => {
+test('render_markdown.mjs: 无骨架无分片报 error 提示步骤 5', async () => {
   const { tmpRoot } = setupChunksTmp('merge-none', {}, { skeleton: null });
   const r = await runTrans(tmpRoot);
   assert.equal(r.code, 1);
-  assert.ok(JSON.parse(r.stdout).reason.includes('步骤 7'));
+  assert.ok(JSON.parse(r.stdout).reason.includes('步骤 5'));
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });

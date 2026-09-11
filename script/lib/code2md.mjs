@@ -2,7 +2,7 @@
 // 步骤 2 代码块转换（表格占位符设计的 code 镜像）：接收浏览器侧
 // __u2mCollectCode 的收集载荷，Node 层做七类 fail-closed 校验 + 层 2 行首
 // 序号剥离 + 序列化 → 2_code.json 条目 + 失败诊断日志。
-// fail-closed 原则（spec §6）：宁可失败走步骤 7 LLM 兜底，不可静默失真。
+// fail-closed 原则（spec §6）：宁可失败走步骤 5 LLM 兜底，不可静默失真。
 // 提取在浏览器侧完成（walkLines 需要 computed display），本模块不解析 HTML——
 // 与表格 self/turndown 可插拔有意不同（YAGNI）。
 import fs from 'node:fs/promises';

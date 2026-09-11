@@ -111,7 +111,7 @@ test('T3 上下文窗口：开头/上文就位、下文被字节帽压制、合�
   assert.ok(c3.html.includes('❌ 待转换内容自此结束'), '❌ 每块恒在（末块也有）');
   assert.ok(bytes(c3.html) > 10000, '上下文不计预算：文件可超 chunkMax');
 
-  // 每块都是完整独立文档（与 6_article.html 同头）
+  // 每块都是完整独立文档（与 4_article.html 同头）
   for (const c of r.chunks) {
     assert.ok(c.html.startsWith('<!DOCTYPE html>\n'));
     assert.ok(c.html.includes('<title>t</title>'));

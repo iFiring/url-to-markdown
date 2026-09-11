@@ -88,14 +88,14 @@ test('代码管线：styled ok 折 / failed live，clean 恒折，k 对齐，dat
   } finally { fs.rmSync(tmpRoot, { recursive: true, force: true }); }
 });
 
-test('代码管线：步骤 8 精确匹配还原 + 自适应围栏（端到端）', async () => {
+test('代码管线：步骤 6 精确匹配还原 + 自适应围栏（端到端）', async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-integ-code-'));
   try {
     const { r, dir } = await runClean(tmpRoot, URL);
     assert.equal(r.code, 0, `stderr: ${r.stderr}`);
     fs.writeFileSync(path.join(dir, '3_key_ids.json'),
       JSON.stringify({ titleId: 1, descriptionIds: [], paragraphIds: [120], dumpIds: [] }));
-    fs.writeFileSync(path.join(dir, '7_skeleton.json'), JSON.stringify([
+    fs.writeFileSync(path.join(dir, '5_skeleton.json'), JSON.stringify([
       { h1: '# 代码块形态测试' },
       { code: '{{CODE_1}}' },
       { code: '{{CODE_9}}' },                                    // 内容含 ``` 与字面 {{CODE_2}}

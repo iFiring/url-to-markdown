@@ -213,7 +213,7 @@ test('R6: img height:auto 删、真实像素宽高保留', () => {
   const doc = run(`<img id=a style="height: auto; width: 677px;"><img id=b style="height: 120px; width: 50px;">`);
   const a = doc.getElementById('a').style;
   assert.equal(a.getPropertyValue('height'), '', 'auto 无信号 → 删');
-  assert.equal(a.getPropertyValue('width'), '677px', 'px 宽度是步骤 7 信号 → 保留');
+  assert.equal(a.getPropertyValue('width'), '677px', 'px 宽度是步骤 5 信号 → 保留');
   const b = doc.getElementById('b').style;
   assert.equal(b.getPropertyValue('height'), '120px');
   assert.equal(b.getPropertyValue('width'), '50px');
