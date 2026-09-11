@@ -88,7 +88,7 @@ test('代码管线：styled ok 折 / failed live，clean 恒折，k 对齐，dat
   } finally { fs.rmSync(tmpRoot, { recursive: true, force: true }); }
 });
 
-test('代码管线：步骤 8 精确匹配还原 + 步骤 9 自适应围栏（端到端）', async () => {
+test('代码管线：步骤 8 精确匹配还原 + 自适应围栏（端到端）', async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-integ-code-'));
   try {
     const { r, dir } = await runClean(tmpRoot, URL);
@@ -102,7 +102,7 @@ test('代码管线：步骤 8 精确匹配还原 + 步骤 9 自适应围栏（�
       { code: { lang: 'wrong', content: 'protected const a = 1;\nprotected const b = 2;' } }, // LLM 自转（b12）
       { p: '正文段落。' },
     ], null, 2));
-    const r8 = await runScript(process.execPath, [path.resolve('script/screenshot_trans.mjs'), '--url', URL],
+    const r8 = await runScript(process.execPath, [path.resolve('script/render_markdown.mjs'), '--url', URL],
       { env: { U2M_WORKING_ROOT: tmpRoot }, timeoutMs: 60000 });
     assert.equal(r8.code, 0, `stderr: ${r8.stderr}`);
     const out8 = JSON.parse(r8.stdout);
@@ -112,10 +112,7 @@ test('代码管线：步骤 8 精确匹配还原 + 步骤 9 自适应围栏（�
     assert.deepEqual(resolved[1].code, { lang: 'javascript', content: 'import OpenAI;\nconst client = 1;' });
     // b9 的字面 {{CODE_2}} 不被误替换（2_code.json 里 2 号存在）
     assert.ok(resolved[2].code.content.includes('{{CODE_2}} inline'));
-    const r9 = await runScript(process.execPath, [path.resolve('script/render_skeleton.mjs'), '--url', URL],
-      { env: { U2M_WORKING_ROOT: tmpRoot }, timeoutMs: 60000 });
-    assert.equal(r9.code, 0, `stderr: ${r9.stderr}`);
-    const md = fs.readFileSync(JSON.parse(r9.stdout).markdownPath, 'utf8');
+    const md = fs.readFileSync(out8.markdownPath, 'utf8');
     // b9 内容含 ``` → 4 重围栏
     assert.ok(md.includes('````markdown\nouter\n```\ninner fence\n```\nref {{CODE_2}} inline\n````'),
       `b9 应 4 重围栏: ${md}`);

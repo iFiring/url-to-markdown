@@ -7,7 +7,7 @@ import http from 'node:http';
 import { runScript } from '../helpers/run-script.mjs';
 
 const snapshotScript = path.resolve('script/snapshot.mjs');
-const transScript = path.resolve('script/screenshot_trans.mjs');
+const transScript = path.resolve('script/render_markdown.mjs');
 
 // 可翻版的 live 夹具服务器：v1 → v2 在模块前插入新段落并改模块文本，
 // 使 data-idx 平移 + 签名失配 → 步骤 8 应自动降级快照兜底。

@@ -52,7 +52,7 @@ const EMPH_SELECTOR = 'strong,b,em,i,del,s';
 // R4 剥尾部悬空 br 允许下降的行内标签（强调族尾 br 已被 R3 提升出元素）
 const BR_DESCEND = new Set(['A', 'STRONG', 'B', 'EM', 'I', 'DEL', 'S', ...RAW_PASS]);
 
-// 内容最长反引号连续串长度（code span 围栏自适应——与步骤 9 围栏同哲学：
+// 内容最长反引号连续串长度（code span 围栏自适应——与骨架渲染（lib/skeleton2md）围栏同哲学：
 // 围栏严格长于内容最长串，GFM 不可闭合）
 function longestTickRun(s) {
   const runs = s.match(/`+/g);
@@ -264,7 +264,7 @@ function convertNode(node, state) {
   }
 }
 
-// canonical 片段 → markdown。解析失败抛错，调用方（screenshot_trans）
+// canonical 片段 → markdown。解析失败抛错，调用方（render_markdown）
 // 兜底为 textContent 纯文本（spec §5.4）。
 export function inlineRunToMarkdown(html) {
   const doc = new JSDOM(`<!DOCTYPE html><body>${html}</body>`).window.document;

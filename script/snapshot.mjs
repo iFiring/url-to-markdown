@@ -42,7 +42,7 @@
  *
  * 重定向门：登录+滚动后检测「占优内容 iframe」（同源/跨域，见
  * lib/snapshot-redirect.mjs），命中则跳转目标页原生续跑；快照成功后写
- * redirect_to.yaml marker，urlDir() 据此把步骤 2-9 定位到 redirected_ 目录。
+ * redirect_to.yaml marker，urlDir() 据此把步骤 2-8 定位到 redirected_ 目录。
  *
  * 退出码: 0 成功；1 失败；2 参数错误。
  */

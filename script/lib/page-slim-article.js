@@ -13,7 +13,7 @@
  *     的纯符号交互件如 ⋮/✕ 同删；含字母数字者走 ④）
  *  ④ 有文本 button 降级（解包上提子节点，包装铬的 style 弃置）
  *  ⑤ 非白名单协议 href 剥除（scheme ∉ http/https/mailto/tel 的 <a>
- *     解包——参考页 codex:// 营销链接单个 ~1KB prompt 曾漏进 9_markdown）
+ *     解包——参考页 codex:// 营销链接单个 ~1KB prompt 曾漏进最终 markdown）
  *  ⑥ 空壳 span 拆包（属性只剩 data-idx，迭代到不动点——pre 内语法
  *     高亮 token span 的样式已被步骤 5 清空，结构在、信息不在）
  * 保护集 protectedIds = 迁入的 key 元素全集（titleId ∪ descriptionIds

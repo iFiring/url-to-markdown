@@ -1,16 +1,19 @@
 #!/usr/bin/env node
 /**
- * screenshot_trans.mjs —— 步骤 8：占位符还原 + 图片下载 + trans2img 截图。
- * 读 7_skeleton.json + 1_snapshot.html + 2_long_text.json + 3_key_ids.json，产出：
- * （分割时读分片 7_skeleton_chunk_X_of_N.json 并按 X 序合并，spec
- * 2026-09-09 §5；7_skeleton.json 存在时优先）
- * 
- *   8_resolved_skeleton.json  结构同步骤 7，所有 {{LONG_TEXT_k[|suffix]}}
- *                             替换为真实文本；img 条目（![img](url) 形态）在
- *                             下载成功后只换括号内 URL 改写为
- *                             ![img](assets/images/<name>) 并重写本文件；
- *                             trans2img 条目在截图择优后回写为选中路径
- *                             assets/trans/{id}.webp 并重写本文件
+ * render_markdown.mjs —— 步骤 8（终态步骤）：占位符还原 + 图片下载 + trans2img
+ * 截图 + 骨架渲染 markdown。读 7_skeleton.json + 1_snapshot.html +
+ * 2_long_text.json + 3_key_ids.json（分割时读分片 7_skeleton_chunk_X_of_N.json
+ * 并按 X 序合并，spec 2026-09-09 §5；7_skeleton.json 存在时优先），产出：
+ *
+ *   8_markdown.md            最终产物（lib/skeleton2md.mjs 渲染，块间空行、
+ *                             文件以换行收尾）
+ *
+ *   8_resolved_skeleton.json  调试中间产物，结构同步骤 7，所有
+ *                             {{LONG_TEXT_k[|suffix]}} 替换为真实文本；img
+ *                             条目（![img](url) 形态）在下载成功后只换括号内
+ *                             URL 改写为 ![img](assets/images/<name>) 并重写
+ *                             本文件；trans2img 条目在截图择优后回写为选中
+ *                             路径 assets/trans/{id}.webp 并重写本文件
  *
  *   assets/images/<name>      骨架 img 条目的远端图片（见 lib/download_images.mjs
  *                             头注：优先 URL 文件名、冲突带编号、扩展名按
@@ -20,19 +23,20 @@
  *                             （WebP，2x 分辨率，全部落盘保留）
  *
  * 用法:
- *   node screenshot_trans.mjs --url <url>
+ *   node render_markdown.mjs --url <url>
  *
- * 三轮处理：
+ * 四轮处理：
  *   1. 纯 Node（playwright 之前）：读骨架 + 2_long_text.json 做占位符替换，
  *      写出 8_resolved_skeleton.json（条目数、顺序、key 与步骤 7 完全一致，
  *      value 全部为真实文本）。任一 value 引用了未定义编号 → 直接 error。
- *      骨架无 trans2img 也无 img 条目时到此为止（skipped: "no_trans2img"，
- *      resolved skeleton 已写出）
+ *      骨架无 trans2img 也无 img 条目时跳过浏览器阶段直接渲染 markdown
+ *      （skipped: "no_trans2img"）
  *   2. playwright · 图片下载：context.request（共享 U2M_PROXY 代理与
  *      storageState 登录态）按文档序去重下载 http(s) 图片（并发限 4），
  *      成功者把 resolved skeleton 的 img 值改写为 assets/images/<name>
  *      并重写 8_resolved_skeleton.json；失败不中断——保留原 URL、记入
- *      failedImages、stderr 警告。仅此无 trans2img 时到此为止
+ *      failedImages、stderr 警告。仅此无 trans2img 时关浏览器渲染 markdown
+ *      收工
  *   3. playwright · 截图（live 重渲染 + 严校验 + 快照兜底）：
  *      页 A 加载 file://1_snapshot.html——真实文本 + 全量内联样式，既是
  *      签名基准也是兜底截图源；直接用 --url 开页 B 重渲染（gotoSettled +
@@ -57,19 +61,25 @@
  *      都是真实文本，无需任何页面内占位符还原。链上每个 id 各截一张并
  *      记录 boundingBox（展开后的真实尺寸），随后逐条目择优——宽度优先、
  *      等宽选高、宽高全同选最外层（数组首位）——把条目 value 回写为选中路径
+ *   4. 纯 Node · 骨架渲染（浏览器关闭之后）：lib/skeleton2md.mjs 把最终
+ *      resolved skeleton 转为 markdown 块写出 8_markdown.md；code 残留
+ *      （{{CODE_k}} 未物化）或 trans2img 仍为数组 → 渲染守卫响亮报错
  *
  * stdout 输出（有且仅有一行 JSON，日志一律走 stderr）:
- *   `resolvedSkeleton` 为 resolved skeleton 路径；
+ *   `markdownPath`/`bytes`/`blocks` 为最终产物 8_markdown.md 路径/字节数/块数
+ *   （skipped 路径同样产出）；`resolvedSkeleton` 为 resolved skeleton 路径；
  *   `count` 为截图数；`source` 为截图来源（`live` 全部来自重渲染 / `snapshot` 全部快照兜底 / `mixed` 混合——均无需处理）；
  *   `images` 为下载成功数、`failedImages` 为失败 URL（其骨架条目保留原 URL，无需处理）；
  *   `runsResolved` 为 2_long_text.json runs 段经 inline2md 成功转 markdown 的条数
  *   （转换失败退回纯文本 + warning，不在此计数）；
  *   `skipped: "no_trans2img"` 时无截图但图片下载照常；
  *   {"status":"ok","count":N,"screenshots":[...],"source":"live"|"snapshot"|"mixed",
- *    "images":I,"failedImages":[...],"runsResolved":R,"resolvedSkeleton":"..."}   → 退出码 0
+ *    "images":I,"failedImages":[...],"runsResolved":R,"resolvedSkeleton":"...",
+ *    "markdownPath":"...","bytes":B,"blocks":M}   → 退出码 0
  *   {"status":"ok","skipped":"no_trans2img","images":I,"failedImages":[...],
- *    "resolvedSkeleton":"..."}       无 trans2img 条目 → 退出码 0
- *   {"status":"error","reason":"..."} 前置缺失 / 非四键契约 / id 未命中 / 未定义编号 → 1
+ *    "resolvedSkeleton":"...","markdownPath":"...","bytes":B,"blocks":M}
+ *      无 trans2img 条目 → 退出码 0
+ *   {"status":"error","reason":"..."} 前置缺失 / 非四键契约 / id 未命中 / 未定义编号 / 渲染守卫 → 1
  *
  * 退出码: 0 成功；1 失败；2 参数错误。
  */
@@ -85,6 +95,7 @@ import { proxyLaunchOptions, gotoSettled, newU2MContext } from './lib/browser.mj
 import { snapshotScroll } from './lib/snapshot-scroll.mjs';
 import { downloadImages } from './lib/download_images.mjs';
 import { inlineRunToMarkdown, runTextContent } from './lib/inline2md.mjs';
+import { convertSkeleton } from './lib/skeleton2md.mjs';
 
 function parseArgs(argv) {
   const out = { _: [] };
@@ -102,7 +113,7 @@ function parseArgs(argv) {
 
 // 把骨架条目里 value 中的 {{LONG_TEXT_k[|suffix]}} 替换为真实文本。
 // 字符串直接替换；code 条目的 value 是 {lang, content} 对象——对其字符串
-// 属性逐键递归替换（content 引用的长文本占位符同样要还原，否则步骤 9
+// 属性逐键递归替换（content 引用的长文本占位符同样要还原，否则渲染阶段
 // 会把字面占位符写进代码围栏），未定义编号同样上报。
 // 返回 { resolved, undefined: string[] }。
 function resolveSkeletonString(value, longText) {
@@ -160,11 +171,27 @@ function sameSignature(a, b) {
     && a.text === b.text;
 }
 
+// 终态渲染（第 4 轮，纯 Node）：resolved skeleton → 8_markdown.md。
+// 只在所有成功 emit 之前调用——浏览器已关、emit 未发，渲染守卫抛错
+// 冒泡到 main().catch → emitError，与 emit 互斥不产生第二行 stdout。
+// 文件以换行收尾（POSIX 文本惯例；空骨架写空串不写裸 \n）。
+async function renderAndWriteMarkdown(resolvedSkeleton, dir) {
+  const md = convertSkeleton(resolvedSkeleton);
+  const outPath = path.join(dir, '8_markdown.md');
+  await fsPromises.writeFile(outPath, md ? md + '\n' : '');
+  log(`markdown 已生成: ${outPath}（${md.length} 字节）`);
+  return {
+    markdownPath: outPath,
+    bytes: md.length,
+    blocks: md ? md.split(/\n\n+/).length : 0,
+  };
+}
+
 async function main() {
   const args = parseArgs(process.argv);
   if (!args) return;
   const url = args.url;
-  if (!url) return usage('用法: screenshot_trans.mjs --url <url>');
+  if (!url) return usage('用法: render_markdown.mjs --url <url>');
 
   const dir = urlDir(url);
   const snapshotPath = path.join(dir, '1_snapshot.html');
@@ -305,7 +332,7 @@ async function main() {
   //    字符串 "{{CODE_k}}" → 整体物化为 {lang, content}；对象 {content: "{{CODE_k}}"}
   //    → 替换 content + lang 覆写。lang 一律取 2_code.json 值（data-language
   //    收集链结果，权重高于 LLM 猜测）。缺失/failed k 保留字面、记 failedCodes
-  //    （不阻断；残留由步骤 9 守卫响亮报错）──
+  //    （不阻断；残留由渲染守卫（lib/skeleton2md）响亮报错）──
   const codesJsonPath = path.join(dir, '2_code.json');
   const codesJson = fs.existsSync(codesJsonPath)
     ? JSON.parse(await fsPromises.readFile(codesJsonPath, 'utf8'))
@@ -367,9 +394,11 @@ async function main() {
 
   if (transIds.length === 0 && imgUrls.length === 0) {
     log('骨架无 trans2img 条目也无 img 条目（已写出 resolved skeleton）');
+    const md = await renderAndWriteMarkdown(resolvedSkeleton, dir);
     return emit({
       status: 'ok', skipped: 'no_trans2img', resolvedSkeleton: resolvedPath,
       runsResolved, tablesResolved, failedTables, codesResolved, failedCodes,
+      ...md,
       ...(chunksMerged !== undefined && { chunksMerged }),
     });
   }
@@ -416,6 +445,7 @@ async function main() {
       await context.close();
       await browser.close();
       browser = null;
+      const md = await renderAndWriteMarkdown(resolvedSkeleton, dir);
       return emit({
         status: 'ok',
         skipped: 'no_trans2img',
@@ -423,6 +453,7 @@ async function main() {
         runsResolved,
         images,
         failedImages,
+        ...md,
         ...(chunksMerged !== undefined && { chunksMerged }),
       });
     }
@@ -580,6 +611,8 @@ async function main() {
       : liveIds.length === transIds.length ? 'live' : 'mixed';
     log(`trans2img 截图完成: ${screenshots.length} 个（source=${source}）→ ${transDir}`);
 
+    const md = await renderAndWriteMarkdown(resolvedSkeleton, dir);
+
     emit({
       status: 'ok',
       count: screenshots.length,
@@ -593,6 +626,7 @@ async function main() {
       failedTables,
       codesResolved,
       failedCodes,
+      ...md,
       ...(chunksMerged !== undefined && { chunksMerged }),
     });
   } catch (e) {

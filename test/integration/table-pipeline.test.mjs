@@ -82,7 +82,7 @@ test('表格管线：成功表 styled 折叠、失败表 styled 保 live + data-
   } finally { fs.rmSync(tmpRoot, { recursive: true, force: true }); }
 });
 
-test('表格管线：步骤 8 {{TABLE_k}} 还原 + 步骤 9 GFM markdown 输出', async () => {
+test('表格管线：步骤 8 {{TABLE_k}} 还原 + GFM markdown 输出', async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-integ-table-'));
   const url = 'https://example.com/tables';
   const { r, dir } = await runClean(tmpRoot, url, { U2M_TABLE_ENGINE: 'self' });
@@ -100,8 +100,8 @@ test('表格管线：步骤 8 {{TABLE_k}} 还原 + 步骤 9 GFM markdown 输出'
       { p: '无表头表（落步骤7 自转）：' },
       { table: '| A | B |\n| --- | --- |\n| C | D |' },
     ], null, 2));
-    // 步骤 8
-    const r8 = await runScript(process.execPath, [path.resolve('script/screenshot_trans.mjs'), '--url', url],
+    // 步骤 8：还原 + 渲染
+    const r8 = await runScript(process.execPath, [path.resolve('script/render_markdown.mjs'), '--url', url],
       { env: { U2M_WORKING_ROOT: tmpRoot }, timeoutMs: 60000 });
     assert.equal(r8.code, 0, `stderr: ${r8.stderr}`);
     const out8 = JSON.parse(r8.stdout);
@@ -109,11 +109,7 @@ test('表格管线：步骤 8 {{TABLE_k}} 还原 + 步骤 9 GFM markdown 输出'
     const resolved = JSON.parse(fs.readFileSync(out8.resolvedSkeleton, 'utf8'));
     assert.match(resolved[2].table, /\| Setting \| Impact \|/);
     assert.match(resolved[4].table, /\| 时间 \| 上午 \| 上午 \|/, '跨格表 3 列、上午重复');
-    // 步骤 9
-    const r9 = await runScript(process.execPath, [path.resolve('script/render_skeleton.mjs'), '--url', url],
-      { env: { U2M_WORKING_ROOT: tmpRoot }, timeoutMs: 60000 });
-    assert.equal(r9.code, 0, `stderr: ${r9.stderr}`);
-    const md = fs.readFileSync(JSON.parse(r9.stdout).markdownPath, 'utf8');
+    const md = fs.readFileSync(out8.markdownPath, 'utf8');
     assert.match(md, /\| Setting \| Impact \|/);
     assert.match(md, /\| 时间 \| 上午 \| 上午 \|/);
     assert.match(md, /\| A \| B \|/, '失败表 LLM 自转 markdown 透传');
