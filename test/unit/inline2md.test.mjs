@@ -40,22 +40,58 @@ test('强调映射：strong/em/del 语义标签 → **/* /~~', () => {
     '**加粗** 普通 *斜体* 与 ~~删除~~');
 });
 
-test('强调嵌套：递归下降天然支持；外层遇内层强调记号 → 边界退化', () => {
+test('强调嵌套：递归下降天然支持；跨族嵌套边界触 * → 换 __/_ 备选定界符（2026-09-11 修订，取代 raw HTML 退化）', () => {
   assert.equal(inlineRunToMarkdown('<strong>a <em>b</em> c</strong>'),
     '**a *b* c**');
-  // 内层先产出 **x**，外层 *…* 内容以 * 开头 → 退化原生 HTML
-  assert.equal(inlineRunToMarkdown('<em><strong>x</strong></em>'), '<em>**x**</em>');
+  // 跨族嵌套：内层先产出 **x**，外层 *…* 内容首/尾触 * → 换 _ 定界符
+  // （marked --gfm 实渲 <em><strong>x</strong></em>，等价）
+  assert.equal(inlineRunToMarkdown('<em><strong>x</strong></em>'), '_**x**_');
+  assert.equal(inlineRunToMarkdown('<strong><em>x</em></strong>'), '__*x*__');
+  // 三重嵌套：R2 亲链跨族不误并，逐层择优定界符
+  assert.equal(inlineRunToMarkdown('<strong><em><strong>x</strong></em></strong>'), '**_**x**_**');
 });
 
-test('强调边界退化：内容首/尾为空白或 */_ → 原生 HTML 透传（GFM 强调不闭合）', () => {
-  // 首空白：** x** 左侧不满足左flanking → 退化
-  assert.equal(inlineRunToMarkdown('<strong> x</strong>'), '<strong> x</strong>');
-  // 尾空白
-  assert.equal(inlineRunToMarkdown('<em>y </em>'), '<em>y </em>');
-  // 内容以强调记号开头（嵌套强调）：** *x* ** 不闭合 → 退化（逐节点——外层
-  // 退化时内层已是 markdown，CommonMark 对 raw HTML 内联内容仍解析，
-  // 渲染等价 <strong><em>x</em></strong>）
-  assert.equal(inlineRunToMarkdown('<strong><em>x</em></strong>'), '<strong>*x*</strong>');
+test('同族嵌套强调并为一层（微信双层加粗：strong 套 bold span 归一产物）', () => {
+  assert.equal(inlineRunToMarkdown('<strong><strong>x</strong></strong>'), '**x**');
+  assert.equal(inlineRunToMarkdown('<strong><b>x</b></strong>'), '**x**');
+  assert.equal(inlineRunToMarkdown('<em><i>x</i></em>'), '*x*');
+  assert.equal(inlineRunToMarkdown('<del><s>x</s></del>'), '~~x~~');
+  // 多个内层段全部并入外层
+  assert.equal(inlineRunToMarkdown('<strong><strong>A</strong><strong>B</strong></strong>'), '**AB**');
+  // 跨族保留：strong 内 em 不被误并
+  assert.equal(inlineRunToMarkdown('<strong>a<em>b</em>c</strong>'), '**a*b*c**');
+});
+
+test('强调边界空白/br：R3 提升到元素外，md 形态不再退化', () => {
+  assert.equal(inlineRunToMarkdown('<strong> x</strong>'), ' **x**');
+  assert.equal(inlineRunToMarkdown('<em>y </em>'), '*y* ');
+  assert.equal(inlineRunToMarkdown('<strong> x </strong>'), ' **x** ');
+  assert.equal(inlineRunToMarkdown('<strong>a<br></strong>b'), '**a**\\\nb');
+});
+
+test('空白/br-only 强调壳解包（R1）；中部 br 保留为硬换行', () => {
+  assert.equal(inlineRunToMarkdown('前<strong><br></strong>后'), '前\\\n后');
+  assert.equal(inlineRunToMarkdown('前<strong> </strong>后'), '前 后');
+  assert.equal(inlineRunToMarkdown('<em><br></em>'), '');
+});
+
+test('run 尾部悬空 br 剥离（R4）；中部硬换行不受影响', () => {
+  assert.equal(inlineRunToMarkdown('a<br>'), 'a');
+  assert.equal(inlineRunToMarkdown('a<br><br>'), 'a');
+  assert.equal(inlineRunToMarkdown('<u>x<br></u>'), '<u>x</u>');
+  assert.equal(inlineRunToMarkdown('<strong>a<br></strong>'), '**a**');
+  assert.equal(inlineRunToMarkdown('a<br>b<br>'), 'a\\\nb');
+});
+
+test('微信实测形态端到端：双层加粗 + br 壳 → 单层 **', () => {
+  assert.equal(
+    inlineRunToMarkdown('<strong><strong>作者：</strong><strong>尤逸晖，Datawhale优秀学习者</strong><strong><br></strong></strong>'),
+    '**作者：尤逸晖，Datawhale优秀学习者**'
+  );
+  assert.equal(
+    inlineRunToMarkdown('而是<strong><strong>工程设计是否扎实</strong></strong><strong>。</strong>'),
+    '而是**工程设计是否扎实****。**'
+  );
 });
 
 test('链接映射：a[href] → [文本](href)；含 ) 或空白的 href 角括号包裹；无 href 解包', () => {
