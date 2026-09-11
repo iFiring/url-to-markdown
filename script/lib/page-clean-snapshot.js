@@ -1,12 +1,12 @@
 /**
- * 步骤 2 页面内清洗函数。在浏览器 evaluate 中执行；clean_snapshot.mjs 对
+ * 步骤 1 清洗阶段页面内清洗函数。在浏览器 evaluate 中执行；snapshot.mjs 对
  * 同一快照跑两趟，cfg.mode ∈ 'styled'（缺省）| 'clean' 分叉：
  *   styled 趟 —— 共享结构清洗 + 长文本占位 + SVG 瘦身为壳（仅留
  *                id/class/data-idx）+ 属性白名单（22 静态属性 +
  *                <style> 选择器引用的动态属性集，<style> 豁免）
- *                → 带样式版 + 恢复清单（供步骤 4 裁剪与后续占位还原）
+ *                → 带样式版 + 恢复清单（供步骤 3 裁剪与后续占位还原）
  *   clean 趟   —— 共享结构清洗 + SVG 清空/样式剥除 + 瘦身规则 → 清洗版
- * 两趟共享同一套结构清洗（步骤 1-8：link/meta/base 删除、骨架删除、播放器
+ * 两趟共享同一套结构清洗（共享段 1-8：link/meta/base 删除、骨架删除、播放器
  * 删除、控件删除、D1 脊柱占优比较删除 7.5、空元素级联 + KEEP_EMPTY、astro-
  * 前缀解包、注释剥离（pre/code 子树除外））与折叠统计预计算（K5 hidden 规模、
  * K7 pre 行数量原文挂 expando）+ chrome 折叠集标志预计算（2026-09-09，spec
@@ -15,13 +15,13 @@
  * 消费；样式计算仅此一处，clean 趟折叠消费零计算）。长文本占位自
  * 2026-09-03 起移出共享段、两趟各自执行：styled 趟带编号 {{LONG_TEXT_k|n_chars}}
  * （还原链消费），clean 趟在 K11 之后执行且无编号 {{LONG_TEXT|n_chars}}——
- * 唯一消费者步骤 3 只看结构+体量信号。
+ * 唯一消费者步骤 2 只看结构+体量信号。
  *
  * 清洗版含无编号 LONG_TEXT 占位符（K11 纯视图折叠先于占位执行、可吞模块内
- * 长文本——孪生守卫为 clean LT 后缀 ⊆ styled，步骤 3 少看见模块内 LT，
+ * 长文本——孪生守卫为 clean LT 后缀 ⊆ styled，步骤 2 少看见模块内 LT，
  * 还原链不受影响）；
- * 还原链只走带样式版——步骤 5 骨架引用来自文章视图（styled 路径），步骤 6
- * 从 2_long_text.json 回填，清洗版占位不被任何后续步骤消费。
+ * 还原链只走带样式版——步骤 4 骨架引用来自文章视图（styled 路径），步骤 5
+ * 从 1_long_text.json 回填，清洗版占位不被任何后续步骤消费。
  *
  * 清洗版瘦身规则 K1-K7/K9-K11：class 语义过滤 K1 → 属性白名单 K2 →
  * SVG 清空 K3 → astro 解包 K4（两趟共享，见共享段）→ hidden 裸属性折叠 K5
@@ -34,13 +34,13 @@
  * 注释）；K8 行内 run 折叠已按 2026-09-06 spec 重设计（见
  *   docs/superpowers/specs/2026-09-06-long-text-inline-run-design.md）：
  *   折叠单位 = 极大纯行内 run，检测/规范化序列化在两趟共享段末尾执行，
- *   canonical HTML 入 2_long_text.json 的 runs 段，步骤 6 inline2md
+ *   canonical HTML 入 1_long_text.json 的 runs 段，步骤 5 inline2md
  *   确定性转 markdown——行内结构不再依赖 LLM 转录。详见各步骤注释与
  *   spec 修订记录。
  *
  * 带样式版简化（2026-08-28）：astro 解包两趟共享 + styled 属性白名单——
- * 带样式版是步骤 4-7 的输入源，脚手架标签与属性（astro props、data-v-*、
- * aria-* 等）曾一路流进文章视图（步骤 5 LLM 输入）。
+ * 带样式版是步骤 3-5 的输入源，脚手架标签与属性（astro props、data-v-*、
+ * aria-* 等）曾一路流进文章视图（步骤 4 LLM 输入）。
  */
 function __u2mCleanSnapshot(cfg) {
   cfg = cfg || {};
@@ -57,14 +57,14 @@ function __u2mCleanSnapshot(cfg) {
   }
 
   // 2. 删除所有 <meta> 标签（charset/viewport/og:* 等，对结构识别是纯噪声）；
-  //    <title> 保留，作步骤 3 的识别线索
+  //    <title> 保留，作步骤 2 的识别线索
   var metas = document.querySelectorAll('meta');
   for (var i = metas.length - 1; i >= 0; i--) {
     metas[i].parentNode.removeChild(metas[i]);
   }
 
   // run 序列化的 URL 绝对化基准（spec 2026-09-06 §3.3）：快照已注入 <base>，
-  // 但下方步骤 3 会删除它——先捕获 document.baseURI，检测/序列化在共享段
+  // 但下方共享段第 3 步会删除它——先捕获 document.baseURI，检测/序列化在共享段
   // 末尾执行时基准已不可得
   var runBaseURI = document.baseURI;
 
@@ -76,8 +76,8 @@ function __u2mCleanSnapshot(cfg) {
 
   // 4. 按钮类控件保留（2026-08-25 起）：button 与 [role="button"]（div/span/a
   //    伪装）不再删除——FAQ 折叠头、CTA、卡片式 role=button 常是内容载体，
-  //    整删或按字数取舍都会误伤正文，一律保留交步骤 3 语义判断。按钮型
-  //    input[type=button|submit|reset] 仍随步骤 5 的表单控件删除（无子内容，
+  //    整删或按字数取舍都会误伤正文，一律保留交步骤 2 语义判断。按钮型
+  //    input[type=button|submit|reset] 仍随共享段第 7 步的表单控件删除（无子内容，
   //    value 文本极罕为正文）。
 
   // 5. 删除页面骨架标签：<nav>/<footer>/<form> 及其 role 等价物——
@@ -193,7 +193,7 @@ function __u2mCleanSnapshot(cfg) {
   //    video/audio/input 等已在前序步骤整体删除，不再列入白名单。
   //    表格结构元素（table/tr/td/col 等）即使为空也保留——删掉空单元格/
   //    空行/列定义会让行列错位，破坏表格整体显示；单元格内的噪声照删，
-  //    留下空壳单元格（按钮自 2026-08-25 起保留，见步骤 4）。
+  //    留下空壳单元格（按钮自 2026-08-25 起保留）。
   var KEEP_EMPTY = {
     IMG: 1, IFRAME: 1, CANVAS: 1, OBJECT: 1, EMBED: 1,
     SOURCE: 1, PICTURE: 1,
@@ -232,7 +232,7 @@ function __u2mCleanSnapshot(cfg) {
         // 空白的 span 当空壳删掉，丢失空格致代码粘连（constclient=…）。
         // <pre> 白空保留是 HTML 语义，pre 子树内一律计为内容。scoped 到 pre
         // ——块级仅含空白的元素（缩进 filler）照删，既有空元素级联行为不变。
-        // 级联在两趟共享段执行，带样式版（喂步骤 4-7 的路径）同样受益。
+        // 级联在两趟共享段执行，带样式版（喂步骤 3-5 的路径）同样受益。
         if (el.closest('pre')) return true;
       } else if (n.nodeType === 1) {
         if (keepTag(n)) return true;
@@ -258,8 +258,8 @@ function __u2mCleanSnapshot(cfg) {
   // astro 包装解包（K4，两趟共享）：astro- 前缀是 Astro 框架保留的脚手架
   //    命名空间（astro-island/astro-slot/astro-static-slot 及未来变体），按前缀
   //    匹配而非枚举；子元素原样上提，包装自身属性（含其 data-idx 与巨量
-  //    序列化 props）弃置。两趟共享的意义：步骤 3 引用集来自清洗版（从不引用
-  //    包装 id），带样式版同步解包使两版 id 集对齐，脚手架不再流进步骤 4-5
+  //    序列化 props）弃置。两趟共享的意义：步骤 2 引用集来自清洗版（从不引用
+  //    包装 id），带样式版同步解包使两版 id 集对齐，脚手架不再流进步骤 3-4
   //    （曾实证文章视图残留 59 个 astro 标签、27KB props 噪音）。
   //    置于空元素级联之后（与原清洗版执行顺序一致，清洗版输出逐字节不变）、
   //    K5-K8 折叠之前——折叠统计的是解包后的真实子树。
@@ -275,9 +275,9 @@ function __u2mCleanSnapshot(cfg) {
   }
 
   // 注释节点剥离（两趟共享，spec 2026-09-09 §9.1-2）：框架 SSR 残留（<!---->
-  //     Vue/React 占位注释）与模板注释零信息量；顺带消除原生注释与步骤 6 分块
+  //     Vue/React 占位注释）与模板注释零信息量；顺带消除原生注释与步骤 5 分块
   //     上下文标记（HTML 注释形态）的潜在混淆。pre/code 子树除外——代码样本
-  //     可能含 HTML 注释作为内容（styled 失败 live 代码块由步骤 5 LLM 阅读）。
+  //     可能含 HTML 注释作为内容（styled 失败 live 代码块由步骤 4 LLM 阅读）。
   //     先收集后删——避免 TreeWalker 活遍历中删节点的迭代陷阱。
   var commentsRemovedCount = 0;
   var commentWalker = document.createTreeWalker(document.documentElement, 128, null);
@@ -292,8 +292,8 @@ function __u2mCleanSnapshot(cfg) {
 
   // ---- 折叠统计预计算（两趟共享）+ 长文本占位函数定义 ----
   // 长文本占位（2026-09-03 修订）移出共享段、两趟各自调用 foldLongText：
-  // styled 趟在分支开头执行（带编号，原文按编号收集 → 2_long_text.json）；
-  // clean 趟在 K11 之后执行（无编号——步骤 3 只看结构+体量；K11 先整棵折叠
+  // styled 趟在分支开头执行（带编号，原文按编号收集 → 1_long_text.json）；
+  // clean 趟在 K11 之后执行（无编号——步骤 2 只看结构+体量；K11 先整棵折叠
   // 纯视图模块，幸存文本节点再占位）。阈值/豁免/中英文标准两趟同源。
   // K5 hidden 规模与 K7 pre 行数量的是子树原文，必须在占位之前预计算挂
   // expando：占位之后原文变成 {{LONG_TEXT…N_unit}} 语法串，届时再量会把
@@ -398,18 +398,18 @@ function __u2mCleanSnapshot(cfg) {
   //    进 texts。k 全文档序连续单计数器（run 与散文本共用）。
   //    numbered=false（clean 趟，K11 之后调用）：同一套 walk 按记录成员资格
   //    执行（记录元素被 K5/K10/K11 删除或吞没则 walk 不可达、自然跳过），
-  //    无编号、不收集——清洗版唯一消费者是步骤 3（结构+体量信号），恢复清单
+  //    无编号、不收集——清洗版唯一消费者是步骤 2（结构+体量信号），恢复清单
   //    只来自带样式版。散文本折叠不受 table/pre 排除影响（run 检测的位置
   //    排除只限整段折叠）：表格/pre 内部长文本节点照旧逐节点折叠——
   //    table2md/code2md 的 expandLongText 预展开依赖这一形态（styled 趟先
   //    占位、收集在分支末尾）。
   //    纯空白文本节点（源码缩进/换行）不含语义内容，不占位——否则会在
-  //    父子元素之间凭空捏造"长文本"，误导步骤 3 的结构识别。
+  //    父子元素之间凭空捏造"长文本"，误导步骤 2 的结构识别。
   //    svg/style 子树内的文本不占位——两趟随后都会删 SVG 内容（styled 瘦身
   //    壳 / clean 清空），若占位，占位符会随之消失而编号留在清单里；
   //    <style> 文本在带样式版中原样保留，清洗版删除 <style> 标签。
   //    H1/H2/H3 整子树内的文本不占位（2026-08-31 修订）——标题是层级锚点，
-  //    占位成 {{LONG_TEXT_k|N}} 会让步骤 3 的 LLM 看不到真实标题文本、无从
+  //    占位成 {{LONG_TEXT_k|N}} 会让步骤 2 的 LLM 看不到真实标题文本、无从
   //    判标题层级与 key id 取舍（与 <title> 不占位同款 rationale，title 因
   //    treewalker 只走 body 而天然不占位，这里是把同款豁免扩到正文标题）。
   //    整子树豁免——嵌套 span/a/code 等后代文本节点一并保留原文、子树结构
@@ -477,7 +477,7 @@ function __u2mCleanSnapshot(cfg) {
   // 9b. aria-label 值截断（两趟共享）：保留首句+末句，中间省略为 …。
   //     aria-label 是 icon-only 控件/链接的唯一可达名信号——clean 趟白名单
   //     保留它、styled 趟亦保留，但某些站点把整段描述塞进 aria-label，全量
-  //     流到步骤 5 LLM 输入费 token。按完整句末标点切句：终止符 = 。！？；
+  //     流到步骤 4 LLM 输入费 token。按完整句末标点切句：终止符 = 。！？；
   //     与 .!?;（不含逗号/顿号这类句中停顿）；≥3 句才截断，≤2 句（含无终止
   //     符的长单句）原样保留。共享段同位执行→两版截断值天然一致（孪生守卫
   //     不受影响）；aria-label 是元数据、不流入最终 markdown，无需进恢复清单。
@@ -500,7 +500,7 @@ function __u2mCleanSnapshot(cfg) {
   // ---- run 检测 + 规范化序列化（两趟共享段末尾；spec 2026-09-06 §3）----
   // 长文本折叠单位升级为「极大纯行内 run」：流容器内 text 与行内元素混排的
   // 整段内容折成一个 {{LONG_TEXT_k}}（两趟折叠执行见 foldLongText），原文以
-  // 规范化 HTML 片段入库（runs 段），步骤 6 inline2md 确定性转 markdown。
+  // 规范化 HTML 片段入库（runs 段），步骤 5 inline2md 确定性转 markdown。
   // 检测放共享段末尾：两趟 DOM 完全一致（空元素级联 + astro 解包已完），
   // 决策天然一致——孪生守卫 clean⊆styled 由构造保证，免疫 clean 趟 K5/K10/
   // K11 的纯性扰动（K 规则删子树会让 clean 侧容器「变纯」而 styled 不纯）。
@@ -528,7 +528,7 @@ function __u2mCleanSnapshot(cfg) {
   // 但取不到 LaTeX 源则阻断（决策 3：无源 math 留 DOM 走现状链路）。
   // 隐藏三层语义（§3.2-3，2026-09-07 审阅修订）：run 根自查（runShapeOk）、
   // 后代元素逐查（含 math 根自身）、祖先不查——FAQ [hidden] 块内的 run 要
-  // 照常折（styled 版编号进恢复清单，步骤 3 标记后可还原）。
+  // 照常折（styled 版编号进恢复清单，步骤 2 标记后可还原）。
   // 注释节点（nodeType 8）有意放行：不渲染、无语义；序列化侧静默丢弃
   function runInnerOk(node) {
     if (node.nodeType === 3 || node.nodeType === 8) return true;
@@ -543,7 +543,7 @@ function __u2mCleanSnapshot(cfg) {
     // KaTeX 视觉孪生原子化（§3.3「katex-html 不入库」的兑现机制，2026-09-07
     // 审阅修订）：span.katex = katex-mathml（clip 隐藏的 math 源，非
     // display:none）+ katex-html（视觉孪生，可含 svg 伸展符号）。整棵视为一个
-    // math 节点、只判源——否则孪生文本随 run 双份入文（步骤 6 产出
+    // math 节点、只判源——否则孪生文本随 run 双份入文（步骤 5 产出
     // $E=mc^2$*E*=*m**c*2），或孪生内 svg 把整段 run 误阻断（KaTeX 页失去
     // 折叠收益，spec §1 动机 3 落空）。内部免检纯性/隐藏（clip 非
     // display:none；svg 是排版符号非图片内容）；无源 → 阻断（同决策 3）
@@ -607,7 +607,7 @@ function __u2mCleanSnapshot(cfg) {
     if (node.nodeType === 3) return escHtmlText(node.textContent);   // 空白保真不归一
     if (node.nodeType !== 1) return '';
     // span.katex 原子序列化（runInnerOk 同款判定）：只输出极简 math，
-    // katex-html 视觉孪生不入库——否则步骤 6 源与孪生双份输出
+    // katex-html 视觉孪生不入库——否则步骤 5 源与孪生双份输出
     if (node.classList && node.classList.contains('katex')) {
       return serializeMathAtomic(node.querySelector('math'), node);
     }
@@ -641,11 +641,11 @@ function __u2mCleanSnapshot(cfg) {
         return serializeMathAtomic(node, null);
       default: {
         // code/br + 行内同族（u/mark/small/sub/sup/abbr/cite/q/kbd/samp/time/
-        // var/wbr）：保原名、属性剥净；wbr 零宽信号在步骤 6 解包
+        // var/wbr）：保原名、属性剥净；wbr 零宽信号在步骤 5 解包
         if (RUN_INLINE[tag] !== 1) return kids();   // 防御：允许集外透明（检测已挡）
         var lower = node.tagName.toLowerCase();
         // void 元素不带闭合标签：HTML5 解析规则把 `</br>` 当 `<br>` 起始标签
-        // 重建——步骤 6 jsdom 回读 `<br></br>` 得到两个 br，一个换行渲染成
+        // 重建——步骤 5 jsdom 回读 `<br></br>` 得到两个 br，一个换行渲染成
         // 两个（地址/签名/诗歌类高频形态）
         if (tag === 'BR' || tag === 'WBR') return '<' + lower + '>';
         var s4 = kids();
@@ -693,14 +693,14 @@ function __u2mCleanSnapshot(cfg) {
     }
 
     // 11. 属性白名单（styled 趟）：只留级联、还原链与内容信号所需——
-    //     (a) clean K2 八属性 + style（juice 输入）/href/src（步骤 5 链接与
-    //     图片 URL 源、步骤 6 下载源）/width/height（img 权重信号，与 style
+    //     (a) clean K2 八属性 + style（juice 输入）/href/src（步骤 4 链接与
+    //     图片 URL 源、步骤 5 下载源）/width/height（img 权重信号，与 style
     //     声明互补）；
-    //     (b) 内容信号：colspan/rowspan（步骤 5 判复杂跨格表格→trans2img）、
+    //     (b) 内容信号：colspan/rowspan（步骤 4 判复杂跨格表格→trans2img）、
     //     start（ol 起始编号）、aria-label（icon-only 控件/链接的唯一可达名，值已在共享段截断为首末句）、
     //     data-src/srcset（懒加载图片 URL 通道——步骤 1 只规范 img[src]）、
     //     datetime（time 日期原文）、open（details 展开态）、lang（语言信号，
-    //     步骤 6 照抄 <html lang>）；
+    //     步骤 5 照抄 <html lang>）；
     //     (c) 动态集：<style> 选择器引用的属性——删属性即断 juice 级联
     //     （article-1 曾实测丢 45 条 border/background/display 声明，
     //     [data-theme]/[data-width]/Vue scoped [data-v-*] 一并覆盖）。
@@ -737,12 +737,12 @@ function __u2mCleanSnapshot(cfg) {
     document.head.insertBefore(metaCharset, document.head.firstChild);
 
     // 收集表格元数据（折叠前、长文本占位已就位）供 Node 层跑转换引擎。
-    // __u2mCollectTables 由 clean_snapshot.mjs 把 page-collect-tables.js 源码拼在
+    // __u2mCollectTables 由清洗阶段（lib/clean-snapshot.mjs）把 page-collect-tables.js 源码拼在
     // 本函数前注入 evaluate 作用域；单独跑本函数时（无注入）退化为空列表。
     var tablesCollected = (typeof __u2mCollectTables === 'function') ? __u2mCollectTables() : [];
 
     // 收集代码块元数据（折叠前、与表格同场——LONG_TEXT 占位已就位）。
-    // __u2mCollectCode 由 clean_snapshot.mjs 把 page-collect-code.js 源码拼在
+    // __u2mCollectCode 由清洗阶段（lib/clean-snapshot.mjs）把 page-collect-code.js 源码拼在
     // 本函数前注入 evaluate 作用域；单独跑本函数时（无注入）退化为空列表。
     var codesCollected = (typeof __u2mCollectCode === 'function') ? __u2mCollectCode() : [];
 
@@ -778,7 +778,7 @@ function __u2mCleanSnapshot(cfg) {
   }
 
   // K1. class 语义过滤（仅清洗版）：样式强相关 token 删、语义 token 留。
-  //     原则：拿不准保留——漏删只费字节，误删语义 token 才伤步骤 3 判读。
+  //     原则：拿不准保留——漏删只费字节，误删语义 token 才伤步骤 2 判读。
   //     2026-08-27 在上版 class 过滤（2026-08-25 瘦身设计）基础上补漏：负号前缀位移类、
   //     CSS-modules、! important 变体、overflow/appearance、裸 border/shadow/prose、工具名类。
   var HASH_PREFIX_RE = /^(?:astro|css|sc|jsx|chakra|emotion|styled|mui|next|module)-[-0-9a-zA-Z]+$/;
@@ -857,12 +857,12 @@ function __u2mCleanSnapshot(cfg) {
     });
   }
 
-  // （K4 astro 解包已上移至两趟共享段——见上方步骤 9；本趟不再重复执行）
+  // （K4 astro 解包已上移至两趟共享段——见上方共享段第 9 步；本趟不再重复执行）
 
   // K5. hidden 裸属性折叠（仅清洗版）：HTML 规范里属性存在即隐藏（任意值），
   //     无需样式计算。最外层折叠、子树清空放 HIDDEN_TAG 规模+构成 token
   //     （规模取共享段占位前预计算的原文——量占位符语法串会虚高）；根保留
-  //     id 可引用，原文在带样式版（步骤 3 把 hidden 块标进 paragraphIds
+  //     id 可引用，原文在带样式版（步骤 2 把 hidden 块标进 paragraphIds
   //     即可还原 FAQ 折叠答案等）。
   function topTags(counts) {
     return Object.keys(counts)
@@ -896,8 +896,8 @@ function __u2mCleanSnapshot(cfg) {
   //      chromeFolds 判定，壳机制逐字复用 K5——K2 白名单属性（含 data-idx）
   //      已就位、子树清空、token 带占位前预计算规模 + topTags 构成。
   //      hidden 种复用 HIDDEN_TAG（语义同裸 [hidden]：可能是收起正文，壳可
-  //      标进 paragraphIds，还原走带样式版）。带样式版不折叠（步骤 5 隐藏
-  //      剥离照旧展开、步骤 4 按壳 id 保整枝）。
+  //      标进 paragraphIds，还原走带样式版）。带样式版不折叠（步骤 3 轮 B 隐藏
+  //      剥离照旧展开、步骤 3 轮 A 按壳 id 保整枝）。
   var CHROME_TOKEN = { hidden: 'HIDDEN_TAG', dialog: 'DIALOG_TAG', overlay: 'OVERLAY_TAG' };
   var cssHiddenCount = 0;
   var dialogCount = 0;
@@ -934,7 +934,7 @@ function __u2mCleanSnapshot(cfg) {
   //     /__u2mFoldTables 一致，保证两版 k 对齐）。行 = 本表自身的 <tr> 数（嵌套
   //     表格的行归属其最近的 table、不计入外层），列 = 各行「单元格 colspan 之和」
   //     的最大值（网格列数而非单元格个数）；形状在 K2 前预计算（colspan 属性彼时
-  //     尚在）。步骤 3 以行列规模判读表格；成功表的原文存 2_tables.json、步骤 6
+  //     尚在）。步骤 2 以行列规模判读表格；成功表的原文存 1_tables.json、步骤 5
   //     还原，全表在后续步骤从带样式版保真（成功表带样式版也折叠为同形占位符）。
   //     带 hidden 的 table 由 K5 独占折叠（其构成 token 已就位），跳过防二次覆盖
   var tables = document.querySelectorAll('table');
@@ -949,7 +949,7 @@ function __u2mCleanSnapshot(cfg) {
     tb.appendChild(document.createTextNode('{{TABLE_' + tableK + '|' + shape.rows + '×' + shape.cols + '}}'));
   }
 
-  // K7. pre 折叠（仅清洗版，map 驱动）：codeFold 由 clean_snapshot.mjs 按收集
+  // K7. pre 折叠（仅清洗版，map 驱动）：codeFold 由清洗阶段（lib/clean-snapshot.mjs）按收集
   //     结果构造（含 failed 条目——clean 无条件折叠全部非 hidden pre，镜像 K6
   //     对表的处理）。map 未命中（防御分支，编排层保证收集全覆盖，理论不可达）
   //     → 退回 {{PRE_CODE_TAG|n_lines}} 局部计数（__u2mPreLines 占位前预计算），
@@ -989,8 +989,8 @@ function __u2mCleanSnapshot(cfg) {
 
   // （K8 行内 run token 化 2026-08-31 曾废除；2026-09-06 spec 重设计后
   //   「极大纯行内 run 整段折叠」已在两趟共享段末尾检测、趟分支内执行——
-  //   canonical HTML 入 runs 段、步骤 6 inline2md 确定性还原行内结构，
-  //   旧废除理由（步骤 3 看不到行内骨架、行内结构保真依赖 LLM）随之作废，
+  //   canonical HTML 入 runs 段、步骤 5 inline2md 确定性还原行内结构，
+  //   旧废除理由（步骤 2 看不到行内骨架、行内结构保真依赖 LLM）随之作废，
   //   见 docs/superpowers/specs/2026-09-06-long-text-inline-run-design.md）
 
   // K9. 保守空白压缩（仅清洗版）：删纯空白文本节点，当且仅当
@@ -1012,14 +1012,14 @@ function __u2mCleanSnapshot(cfg) {
   for (var i = 0; i < wsNodes.length; i++) wsNodes[i].parentNode.removeChild(wsNodes[i]);
 
   // K10. 空壳 span 拆包（仅清洗版）：K2 已剥 style/class 等，「只剩
-  //     data-idx」一个属性的 span 是纯行内包装，对步骤 3（key id 识别）
+  //     data-idx」一个属性的 span 是纯行内包装，对步骤 2（key id 识别）
   //     无语义；解包把子节点并入父块——内容不丢、只粒度变粗，省 step 3
-  //     输入字节（实测微信页 ~133KB clean 省 ~30KB）。与步骤 6 规则⑥同款
+  //     输入字节（实测微信页 ~133KB clean 省 ~30KB）。与步骤 3 瘦身规则⑥同款
   //     拆包机制，但彼处带保护集（key 元素不拆）、此处 step 2
   //     在 step 3 之前无保护集——裸 span 是行内包装、内容流入可选块级父
   //     （p/section/h2-h6 等，实测占绝大多数），无内容丢失。
   //     仅 clean 趟执行：带样式版保留这些 span——其 style 携 font-weight/
-  //     color 供步骤 5 finalize 保留与步骤 5 LLM 判粗体/颜色，不能拆。孪生
+  //     color 供步骤 3 finalize 保留与步骤 4 LLM 判粗体/颜色，不能拆。孪生
   //     id 集由此由「相等」放宽为 clean ⊆ styled（step 3 在子集挑、step 4
   //     在超集查恒命中）；clean 趟长文本占位在 K10 之后才执行（2026-09-03
   //     后置），拆包挪的是原文文本节点；styled 趟不受影响（K10 仅 clean）。
@@ -1050,10 +1050,10 @@ function __u2mCleanSnapshot(cfg) {
   //     div + 行内文本类元素 + 文本/注释节点（div 根档），或 p 根的「仅行内
   //     集」子树（图表轴刻度、图解步骤、对比卡片、KaTeX 视觉孪生等可视模块
   //     的内部文本碎片）——整棵内容折叠为单个 {{VIEW_TEXT|n_chars/n_words}}
-  //     占位符。对步骤 3 这些碎片是噪声（可视模块整棵标记、内部不拆）。机制
+  //     占位符。对步骤 2 这些碎片是噪声（可视模块整棵标记、内部不拆）。机制
   //     照 K5 HIDDEN_TAG：壳保留（标签 + K2 白名单属性——data-idx 可引用、
   //     class/aria-label 标识模块身份），仅清空子树换占位符；无编号、不进恢
-  //     复清单——原文在带样式版（步骤 4-8 输入源完全不动，trans2img/还原链
+  //     复清单——原文在带样式版（步骤 3-5 输入源完全不动，trans2img/还原链
   //     零影响），clean 版占位符不被任何后续步骤消费。
   //     极大性 = 父不纯 → 折叠永不吸收纯结构之外的兄弟/内容（div>p/table 等
   //     语义标签是天然边界）。
@@ -1061,9 +1061,9 @@ function __u2mCleanSnapshot(cfg) {
   //     同族 u/s/mark/small/sub/sup/abbr/cite/q/kbd/samp/time（与 K9
   //     INLINE_TAGS 同族、剔 img——图片是"此处有图"内容信号，不入允许集仍
   //     阻断）。math 整棵放行：MathML 内部（mi/mo/mn/semantics 等）不逐一检
-  //     查——公式渲染内容，LaTeX 还原链走带样式版（步骤 6 才是 math 消费
+  //     查——公式渲染内容，LaTeX 还原链走带样式版（步骤 5 才是 math 消费
   //     者），clean 版整块可折。扩展仅限行内元素——块级/语义标签（ul/table/
-  //     pre/h4-h6 等）不入允许集、天然阻断，步骤 3 的结构判读不受影响。
+  //     pre/h4-h6 等）不入允许集、天然阻断，步骤 2 的结构判读不受影响。
   //     折叠门槛（两道，2026-09-03——只折「结构脚手架明显 + 文本量达标」的
   //     子树，短小内容如 {{VIEW_TEXT|3_words}} 不再产生）：
   //     ① 文本量：被折部分 ≥8 汉字 / ≥6 词（viewTextSize 逐节点求和语义，
@@ -1075,19 +1075,19 @@ function __u2mCleanSnapshot(cfg) {
   //     含长文本的模块整棵折叠、原文随折吞没（2026-09-03 四次修订：K11 先于
   //     LT 执行——clean 版根本不为模块内长文本生成占位符；三次修订的「LT
   //     随折吞没」是同效的旧实现）——孪生守卫为 clean LT 后缀 ⊆ styled：
-  //     步骤 3 少看见模块内 LT（可视模块整块标记、内部本就不拆），还原链走
+  //     步骤 2 少看见模块内 LT（可视模块整块标记、内部本就不拆），还原链走
   //     带样式版不受影响。纯 LT 文本行（0 内部元素）过不了结构门槛、天然不折。
   //     p>span 形态（2026-09-03 新增）：p 通常不嵌 p、只含 text 或行内元素
   //     ——p 作为折叠根独立一档，纯性 = 子树只含文本与行内集（div/p/img 等
   //     任何其他标签阻断），结构门槛沿用行内档（行内 > 4）。p 不入纯树的
   //     允许集——否则正文段落流 <div><p>…</p><p>…</p></div> 会因 p 变纯而
-  //     整块折叠（正文段落是步骤 3 的判读对象）；p 含纯行内树（如行内
+  //     整块折叠（正文段落是步骤 2 的判读对象）；p 含纯行内树（如行内
   //     katex）时由 p 根整棵折叠、内部行内元素不再单独入选（折叠循环的
   //     isConnected 守卫挡掉随 p 折叠而脱离文档的候选，防双重计数）。
   //     豁免与阻断：a/button/h1-h3 后代不折（链接文本、控件可达名、标题锚点
-  //     是步骤 3 的判读信号，H1-H3 豁免镜像长文本占位规则）；hidden 元素是
-  //     阻断标签——K5 领地（FAQ 折叠答案等需步骤 3 标记还原），纯性判定不穿
-  //     透；svg/img 等非允许标签同为天然阻断（svg/img 是步骤 3 识别
+  //     是步骤 2 的判读信号，H1-H3 豁免镜像长文本占位规则）；hidden 元素是
+  //     阻断标签——K5 领地（FAQ 折叠答案等需步骤 2 标记还原），纯性判定不穿
+  //     透；svg/img 等非允许标签同为天然阻断（svg/img 是步骤 2 识别
   //     "此处有图"的信号）。
   var INLINE_VIEW = { SPAN: 1, A: 1, STRONG: 1, B: 1, EM: 1, I: 1, CODE: 1, BR: 1,
     U: 1, S: 1, MARK: 1, SMALL: 1, SUB: 1, SUP: 1, ABBR: 1, CITE: 1, Q: 1, KBD: 1,
@@ -1158,7 +1158,7 @@ function __u2mCleanSnapshot(cfg) {
 
   // 9c. 长文本占位（clean 趟，无编号，K11 之后执行）：纯视图模块已整棵折叠
   //     （viewTextSize 量的就是原文），幸存文本节点再按阈值占位——
-  //     {{LONG_TEXT|n_unit}}，步骤 3 只看结构+体量信号；恢复清单只来自
+  //     {{LONG_TEXT|n_unit}}，步骤 2 只看结构+体量信号；恢复清单只来自
   //     带样式版（styled 趟 foldLongText(true)），此趟不收集。K6/K7 已把
   //     table/pre 全折（clean 无条件折叠），幸存者 = 段落/标题/列表等流文本
   foldLongText(false);

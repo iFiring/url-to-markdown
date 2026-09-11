@@ -74,7 +74,7 @@ function __u2mPrepareBody(cfg) {
 
   // 7. 打 data-idx：body 内所有元素按文档序递增标记，仅排除
   //    EXCLUDE_TAGS（纯文本修饰/薄语义行内标签）与 svg/math 内部后代
-  //    （根元素本身标记；内部细节对下游不可见——步骤 2 剥 svg 属性，
+  //    （根元素本身标记；内部细节对下游不可见——步骤 1 剥 svg 属性，
   //    转换按原子块处理，标记内部只会膨胀快照）
   let n = 0;
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);

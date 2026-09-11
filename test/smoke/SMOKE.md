@@ -2,10 +2,12 @@
 
 前置：`bash script/init.sh` 输出 ok（纯环境自检；核心参数 skill-root / url-name / url-working-path 由步骤 1 输出）。
 
+> 2026-09-11 起原步骤 1/2 合并为单 CLI `snapshot.mjs`（单命令完成快照 + 清洗），后续步骤重编号 3→2、4→3、5→4、6→5、产物 `2_*`→`1_*`、`3_key_ids`→`2_key_ids`、`4_*`→`3_*`、`5_skeleton*`→`4_skeleton*`、`6_*`→`5_*`——下文带日期的历史执行记录保留当时的旧编号与产物名。
+
 ## 1. 真实静态文章页
 
 1. `node script/snapshot.mjs --url <文章URL>` → 期望 `ok`（内部自动处理登录检测、滚动、虚拟列表检测、快照抓取）
-2. 按 SKILL.md 步骤 2-6 继续（结构清洗 → LLM 识别 → 文章视图渲染 → LLM 骨架 → 终态渲染）
+2. 按 SKILL.md 步骤 2-5 继续（LLM 识别 → 文章视图渲染 → LLM 骨架 → 终态渲染）
 3. 检查最终产物：正文完整、无导航/广告、图片引用有效
 
 记录：URL / 截图 / 发现的问题。
@@ -26,9 +28,9 @@
 - 1 个 passthrough_svg 实为装饰性背景（aria-hidden 网格线），其引用被 Readability 剔除——无害；manifest 悬挂 done 条目属已知遗留观察
 - 步骤 3 无 pending；步骤 4 完成；步骤 5 首跑 120s 内无人点击 → timeout（用户重跑即可）
 
-## 1b. 步骤 6 双层排除 + 四段手术（超宽截全 + 非文章内容不进图 + 截图留白）
+## 1b. 步骤 5 双层排除 + 四段手术（超宽截全 + 非文章内容不进图 + 截图留白）
 
-对已有全产物的工作目录单独重跑步骤 6（`U2M_WORKING_ROOT` 指向副本，不动原始数据）：
+对已有全产物的工作目录单独重跑步骤 5（`U2M_WORKING_ROOT` 指向副本，不动原始数据）：
 `U2M_WORKING_ROOT=<副本根> U2M_DEBUG=1 node script/render_markdown.mjs --url <URL>`，
 检查 stdout 单行 ok、stderr 三类 debug 行（分类层排除 / 横向裁剪 reveal / 遮挡者隐藏）、
 超宽元素（>1280 CSS px）截图的视口外带（设备 px x≥2560）内容密度由 ≈0 变为 >1%、无导航像素。
@@ -48,7 +50,7 @@
 1. `node script/snapshot.mjs --url <登录页URL>` → viewer 弹出（内部 snapshot-login.mjs 检测到需登录）
 2. 在 viewer 中完成真实登录 → 点「✅ 登录完成」→ 脚本继续执行滚动、检测、快照
 3. 重跑同 URL → storageState 复用，无需再次登录
-4. 后续按 SKILL.md 步骤 2-6 继续
+4. 后续按 SKILL.md 步骤 2-5 继续
 
 记录：站点 / 登录方式（账密/验证码/SSO）/ Screencast 操控是否顺畅。
 
@@ -56,7 +58,7 @@
 
 验证 manifest 分派与步骤 3 产物（SVG 语义等价性人工评审）。
 
-## 4. 文章视图瘦身（步骤 4 零值过滤 + 瘦身 pass；下表为 2026-08-28 旧编号执行记录，产物名保留当时形态）
+## 4. 文章视图瘦身（步骤 3 零值过滤 + 瘦身 pass；下表为 2026-08-28 旧编号执行记录，产物名保留当时形态）
 
 URL：https://developers.openai.com/api/docs/guides/prompt-caching（复用既有步骤 0-4 产物，1_snapshot 未重跑）
 
@@ -74,7 +76,7 @@ URL：https://developers.openai.com/api/docs/guides/prompt-caching（复用既�
 
 - 2026-08-29 追记：`__u2mLatexText` 分级信任扩展（未声明 encoding 的裸 annotation 也信；显式声明非 TeTeX 编码仍拒）后重跑步骤 6——`mathReplaced` 0→19、MathML 残留 0、`6_article.html` 110.5KB→96.7KB（累计 -59%）。工作目录中 7/8/9 产物仍为扩展前生成（公式内容一致——LLM 转录与机械替换等价），下次完整跑批自然对齐
 
-## 5. 步骤 5-6 端到端（修订后骨架契约回归，2026-09-02 新增；2026-09-11 起原步骤 8/9 合并为单 CLI、后重编号为 5/6）
+## 5. 步骤 5-6 端到端（修订后骨架契约回归，2026-09-02 新增；2026-09-11 起原步骤 8/9 合并为单 CLI、后重编号为 5/6；同日步骤 1/2 合并后重编号为 4/5）
 
 两页已有步骤 0-4 产物（`working/mmh1.top_article_prompt-cache.html/`、`working/developers.openai.com_api_docs_guides_prompt-caching/`），按修订后 `references/markdown_skeleton_guide.md` 重跑：步骤 5（子代理读 `4_article.html` 写 `5_skeleton.json`）→ `node script/render_markdown.mjs --url <URL>`，各步 stdout 单行 `ok`。
 
@@ -99,14 +101,14 @@ openai 页检查点（英文文档，展开器/嵌套图解/UI 控件密集）�
 ## 6. 代码块占位符（2026-09-02 新增）
 
 - URL: <mmh1.top prompt-cache 文章地址>（`working/mmh1.top_article_prompt-cache.html/`）
-- 预期：步骤 2 emit `codes` 全 ok（≥2 块）；重跑步骤 5-6 后 `6_markdown.md` 代码块
-  换行与原 LLM 语义重建结果逐字一致（内容来自 `2_code.json` 预计算而非转录）
+- 预期：步骤 1 emit `codes` 全 ok（≥2 块）；重跑步骤 4-5 后 `5_markdown.md` 代码块
+  换行与原 LLM 语义重建结果逐字一致（内容来自 `1_code.json` 预计算而非转录）
 - URL: <developers.openai.com prompt-caching 指南地址>（`working/developers.openai.com_api_docs_guides_prompt-caching/`）
-- 预期：步骤 2 emit `codes` 14 块全 ok、其中 10 块 `gutterStripped`（user-select:none
+- 预期：步骤 1 emit `codes` 14 块全 ok、其中 10 块 `gutterStripped`（user-select:none
   序号槽层 1 排除 + 2026-09-03 槽壳传播——display:block 壳 us:auto、数字 span 才
-  us:none 的形态不剔除会 mixed_signal 误杀）；pre 2874 的 `2_code.json` 内容以 `{`
+  us:none 的形态不剔除会 mixed_signal 误杀）；pre 2874 的 `1_code.json` 内容以 `{`
   开头且 `  "model"` 两格缩进保留（2026-09-03 空白守卫结构化后恢复；k=6 代码内
-  空行同步保真）；步骤 7 对占位符块发 `{"code":"{{CODE_k}}"}` 引用不自转
+  空行同步保真）；步骤 4 对占位符块发 `{"code":"{{CODE_k}}"}` 引用不自转
 - 实测（2026-09-03 槽壳传播 + 空白守卫结构化后）：`codes: {total:14, ok:14,
   failed:0}`，k=5/6（2874/3127，此前 mixed_signal_mismatch）转 ok；k=5 两格缩进
   在位、k=6 空行恢复 13 行全保真；`logs/codes/` 空
@@ -115,18 +117,18 @@ openai 页检查点（英文文档，展开器/嵌套图解/UI 控件密集）�
 
 - URL 1: https://mmh1.top/article#/ai-article/skill
 - URL 2: https://mmh1.top/article#/ai-article/prompt-cache
-- 预期：步骤 1 emit `redirect.to` 为 …/article/{skill,prompt-cache}.html；工作目录为 `redirected_` 前缀名（内含 `redirect_to.yaml`）；步骤 2 起仍以原始 URL 调用、产物落在 redirected 目录；`6_markdown.md` 为完整文章
+- 预期：步骤 1 emit `redirect.to` 为 …/article/{skill,prompt-cache}.html；工作目录为 `redirected_` 前缀名（内含 `redirect_to.yaml`）；步骤 2 起仍以原始 URL 调用、产物落在 redirected 目录；`5_markdown.md` 为完整文章
 - 注意：按记忆规约，收尾前用最终代码重跑全管线再记录结论
 ## 8. 长文本行内 run 折叠（2026-09-07 新增）
 
 - URL: <含 KaTeX 行内公式 + `<br>` 混排长段的技术博客/文档页真实地址>
 - 预期：
-  - 步骤 2 `2_long_text.json` runs 段——KaTeX 段落的值只含 `<math…><annotation…>`
+  - 步骤 1 `1_long_text.json` runs 段——KaTeX 段落的值只含 `<math…><annotation…>`
     极简形态，无 katex-html/mord/strut/svg 孪生痕迹（spec §10 原子化）；公式源
     单份不重复
   - `<br>` 混排段的 canonical 为 `<br>` 形态（非 `<br></br>`——jsdom 会把后者
     解析为两个 br、换行翻倍）
-  - 重跑步骤 5-6 后 `6_markdown.md`：run 段落 `$…$` 公式单份、无孪生文本污染
+  - 重跑步骤 4-5 后 `5_markdown.md`：run 段落 `$…$` 公式单份、无孪生文本污染
     （形如 `$E=mc^2$*E*=*m**c*2` 即失败）；硬换行单个、无多余空行
   - 混排长段的行内格式（粗体/斜体/链接/行内 code/公式）来自确定性通道：
     同一 URL 重跑逐字一致，无字面 `{{LONG_TEXT` 残留
@@ -154,9 +156,9 @@ openai 页检查点（英文文档，展开器/嵌套图解/UI 控件密集）�
 
 URL：微信长文（复用 `working/mp.weixin.qq.com_s_lspwTyzxUnpbw1eHIoqluw/`，旧 6_article.html 372KB / 509 段落块）
 
-- [ ] 重跑步骤 4 → 预期 emit `chunks.split=true`、约 8 块、主内容 ≤50KB（上下文侧不计）、分块含 📌/⚠️/✅/❌ 标记
-- [ ] 步骤 5 并行派发子代理 → 全部分片落盘
-- [ ] 步骤 6 → `chunksMerged` 与块数一致；6_markdown.md 与不分块基线对比内容一致（标题层级、列表延续无跨块断裂）
+- [ ] 重跑步骤 3 → 预期 emit `chunks.split=true`、约 8 块、主内容 ≤50KB（上下文侧不计）、分块含 📌/⚠️/✅/❌ 标记
+- [ ] 步骤 4 并行派发子代理 → 全部分片落盘
+- [ ] 步骤 5 → `chunksMerged` 与块数一致；5_markdown.md 与不分块基线对比内容一致（标题层级、列表延续无跨块断裂）
 
 ## 11. 边界 chrome 清除与折叠（2026-09-09 新增）
 

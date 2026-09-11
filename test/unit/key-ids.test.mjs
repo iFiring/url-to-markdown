@@ -1,7 +1,7 @@
 // test/unit/key-ids.test.mjs
-// 直接测 parseKeyIds——四键约束的单一事实源（步骤 4/6/8 共享）。
+// 直接测 parseKeyIds——四键约束的单一事实源（步骤 3/5 共享）。
 // 重点：titleId/descriptionIds 可与 paragraphIds 重叠（流内标题/说明保留
-// 原位、步骤 6 同节点去重），其余组合互不相交、同一键内不得重复。
+// 原位、步骤 3 同节点去重），其余组合互不相交、同一键内不得重复。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseKeyIds } from '../../script/lib/key-ids.mjs';

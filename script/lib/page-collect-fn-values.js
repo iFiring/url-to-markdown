@@ -1,5 +1,5 @@
 /**
- * 步骤 5 函数值收集。在浏览器 evaluate 中执行，运行于 juice 内联后的页面
+ * 步骤 3 轮 B 函数值收集。在浏览器 evaluate 中执行，运行于 juice 内联后的页面
  * （<style> 已移除、style 属性已就位），返回需要真实值替换的声明对：
  *   [{ id: data-idx, props: [属性名, …] }, …]
  * 收集条件：style 属性声明值含函数间接引用——var() / color-mix() / calc()，

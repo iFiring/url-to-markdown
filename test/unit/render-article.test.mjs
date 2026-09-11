@@ -8,11 +8,11 @@ import { runScript } from '../helpers/run-script.mjs';
 import { urlToDirName } from '../../script/lib/env.mjs';
 
 // render_article.mjs（原步骤 4/5/6 合并，2026-09-11）单测。
-// 夹具一律注入为 2_clean_style_snapshot.html + 3_key_ids.json：body 顶层
+// 夹具一律注入为 1_clean_style_snapshot.html + 2_key_ids.json：body 顶层
 // 元素全部标进 paragraphIds ⇒ 轮 A 裁剪近似恒等（removedCount=0），用例
-// 聚焦各自阶段的断言对象——轮 A 断言 4_extract.html；轮 B 断言
-// 4_juice.html（轮 C 之前落盘，不受迁移/瘦身影响）；轮 C 断言
-// 4_article.html + emit。
+// 聚焦各自阶段的断言对象——轮 A 断言 3_extract.html；轮 B 断言
+// 3_juice.html（轮 C 之前落盘，不受迁移/瘦身影响）；轮 C 断言
+// 3_article.html + emit。
 // 注意：夹具经轮 B 白名单清理，color/margin 等白名单外样式不再存活——
 // 相关断言为「应删」方向；font-size/font-weight/background/边框类存活。
 // 轮 C 的 key id 未命中分支按构造不可达（轮 A 已校验同批 id），为防御
@@ -87,7 +87,7 @@ test('render_article.mjs: 无参数时输出 usage_error', async () => {
   assert.equal(JSON.parse(r.stdout).status, 'usage_error');
 });
 
-// 模拟步骤 2 带样式版快照：style 属性 + head/body 两处 <style> + 噪声分支。
+// 模拟步骤 1 带样式版快照：style 属性 + head/body 两处 <style> + 噪声分支。
 // [8] 为段落流内的 dump（toc 导航，内含 <style>），[14]/[16] 为流外噪音分支
 const STYLED_SNAPSHOT = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>测试页</title><style>.hero{color:red}</style></head><body><div class="main" data-idx="1"><header class="hero" style="margin:0" data-idx="2"><h1 data-idx="3">标题</h1><p data-idx="4">作者 日期</p></header><section class="content" style="padding:10px" data-idx="5"><p data-idx="6">段落一</p><div style="border:1px solid" data-idx="7">图容器<span data-idx="71">内嵌</span></div><nav class="toc" id="nav-toc" data-idx="8" role="navigation" aria-label="目录"><style>.deep{color:blue}</style><p data-idx="9">推荐阅读</p></nav><div class="chapter" data-idx="10"><h3 data-idx="11">章节标题</h3><p data-idx="12">段落二</p><ul data-idx="13"><li data-idx="131">条目</li></ul></div></section></div><div class="ads" data-idx="14"><p data-idx="15">广告</p></div><nav class="breadcrumb" data-idx="16"><p data-idx="17">面包屑</p></nav></body></html>`;
@@ -99,10 +99,10 @@ function setupTmp(name, keyIds, { withSnapshot = true, snapshot = STYLED_SNAPSHO
   const urlDir = path.join(tmpRoot, urlToDirName(URL));
   fs.mkdirSync(urlDir, { recursive: true });
   if (withSnapshot) {
-    fs.writeFileSync(path.join(urlDir, '2_clean_style_snapshot.html'), snapshot);
+    fs.writeFileSync(path.join(urlDir, '1_clean_style_snapshot.html'), snapshot);
   }
   if (keyIds !== null) {
-    fs.writeFileSync(path.join(urlDir, '3_key_ids.json'), JSON.stringify(keyIds));
+    fs.writeFileSync(path.join(urlDir, '2_key_ids.json'), JSON.stringify(keyIds));
   }
   return { tmpRoot, urlDir };
 }
@@ -115,7 +115,7 @@ async function runArticle(tmpRoot, env = {}) {
   });
 }
 
-// ── 轮 A · 样式视图裁剪（断言对象 4_extract.html）──
+// ── 轮 A · 样式视图裁剪（断言对象 3_extract.html）──
 
 test('render_article.mjs: 轮 A 四键裁剪——块子树+骨架链一字不动，dump 折叠空壳，流外噪音删除', async () => {
   const { tmpRoot, urlDir } = setupTmp('round-a', {
@@ -128,7 +128,7 @@ test('render_article.mjs: 轮 A 四键裁剪——块子树+骨架链一字不�
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
-  assert.equal(out.article, path.join(urlDir, '4_article.html'));
+  assert.equal(out.article, path.join(urlDir, '3_article.html'));
   assert.equal(out.removedCount, 5, '应删除 5 个元素（9/14/15/16/17）');
   assert.equal(out.dumpCollapsedCount, 1, '应折叠 1 个 dump（8）');
   // emit 加法式契约：三段计数超集；中间产物路径字段已删（无消费者）
@@ -138,12 +138,12 @@ test('render_article.mjs: 轮 A 四键裁剪——块子树+骨架链一字不�
   assert.ok(out.slim && typeof out.slim.spansUnwrapped === 'number');
   assert.deepEqual(out.chunks, { split: false, count: 1, files: [out.article] });
 
-  // 三份产物全部落盘（4_extract / 4_juice 调试中间产物 + 4_article 终态）
-  for (const f of ['4_extract.html', '4_juice.html', '4_article.html']) {
+  // 三份产物全部落盘（3_extract / 3_juice 调试中间产物 + 3_article 终态）
+  for (const f of ['3_extract.html', '3_juice.html', '3_article.html']) {
     assert.ok(fs.existsSync(path.join(urlDir, f)), `${f} 应产出`);
   }
 
-  const html = fs.readFileSync(path.join(urlDir, '4_extract.html'), 'utf8');
+  const html = fs.readFileSync(path.join(urlDir, '3_extract.html'), 'utf8');
 
   // title/description/paragraphIds 块（含嵌套子流展开）子树 + 祖先链保留，属性一字不动
   for (const id of [1, 2, 3, 4, 5, 6, 7, 71, 10, 11, 12, 13, 131]) {
@@ -196,7 +196,7 @@ test('render_article.mjs: titleId 为 null 时正常；流外游离块为顶层�
   assert.equal(out.status, 'ok');
   assert.equal(out.dumpCollapsedCount, 0);
 
-  const html = fs.readFileSync(path.join(urlDir, '4_extract.html'), 'utf8');
+  const html = fs.readFileSync(path.join(urlDir, '3_extract.html'), 'utf8');
   for (const id of [1, 2, 3, 31, 4, 5]) {
     assert.ok(html.includes(`data-idx="${id}"`), `id ${id} 应保留`);
   }
@@ -218,7 +218,7 @@ test('render_article.mjs: dump 落在保留区外——随分支删除、不报�
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
   assert.equal(out.dumpCollapsedCount, 0, '保留区外的 dump 不折叠');
-  const html = fs.readFileSync(path.join(urlDir, '4_extract.html'), 'utf8');
+  const html = fs.readFileSync(path.join(urlDir, '3_extract.html'), 'utf8');
   assert.ok(html.includes('data-idx="6"'));
   assert.ok(!html.includes('data-idx="17"'));
   assert.ok(!html.includes('data-idx="16"'));
@@ -238,8 +238,8 @@ test('render_article.mjs: dump 是 key 元素祖先时报 error（折叠会摧�
   assert.equal(out.status, 'error');
   assert.ok(out.reason.includes('冲突'), `reason 应说明冲突: ${out.reason}`);
   assert.ok(out.reason.includes('5'), `reason 应含 dump id: ${out.reason}`);
-  assert.ok(!fs.existsSync(path.join(urlDir, '4_extract.html')), '失败不应写产物');
-  assert.ok(!fs.existsSync(path.join(urlDir, '4_article.html')), '失败不应写终态产物');
+  assert.ok(!fs.existsSync(path.join(urlDir, '3_extract.html')), '失败不应写产物');
+  assert.ok(!fs.existsSync(path.join(urlDir, '3_article.html')), '失败不应写终态产物');
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
@@ -255,8 +255,8 @@ test('render_article.mjs: key id 未命中时报 error 并列出缺失 id（轮 
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'error');
   assert.ok(out.reason.includes('99'), `reason 应含缺失 id: ${out.reason}`);
-  assert.ok(!fs.existsSync(path.join(urlDir, '4_extract.html')), '失败不应写产物');
-  assert.ok(!fs.existsSync(path.join(urlDir, '4_article.html')), '失败不应写终态产物');
+  assert.ok(!fs.existsSync(path.join(urlDir, '3_extract.html')), '失败不应写产物');
+  assert.ok(!fs.existsSync(path.join(urlDir, '3_article.html')), '失败不应写终态产物');
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
@@ -295,17 +295,17 @@ test('render_article.mjs: 缺快照 / 缺 key_ids 时报 error 并指路', async
   const noSnapshot = setupTmp('nosnap', { titleId: 3, descriptionIds: [], paragraphIds: [6], dumpIds: [] }, { withSnapshot: false });
   const r1 = await runArticle(noSnapshot.tmpRoot);
   assert.equal(r1.code, 1);
-  assert.ok(JSON.parse(r1.stdout).reason.includes('步骤 2'));
+  assert.ok(JSON.parse(r1.stdout).reason.includes('步骤 1'));
   fs.rmSync(noSnapshot.tmpRoot, { recursive: true, force: true });
 
   const noKeyIds = setupTmp('nokey', null);
   const r2 = await runArticle(noKeyIds.tmpRoot);
   assert.equal(r2.code, 1);
-  assert.ok(JSON.parse(r2.stdout).reason.includes('步骤 3'));
+  assert.ok(JSON.parse(r2.stdout).reason.includes('步骤 2'));
   fs.rmSync(noKeyIds.tmpRoot, { recursive: true, force: true });
 });
 
-// ── 轮 B · 样式内联（断言对象 4_juice.html；key_ids 顶层全标 ⇒ 轮 A 近似恒等）──
+// ── 轮 B · 样式内联（断言对象 3_juice.html；key_ids 顶层全标 ⇒ 轮 A 近似恒等）──
 
 // 模拟裁剪后形态的快照：<style> 规则 + 原有内联样式（结构化/盒模型几何/
 // 字体类混杂）+ class + 文本/非文本元素
@@ -322,7 +322,7 @@ test('render_article.mjs: 轮 B juice 内联并删净 <style> 与 class', async 
   assert.equal(out.status, 'ok');
   assert.equal(out.styledCount, 4, '带内联样式的元素应为 4 个（div 1 / p 2 / div 3 / span 4）');
 
-  const juiced = fs.readFileSync(path.join(urlDir, '4_juice.html'), 'utf8');
+  const juiced = fs.readFileSync(path.join(urlDir, '3_juice.html'), 'utf8');
 
   // 终态：无 <style>、无 class，规则内联到元素（字面声明值）
   assert.ok(!juiced.includes('<style'), '不应含 <style> 标签');
@@ -343,17 +343,17 @@ test('render_article.mjs: 轮 B juice 内联并删净 <style> 与 class', async 
   assert.ok(juiced.includes('rgb(255, 255, 0)'), 'span 的背景色应保留');
   assert.ok(juiced.includes('data-idx="2"'), 'data-idx 应保留');
 
-  // 字体类仅保留 font-size / font-weight（步骤 5 判标题层级的信号）
+  // 字体类仅保留 font-size / font-weight（步骤 4 判标题层级的信号）
   assert.ok(juiced.includes('font-size: 18px'), 'font-size 声明应保留');
   assert.ok(juiced.includes('font-weight: bold'), 'font-weight 声明应保留');
 
-  // 盒模型几何全删：margin / padding / 宽高 / box-sizing；定位仅留 absolute（步骤 5 特殊定位信号）
+  // 盒模型几何全删：margin / padding / 宽高 / box-sizing；定位仅留 absolute（步骤 4 特殊定位信号）
   assert.ok(!juiced.includes('margin'), 'margin 声明应删除');
   assert.ok(!juiced.includes('padding'), 'padding 声明应删除');
   assert.ok(!juiced.includes('width'), 'width 声明应删除');
   assert.ok(!juiced.includes('box-sizing'), 'box-sizing 声明应删除');
   assert.ok(!juiced.includes('position: relative'), 'position:relative 应删除（仅 absolute 保留）');
-  assert.ok(juiced.includes('position: absolute'), 'position:absolute 应保留（步骤 5 特殊定位信号）');
+  assert.ok(juiced.includes('position: absolute'), 'position:absolute 应保留（步骤 4 特殊定位信号）');
 
   // 其余字体与文本类声明全删：font-family/font-style / 行高 / 字距 / 文本对齐 / color / 文本换行
   assert.ok(!juiced.includes('font-family'), 'font-family 声明应删除');
@@ -372,12 +372,12 @@ test('render_article.mjs: 轮 B juice 内联并删净 <style> 与 class', async 
 });
 
 // img 宽高例外：白名单唯一的元素级例外——<img> 的 width/height 保留
-// （步骤 5 LLM 判图片权重的语义信号：小图标 / 大图 / 图片组），其余规则
+// （步骤 4 LLM 判图片权重的语义信号：小图标 / 大图 / 图片组），其余规则
 // 不变：img 的 margin 照删、其他元素的宽高照删
 const IMG_SIZE_EXTRACT = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>img 宽高</title><style>body{transition:opacity .2s}</style></head><body><figure data-idx="1"><img src="https://example.com/a/pic.png" style="width:120px;height:80px;margin:10px" data-idx="2"><figcaption data-idx="3">图注</figcaption></figure><div style="width:100%;height:40px;border:1px solid black" data-idx="4">文本</div></body></html>`;
 
-test('render_article.mjs: img 的 style 宽高保留（步骤 5 语义信号），其余元素宽高仍删', async () => {
+test('render_article.mjs: img 的 style 宽高保留（步骤 4 语义信号），其余元素宽高仍删', async () => {
   const { tmpRoot, urlDir } = setupTmp('img-size', {
     titleId: null, descriptionIds: [], paragraphIds: [1, 4], dumpIds: [],
   }, { snapshot: IMG_SIZE_EXTRACT });
@@ -386,7 +386,7 @@ test('render_article.mjs: img 的 style 宽高保留（步骤 5 语义信号）�
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
 
-  const juiced = fs.readFileSync(path.join(urlDir, '4_juice.html'), 'utf8');
+  const juiced = fs.readFileSync(path.join(urlDir, '3_juice.html'), 'utf8');
   // img 宽高保留（元素级例外）；img 的 margin 照删
   assert.ok(juiced.includes('width: 120px'), 'img 的 width 声明应保留');
   assert.ok(juiced.includes('height: 80px'), 'img 的 height 声明应保留');
@@ -419,7 +419,7 @@ test('render_article.mjs: 行内 style 属性含 &quot; 实体引号时不再崩
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
 
-  const juiced = fs.readFileSync(path.join(urlDir, '4_juice.html'), 'utf8');
+  const juiced = fs.readFileSync(path.join(urlDir, '3_juice.html'), 'utf8');
   // 同一属性的声明被正常解析：结构化 border 保留（元素经 CSSOM 重序列化，
   // 颜色归一为 rgb() 形式，只断言结构部分），font-family 白名单外删除
   assert.ok(juiced.includes('1px solid'), 'border 声明应保留');
@@ -446,7 +446,7 @@ test('render_article.mjs: 引号混排（字面单引号 × 实体双引号 × �
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
 
-  const juiced = fs.readFileSync(path.join(urlDir, '4_juice.html'), 'utf8');
+  const juiced = fs.readFileSync(path.join(urlDir, '3_juice.html'), 'utf8');
   // 两个元素的声明都正常解析：结构化样式保留，字体类（白名单外）删除
   assert.ok(juiced.includes('1px solid'), 'body 的 border 声明应保留');
   assert.ok(juiced.includes('outline'), 'div 的 outline 声明应保留');
@@ -470,7 +470,7 @@ test('render_article.mjs: data-style 等后缀属性不被引号处理波及', a
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
 
-  const juiced = fs.readFileSync(path.join(urlDir, '4_juice.html'), 'utf8');
+  const juiced = fs.readFileSync(path.join(urlDir, '3_juice.html'), 'utf8');
   assert.ok(juiced.includes('1px solid'), 'style 属性的 border 应保留');
   // data-style 原样存活：实体不被解码（outerHTML 序列化仍以 &quot; 表达）
   assert.ok(juiced.includes('data-style='), 'data-style 属性应保留');
@@ -515,14 +515,14 @@ test('render_article.mjs: @layer 内的工具类规则解包后正常内联（Ta
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
 
-  const juiced = fs.readFileSync(path.join(urlDir, '4_juice.html'), 'utf8');
+  const juiced = fs.readFileSync(path.join(urlDir, '3_juice.html'), 'utf8');
   // figure 的工具类样式全部内联进来。:root 变量定义随层解包提升到顶层后，
   // juice 会把已定义的 var() 解析为具体值（border-radius: 8px、
   // border-color: #d4d4d8 → CSSOM 归一 rgb(…）；--tw-border-style 以
   // @property 注册 initial-value solid（真实 Tailwind 形态——零值过滤会把
   // style:none 的整边三件全删，不注册则计算为 none、边框断言对象被清理）
   // 由函数值真实化链路以浏览器计算值替换为 solid——结构信号「带边框
-  // 圆角的盒子」对步骤 5 LLM 成立
+  // 圆角的盒子」对步骤 4 LLM 成立
   assert.ok(/border-radius:\s*8px/.test(juiced), 'figure 应内联 border-radius（已解析变量值）');
   assert.ok(/border-width:\s*1px/.test(juiced), 'figure 应内联 border-width');
   assert.ok(/border-color:\s*rgb\(212, ?212, ?216\)/.test(juiced), 'figure 应内联 border-color（已解析变量值）');
@@ -565,7 +565,7 @@ test('render_article.mjs: var/color-mix/calc 残留替换为浏览器计算的�
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
 
-  const juiced = fs.readFileSync(path.join(urlDir, '4_juice.html'), 'utf8');
+  const juiced = fs.readFileSync(path.join(urlDir, '3_juice.html'), 'utf8');
   // @property 注册变量 → 计算值 solid；calc() → 具体 px（1.125rem×2 = 36px）
   assert.ok(juiced.includes('border-style: solid'), 'border-style 应替换为计算值 solid');
   assert.ok(juiced.includes('font-size: 36px'), 'font-size 的 calc 应替换为具体 px 值');
@@ -581,7 +581,7 @@ test('render_article.mjs: var/color-mix/calc 残留替换为浏览器计算的�
 // 隐藏声明剥离：收起的元素（class 规则 / <style> 规则 / 内联 style / 裸 hidden
 // 属性 / 变量驱动）在计算样式前剥离隐藏声明、展开为可见——只删隐藏声明本身，
 // 规则其余声明保留（.row{display:flex} 不被 display:block 盲改，flex 结构
-// 信号流到步骤 5）。
+// 信号流到步骤 4）。
 const HIDDEN_STRIP_EXTRACT = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>隐藏剥离</title><style>
 :root { --gone: none }
@@ -610,7 +610,7 @@ test('render_article.mjs: 隐藏声明剥离——收起元素展开、自然 di
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
 
-  const juiced = fs.readFileSync(path.join(urlDir, '4_juice.html'), 'utf8');
+  const juiced = fs.readFileSync(path.join(urlDir, '3_juice.html'), 'utf8');
   // 终态零隐藏声明（display:none / visibility:hidden 一处不留）
   assert.ok(!juiced.includes('display: none'), '不应残留 display: none');
   assert.ok(!juiced.includes('visibility: hidden'), '不应残留 visibility: hidden');
@@ -619,7 +619,7 @@ test('render_article.mjs: 隐藏声明剥离——收起元素展开、自然 di
     assert.ok(juiced.includes(text), `收起内容应展开保留: ${text}`);
   }
   // 只删隐藏声明、规则其余声明保留：collapse 剥除后 .row 的 flex 自然恢复
-  // （不是 display:block 盲改——flex 方向信号对步骤 5 LLM 完整）。
+  // （不是 display:block 盲改——flex 方向信号对步骤 4 LLM 完整）。
   // 逐元素断言用整标签匹配（style 属性可能排在 data-idx 之前，从 id
   // 往后切片会切掉它）
   const tagOf = (id) => juiced.match(new RegExp(`<[^>]*data-idx="${id}"[^>]*>`))?.[0] || '';
@@ -679,7 +679,7 @@ test('render_article.mjs: 零值声明过滤——等于全元素初始值的声
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
 
-  const juiced = fs.readFileSync(path.join(urlDir, '4_juice.html'), 'utf8');
+  const juiced = fs.readFileSync(path.join(urlDir, '3_juice.html'), 'utf8');
   const tagOf = (id) => juiced.match(new RegExp(`<[^>]*data-idx="${id}"[^>]*>`))?.[0] || '';
 
   // 只剩零值声明的元素：style 属性整体消失（id 12 overflow:auto 因
@@ -703,9 +703,9 @@ test('render_article.mjs: 零值声明过滤——等于全元素初始值的声
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-// pre>code 内部样式对最终 markdown 无语义——仅文本与 data-language 是步骤 5
+// pre>code 内部样式对最终 markdown 无语义——仅文本与 data-language 是步骤 4
 // 所需。高亮 token span 携 font-weight/background/border 等白名单内幸存样式，
-// 若流进步骤 5 会让 LLM 误产 **bold** 损坏代码。finalize 在 pre 子树内直接
+// 若流进步骤 4 会让 LLM 误产 **bold** 损坏代码。finalize 在 pre 子树内直接
 // 剥净全部内联样式（跳过白名单），token span 变 bare 由轮 C 规则⑥解包为
 // 纯文本。对照：pre 外的 font-weight（标题层级信号）仍按白名单保留。
 const PRE_CODE_EXTRACT = `<!DOCTYPE html>
@@ -723,13 +723,13 @@ test('render_article.mjs: pre 内 token span 样式全删（markdown 无需）�
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
 
-  const juiced = fs.readFileSync(path.join(urlDir, '4_juice.html'), 'utf8');
+  const juiced = fs.readFileSync(path.join(urlDir, '3_juice.html'), 'utf8');
   const tagOf = (id) => juiced.match(new RegExp(`<[^>]*data-idx="${id}"[^>]*>`))?.[0] || '';
   // pre 内 token span 样式全删（font-weight/background/color 均无意义）
   assert.ok(!tagOf(3).includes('style='), `pre 内 font-weight span 应剥净 style: ${tagOf(3)}`);
   assert.ok(!tagOf(4).includes('style='), `pre 内 color span 应剥净 style: ${tagOf(4)}`);
   assert.ok(!tagOf(5).includes('style='), `pre 内 background span 应剥净 style: ${tagOf(5)}`);
-  // pre 外的 font-weight 仍保留（标题层级信号，步骤 5 判 div→h2 用）
+  // pre 外的 font-weight 仍保留（标题层级信号，步骤 4 判 div→h2 用）
   assert.ok(tagOf(6).includes('font-weight'), `pre 外的 font-weight 应保留: ${tagOf(6)}`);
   // 代码文本与语言信号存活
   assert.ok(juiced.includes('const') && juiced.includes('client'), '代码文本存活');
@@ -738,7 +738,7 @@ test('render_article.mjs: pre 内 token span 样式全删（markdown 无需）�
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-// ── 轮 C · 文章视图提取 + 瘦身 + 分块（断言对象 4_article.html）──
+// ── 轮 C · 文章视图提取 + 瘦身 + 分块（断言对象 3_article.html）──
 
 // 模拟纯内联形态的快照：块模型——流容器 [4]/非流包装层 [20]/骨架 [10][11]
 // 不在任何键、不入文章；[9] 为轮 A 折叠的 dump 空壳（轮 C 不消费 dumpIds）
@@ -756,7 +756,7 @@ test('render_article.mjs: 轮 C 四键块迁移——子树一字不动，嵌套
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
-  assert.equal(out.article, path.join(urlDir, '4_article.html'));
+  assert.equal(out.article, path.join(urlDir, '3_article.html'));
   assert.equal(out.elementCount, 8, '应迁移 8 个元素（标题 + 说明 + 6 个段落块）');
 
   const html = fs.readFileSync(out.article, 'utf8');
@@ -806,7 +806,7 @@ test('render_article.mjs: titleId 为 null 正常；description 落在段落块�
   assert.equal(out.status, 'ok');
   assert.equal(out.elementCount, 4, '应迁移 4 个元素（desc 3 + 块 5/6/7），desc 51 随块 5 带入不单列');
 
-  const html = fs.readFileSync(path.join(urlDir, '4_article.html'), 'utf8');
+  const html = fs.readFileSync(path.join(urlDir, '3_article.html'), 'utf8');
   assert.equal((html.match(/data-idx="51"/g) || []).length, 1,
     '嵌套 desc 应只出现一次（在最外层块的子树内，不被单独追加到文末）');
   assert.ok(html.includes('<div data-idx="5"><p data-idx="51">作者行</p><p data-idx="52">正文</p></div>'),
@@ -829,7 +829,7 @@ test('render_article.mjs: paragraphIds 乱序列举时输出仍按文档序', as
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
 
-  const html = fs.readFileSync(path.join(urlDir, '4_article.html'), 'utf8');
+  const html = fs.readFileSync(path.join(urlDir, '3_article.html'), 'utf8');
   const order = [1, 5, 6, 8].map((id) => html.indexOf(`data-idx="${id}"`));
   for (let i = 1; i < order.length; i++) {
     assert.ok(order[i] > order[i - 1], `乱序列举不应打乱输出文档序: ${order}`);
@@ -849,7 +849,7 @@ test('render_article.mjs: paragraphIds 为空或含非法成员时报 error（la
 });
 
 // 瘦身规则① data-*：保留白名单 {data-idx, data-language}（后者是
-// 步骤 5 判代码围栏语言的机械信号），其余 data-*（组件库脚手架/交互
+// 步骤 4 判代码围栏语言的机械信号），其余 data-*（组件库脚手架/交互
 // 状态）全删——白名单而非黑名单，陌上站点的 data-* 安全默认删除
 // span 6 带 style 是刻意防拆——规则① 删 data-color 后裸 span 会成空壳被规则⑥ 拆掉（spec §5.7 设计行为），本用例只测 data-* 白名单
 const DATASTAR_JUICED = `<!DOCTYPE html>
@@ -867,7 +867,7 @@ test('render_article.mjs: 瘦身规则①——data-* 只留 data-idx 与 data-l
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
 
-  const html = fs.readFileSync(path.join(urlDir, '4_article.html'), 'utf8');
+  const html = fs.readFileSync(path.join(urlDir, '3_article.html'), 'utf8');
   assert.ok(!html.includes('data-variant'), 'data-variant 应删除');
   assert.ok(!html.includes('data-color'), 'data-color 应删除');
   assert.ok(!html.includes('data-wrap-long-lines'), 'data-wrap-long-lines 应删除');
@@ -906,7 +906,7 @@ test('render_article.mjs: 瘦身规则②——MathML 按三档替换为 $LaTeX$
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
 
-  const html = fs.readFileSync(path.join(urlDir, '4_article.html'), 'utf8');
+  const html = fs.readFileSync(path.join(urlDir, '3_article.html'), 'utf8');
   assert.ok(html.includes('设 $M$ 为最小长度'),
     `KaTeX 双胞胎应整体替换为 $M$: ${html.slice(html.indexOf('<body'))}`);
   for (const id of [60, 61, 62, 63, 64]) {
@@ -949,7 +949,7 @@ test('render_article.mjs: 瘦身规则③④——块内残留按钮清理、but
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
 
-  const html = fs.readFileSync(path.join(urlDir, '4_article.html'), 'utf8');
+  const html = fs.readFileSync(path.join(urlDir, '3_article.html'), 'utf8');
   for (const id of [20, 21, 22, 28]) {
     assert.ok(!html.includes(`data-idx="${id}"`), `id ${id} 应删除`);
   }
@@ -981,7 +981,7 @@ test('render_article.mjs: 瘦身规则⑤——非白名单协议 <a> 解包、�
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
 
-  const html = fs.readFileSync(path.join(urlDir, '4_article.html'), 'utf8');
+  const html = fs.readFileSync(path.join(urlDir, '3_article.html'), 'utf8');
   assert.ok(!html.includes('codex:'), 'codex 协议 href 应随解包消失');
   assert.ok(!html.includes('javascript:'), 'javascript 协议应解包');
   assert.ok(html.includes('深问'), '解包后文本应保留');
@@ -1009,7 +1009,7 @@ test('render_article.mjs: 瘦身规则⑥——空壳 span 塌缩为纯文本、
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok');
 
-  const html = fs.readFileSync(path.join(urlDir, '4_article.html'), 'utf8');
+  const html = fs.readFileSync(path.join(urlDir, '3_article.html'), 'utf8');
   assert.ok(html.includes('<pre data-idx="30"><code data-language="python" data-idx="31">print(1)</code></pre>'),
     `嵌套空壳 span 应塌缩为纯文本: ${html.slice(html.indexOf('<body'))}`);
   assert.ok(html.includes('background-color: rgb(255, 255, 0)'), '带 style 的 span 应保留');
@@ -1041,9 +1041,9 @@ test('render_article.mjs: 超阈值分割——分块文件落盘 + emit chunks 
   assert.equal(out.chunks.split, true);
   assert.ok(out.chunks.count >= 2, `应至少分 2 块: ${out.chunks.count}`);
   assert.equal(out.chunks.files.length, out.chunks.count);
-  assert.ok(/4_article_chunk_1_of_\d+\.html$/.test(out.chunks.files[0]), 'files 应按块序（首文件为第 1 块）');
-  // 4_article.html 照写（调试对照）；每块是完整独立文档
-  assert.ok(fs.existsSync(path.join(urlDir, '4_article.html')));
+  assert.ok(/3_article_chunk_1_of_\d+\.html$/.test(out.chunks.files[0]), 'files 应按块序（首文件为第 1 块）');
+  // 3_article.html 照写（调试对照）；每块是完整独立文档
+  assert.ok(fs.existsSync(path.join(urlDir, '3_article.html')));
   for (const f of out.chunks.files) {
     const html = fs.readFileSync(f, 'utf8');
     assert.ok(html.startsWith('<!DOCTYPE html>'), `${f} 应为完整文档`);
@@ -1070,30 +1070,30 @@ test('render_article.mjs: 未分割——emit chunks 恒定形状 + 清另一模
     titleId: 1, descriptionIds: [], paragraphIds: [5, 6], dumpIds: [],
   }, { snapshot: JUICED });
   // 预置另一模式残留
-  fs.writeFileSync(path.join(urlDir, '4_article_chunk_9_of_9.html'), '<html></html>');
-  fs.writeFileSync(path.join(urlDir, '5_skeleton.json'), '[]');
-  fs.writeFileSync(path.join(urlDir, '5_skeleton_chunk_1_of_2.json'), '[]');
+  fs.writeFileSync(path.join(urlDir, '3_article_chunk_9_of_9.html'), '<html></html>');
+  fs.writeFileSync(path.join(urlDir, '4_skeleton.json'), '[]');
+  fs.writeFileSync(path.join(urlDir, '4_skeleton_chunk_1_of_2.json'), '[]');
   const r = await runArticle(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);
   assert.deepEqual(out.chunks, { split: false, count: 1, files: [out.article] });
   // stale 清理：旧骨架（两种形态）与旧分块 html 全清
-  assert.ok(!fs.existsSync(path.join(urlDir, '5_skeleton.json')), '应清 stale 5_skeleton.json');
-  assert.ok(!fs.existsSync(path.join(urlDir, '5_skeleton_chunk_1_of_2.json')), '应清 stale 分片骨架');
-  assert.ok(!fs.existsSync(path.join(urlDir, '4_article_chunk_9_of_9.html')), '未分割应清旧分块 html');
+  assert.ok(!fs.existsSync(path.join(urlDir, '4_skeleton.json')), '应清 stale 4_skeleton.json');
+  assert.ok(!fs.existsSync(path.join(urlDir, '4_skeleton_chunk_1_of_2.json')), '应清 stale 分片骨架');
+  assert.ok(!fs.existsSync(path.join(urlDir, '3_article_chunk_9_of_9.html')), '未分割应清旧分块 html');
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
 test('render_article.mjs: 分割时清 stale 骨架与越界旧分块（X>N）', async () => {
   const { tmpRoot, urlDir } = setupTmp('chunk-stale', BIG_KEY_IDS, { snapshot: BIG_JUICED });
-  fs.writeFileSync(path.join(urlDir, '5_skeleton.json'), '[]');
-  fs.writeFileSync(path.join(urlDir, '4_article_chunk_9_of_9.html'), '<html></html>');
+  fs.writeFileSync(path.join(urlDir, '4_skeleton.json'), '[]');
+  fs.writeFileSync(path.join(urlDir, '3_article_chunk_9_of_9.html'), '<html></html>');
   const r = await runArticle(tmpRoot, { U2M_ARTICLE_SPLIT_THRESHOLD: '60000' });
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);
   assert.ok(out.chunks.split);
-  assert.ok(!fs.existsSync(path.join(urlDir, '5_skeleton.json')), '分割也应清 stale 单文件骨架');
-  assert.ok(!fs.existsSync(path.join(urlDir, '4_article_chunk_9_of_9.html')), 'X>N 旧分块应清');
+  assert.ok(!fs.existsSync(path.join(urlDir, '4_skeleton.json')), '分割也应清 stale 单文件骨架');
+  assert.ok(!fs.existsSync(path.join(urlDir, '3_article_chunk_9_of_9.html')), 'X>N 旧分块应清');
   for (const f of out.chunks.files) assert.ok(fs.existsSync(f));
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });

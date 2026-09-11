@@ -1,10 +1,10 @@
 /**
- * 步骤 6 页面内提取函数。在浏览器 evaluate 中执行。
+ * 步骤 3 轮 C 页面内提取函数。在浏览器 evaluate 中执行。
  * 四键契约（titleId/descriptionIds/paragraphIds/dumpIds；paragraphIds
  * 嵌套已由调用方经 lib/key-ids.mjs 展开为 blockIds 扁平清单）——
  * 块模型：title/description/block **全部按元素本身**收选（完整子树，
  * 属性与内容一字不动）。流容器、非流包装层、到 body 的祖先骨架不在
- * 任何键、自然不入文章；dumpIds 不被步骤 6 消费——步骤 4 已把流内
+ * 任何键、自然不入文章；dumpIds 不被本步骤消费——轮 A 已把流内
  * 噪音折叠为空壳，壳不在任何键、同样不入（无迁移后剔除 pass）。
  * 收选节点先同节点去重、再做最外层优先嵌套去重——title/description
  * 落在段落块子树内合法（四键只约束 ID 不相交），被包含者跳过、内容

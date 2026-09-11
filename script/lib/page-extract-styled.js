@@ -1,13 +1,13 @@
 /**
- * 步骤 4 页面内裁剪函数。在浏览器 evaluate 中执行。
- * 基于 3_key_ids.json 四键契约（titleId/descriptionIds/paragraphIds/dumpIds；
+ * 步骤 3 页面内裁剪函数。在浏览器 evaluate 中执行。
+ * 基于 2_key_ids.json 四键契约（titleId/descriptionIds/paragraphIds/dumpIds；
  * paragraphIds 嵌套已由调用方展开为 blockIds 扁平清单），把带样式版快照
  * 裁剪为只含文章主体的样式视图：
  *   - 完整保留（一字不动，含全部标签属性与样式属性）：title/description/
  *     block 元素的子树 + 它们到 <body> 的祖先链——祖先上下文不变，CSS
  *     选择器照常生效
  *   - dumpIds：折叠为空元素——清空全部子节点，属性仅留 id/class/data-idx。
- *     壳占住流内位置（步骤 5 juice 求值 nth-child/相邻选择器时兄弟结构
+ *     壳占住流内位置（步骤 3 轮 B juice 求值 nth-child/相邻选择器时兄弟结构
  *     不失真），内容与冗余属性消失；落在保留区外的 dump 随所属分支
  *     删除、不计错不计数
  *   - <head> 完全不动（title + 全部 <style> 原地保留）；body 里即将删除

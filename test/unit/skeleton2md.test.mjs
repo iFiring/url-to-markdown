@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { convertSkeleton, entryToMarkdown } from '../../script/lib/skeleton2md.mjs';
 
 // 骨架 → markdown 纯函数渲染（原步骤 9 CLI 的核心逻辑，2026-09-11 步骤 8/9
-// 合并时抽 lib；同日步骤重编号后现为步骤 5/6）。CLI 集成路径（6_markdown.md
+// 合并时抽 lib；同日步骤重编号后现为步骤 4/5）。CLI 集成路径（5_markdown.md
 // 落盘、emit 契约）由 render-markdown.test.mjs 覆盖，本文件直测转换规则。
 
 // 新契约（references/markdown_skeleton_guide.md）：value 自带行外语法。

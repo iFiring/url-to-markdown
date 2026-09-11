@@ -191,9 +191,10 @@ CLI：`render_markdown.mjs <url-dir> [--port 0] [--timeout 120000]`
 
 ### 6.5 `clean_snapshot.mjs` —— 边界 chrome 清除与折叠（2026-09-09 增补）
 
-> 注：§6.1-6.4 与 §5 数据流描述的是早期脚本形态；现行管线（步骤 0-8、
-> `snapshot.mjs` 单入口、`clean_snapshot.mjs` 两趟清洗等）的演进见
-> `docs/superpowers/specs/` 系列设计文档与 CLAUDE.md。本节为步骤 2 的增补记录。
+> 注：§6.1-6.4 与 §5 数据流描述的是早期脚本形态；现行管线（步骤 0-5、
+> `snapshot.mjs` 单入口含清洗（2026-09-11 起原步骤 1/2 合并，清洗主体平移
+> `lib/clean-snapshot.mjs`）等）的演进见
+> `docs/superpowers/specs/` 系列设计文档与 CLAUDE.md。本节为原步骤 2（清洗）的增补记录。
 
 边界 chrome 清除与折叠（spec: `docs/superpowers/specs/2026-09-09-body-spine-chrome-removal-design.md`）：共享段 D1 脊柱占优删除（两版）+ chrome 折叠集预计算；clean 趟 K5x 消费折叠（HIDDEN/DIALOG/OVERLAY_TAG 壳）；styled 收集与 K6/K7 同源 skip 保 k 对齐。清洗版唯一消费者步骤 3 的 token 判读见 `references/analyze_html_guide.md`。
 

@@ -1,12 +1,12 @@
 // script/lib/inline2md.mjs
 // 长文本行内 run 的确定性 Markdown 转换器（spec 2026-09-06 §5）。
-// 输入是步骤 2 共享段规范化序列化的 canonical HTML 片段（2_long_text.json
+// 输入是步骤 1 共享段规范化序列化的 canonical HTML 片段（1_long_text.json
 // 的 runs 段）：剥净属性、span 已归一为 strong/em/del、math 已压成仅含
 // annotation 的极简形态。jsdom 解析后递归下降映射为 GFM 行内语法。
 //
 // 转义策略（§5.3，2026-09-07 自审修订）：
 //  - 常规文本节点：活动字符 `` \ ` * _ [ ] < $ ~ `` 反斜杠转义；`!` 仅后随
-//    `[` 时转义（防误触步骤 6 图片下载扫描）；
+//    `[` 时转义（防误触步骤 5 图片下载扫描）；
 //  - 行首中断符：处于输出行首（值开头 / 文本换行后 / br 硬换行后 / 前导
 //    空白后）的 `# > - + =` 直接转义、「数字 + ./) + 空白」转义定界符——
 //    防源码换行后随文本被解析为列表/标题/引用/setext（软折叠不覆盖块级
@@ -244,7 +244,7 @@ function convertNode(node, state) {
       return fence + ' ' + raw + ' ' + fence;
     }
     case 'MATH': {
-      // 极简形态（步骤 2 序列化保证 annotation 存在）；源照抄不转义。
+      // 极简形态（步骤 1 序列化保证 annotation 存在）；源照抄不转义。
       // 换行折叠为空格：TeX 源中换行 = 空格 token，渲染等价且防 $…$ 内
       // 换行触发块中断
       const ann = node.querySelector('annotation');

@@ -1,5 +1,5 @@
 /**
- * 步骤 5 预处理：style 属性字符串 token 规范化。在浏览器 evaluate 中执行，
+ * 步骤 3 轮 B 预处理：style 属性字符串 token 规范化。在浏览器 evaluate 中执行，
  * 返回规范化后的整页 HTML（<!DOCTYPE html> + outerHTML）。
  * 为什么需要：juice 写回 style 属性时把声明值里的每个 " 无条件换成 '
  * （juice/lib/inline.js setStyleAttrs 的 value.replace(/["]/g, "'")），

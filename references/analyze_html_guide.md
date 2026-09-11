@@ -1,6 +1,6 @@
 # 任务
 
-这是**一篇文章页面**的快照，读取页面 `<url-working-path>/2_clean_snapshot.html` 的 DOM 结构（元素层级、标签类型、语义 class）与**文本规模**分布，找到该页面文章四类关键元素的 `data-idx`（**以下统称 ID**）：
+这是**一篇文章页面**的快照，读取页面 `<url-working-path>/1_clean_snapshot.html` 的 DOM 结构（元素层级、标签类型、语义 class）与**文本规模**分布，找到该页面文章四类关键元素的 `data-idx`（**以下统称 ID**）：
 
 1. **标题分块**（`titleId`）：文章主标题对应的元素 ID。通常是文章主体范围（见「原则/约束」）内层级最高的 `<h1>`-`<h3>` 或结构上处于段落流外部或顶部的标题性容器；**无论在段落流内还是流外都标这里**——若标题元素本身落在段落流中，**可同时保留其在 `paragraphIds` 的原位**；无主标题或不可判时为 `null`
 
@@ -204,7 +204,7 @@
   - 该区间是文章主体的边界判据：区间之外的非文章结构（footer、相关推荐、评论、浮窗等）一律外部、不标
   - **技巧**：优先找 `titleId`(`<h1>`-`<h3>`)，`descriptionIds` 一定在它之后；`paragraphIds` 从区间起点起——流外时起点 = `titleId`，流内首段时起点 = 首 `paragraphIds` 块（≤ `titleId`）
 
-## 结构说明（`2_clean_snapshot.html`）
+## 结构说明（`1_clean_snapshot.html`）
 
 - `data-idx` 是 body 内元素的**文档序递增整数**（1, 2, 3, …）：编号大小即文档前后位置，可直接比较——「文档序区间」等位置推理均依赖这一点
 
@@ -212,17 +212,17 @@
 
 - `{{LONG_TEXT|n_chars}}` / `{{LONG_TEXT|n_words}}` 为长文本占位符（清洗版**无编号**——编号只存在于带样式版还原链，与判读无关）。**整段形态是常态**：超阈值（>16 汉字 / >12 词）的极大纯行内 run（段落内 text 与 strong/em/code/a 等行内元素混排的整段内容）折叠为单个占位符；夹在块级子元素之间的散长文本节点同样占位；短文本（≤16 汉字 / ≤12 词）保留原文。占位符分布是判读线索——段落/标题/按钮的位置与体量看得到；`<title>` 原文保留（不占位）
 
-- `{{CODE_k|x_lines}}` 为代码块内容占位，k = 文档序编号（1 起、跳过 `[hidden]` pre）、x = 代码行数（按占位前原文的行结构计）；`data-language` 在 pre 属性上。ok/failed 在清洗版同为占位符（clean 恒折叠），标 paragraphIds 的方式与表格占位符一致；成功代码块的原文已由步骤 2 预计算存 `2_code.json`、步骤 6 还原
+- `{{CODE_k|x_lines}}` 为代码块内容占位，k = 文档序编号（1 起、跳过 `[hidden]` pre）、x = 代码行数（按占位前原文的行结构计）；`data-language` 在 pre 属性上。ok/failed 在清洗版同为占位符（clean 恒折叠），标 paragraphIds 的方式与表格占位符一致；成功代码块的原文已由步骤 1 预计算存 `1_code.json`、步骤 5 还原
 
-- `{{TABLE_k|y×x}}`：表格整体占位，k = 文档序编号（1 起、跳过 `[hidden]` 表），y = 行数（`<tr>` 数），x = 列数（各行 colspan 之和的最大值，即网格列数）。行列规模是判读表格的信号——大表（如 `30×` 级）大概率是核心数据载体。成功表的 GFM markdown 已由步骤 2 预计算存 `2_tables.json`、步骤 6 还原；步骤 3 仅需标记其 `data-idx` 入 paragraphIds
+- `{{TABLE_k|y×x}}`：表格整体占位，k = 文档序编号（1 起、跳过 `[hidden]` 表），y = 行数（`<tr>` 数），x = 列数（各行 colspan 之和的最大值，即网格列数）。行列规模是判读表格的信号——大表（如 `30×` 级）大概率是核心数据载体。成功表的 GFM markdown 已由步骤 1 预计算存 `1_tables.json`、步骤 5 还原；步骤 2 仅需标记其 `data-idx` 入 paragraphIds
 
 - `{{HIDDEN_TAG|n_chars;n_a/n_div/…}}` 为带 `hidden` 属性的元素，折叠了子树；token 是真实文本规模与标签构成（计数降序），标明其后是整块折叠内容。hidden 元素按内容语义判身份：文章正文（FAQ/附录/展开收起）→ 段落块（也是锚点）；页面功能（模态/抽屉/移动端导航）→ 流内标 `dumpIds`、流外不标。自 2026-09-09 起也覆盖 **body 边界脚手架区的 CSS 隐藏**（body 直接子孙与独子链上的 display:none/visibility:hidden）——判读方式不变；正文流深处的 CSS 隐藏内容（非激活 tab、FAQ 收起答案）不折叠、原文可见
-- `{{DIALOG_TAG|n_chars;构成}}` 为 `role="dialog"`/`aria-modal` 弹窗折叠壳（任意深度）——**chrome，不要选入任何键**；壳 data-idx 也不需要标 dumpIds（步骤 4 对键外分支整枝删除）
+- `{{DIALOG_TAG|n_chars;构成}}` 为 `role="dialog"`/`aria-modal` 弹窗折叠壳（任意深度）——**chrome，不要选入任何键**；壳 data-idx 也不需要标 dumpIds（步骤 3 对键外分支整枝删除）
 - `{{OVERLAY_TAG|n_chars;构成}}` 为 body 边界独子链上的可见 fixed/absolute/sticky 浮层折叠壳（登录横幅/吸顶工具条等）——**chrome，不要选入任何键**
 
 - `{{VIEW_TEXT|n_chars}}` / `{{VIEW_TEXT|n_words}}` 为**纯视图文本占位符**：可视模块（图解/图表/对比卡片/公式渲染等）内部「只含 div + 行内文本元素（span/a/strong/em/code/br/MathML 等）+ 文本」的极大子树、或「只含文本与行内元素」的 p 根折叠、**壳元素保留**——标签、class、data-idx、aria-label 原样。模块内即使含长文本也**整棵折叠、原文随折吞没**（`n` 是整模块文本体量信号）。判读要点：① **壳的 class/aria-label 标识模块身份**（如 `ra-raw`、`katex-html`）、`n` 是模块文本体量信号；② 标 paragraphIds 时以**壳的 `data-idx` 整块标记**（可视模块整棵标记、内部不拆），占位符不是段落文本、不要标记壳内已被折叠的后代 id。文本量不足（<8 汉字/6 词）、结构单薄（纯 div 树 ≤6 内部 div、含行内元素树 ≤4 元素）的子树**保留原样**；链接/按钮/标题（h1-h3）内的文本结构、含图片（img）的子树也不折叠
 
-    折叠前后对照（折叠前形态仅示意，你在 `2_clean_snapshot.html` 里看到的是折叠后形态）：
+    折叠前后对照（折叠前形态仅示意，你在 `1_clean_snapshot.html` 里看到的是折叠后形态）：
 
     ```html
     <!-- 折叠前：可视模块内部是 div/span + 文本碎片 -->
@@ -253,7 +253,7 @@
 
     反例不折：纯文本段落、含 img 的段落、行内元素 ≤4 的段落——正常正文段落流原样可见。占位符所在位置即模块原位，按普通可视模块参与成流/锚点判定（div 壳可作块、不能作锚点）
 
-### 示例（`2_clean_snapshot.html`）：
+### 示例（`1_clean_snapshot.html`）：
 
 ```html
 <html>
@@ -368,7 +368,7 @@
 
 ## 输出要求
 
-输出路径：`<url-working-path>/3_key_ids.json`
+输出路径：`<url-working-path>/2_key_ids.json`
 
 **JSON 契约**：四键全部写出；`titleId` 为正整数，无主标题或不可判时为 `null`；`descriptionIds`/`dumpIds` 可为空数组；`paragraphIds` **必填且非空**（至少标一个段落块）；数组成员为正整数（块）或嵌套数组（子段落流），各数组按文档序书写
 
