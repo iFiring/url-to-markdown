@@ -20,7 +20,7 @@
  * 清洗版含无编号 LONG_TEXT 占位符（K11 纯视图折叠先于占位执行、可吞模块内
  * 长文本——孪生守卫为 clean LT 后缀 ⊆ styled，步骤 3 少看见模块内 LT，
  * 还原链不受影响）；
- * 还原链只走带样式版——步骤 7 骨架引用来自文章视图（styled 路径），步骤 8
+ * 还原链只走带样式版——步骤 5 骨架引用来自文章视图（styled 路径），步骤 6
  * 从 2_long_text.json 回填，清洗版占位不被任何后续步骤消费。
  *
  * 清洗版瘦身规则 K1-K7/K9-K11：class 语义过滤 K1 → 属性白名单 K2 →
@@ -34,13 +34,13 @@
  * 注释）；K8 行内 run 折叠已按 2026-09-06 spec 重设计（见
  *   docs/superpowers/specs/2026-09-06-long-text-inline-run-design.md）：
  *   折叠单位 = 极大纯行内 run，检测/规范化序列化在两趟共享段末尾执行，
- *   canonical HTML 入 2_long_text.json 的 runs 段，步骤 8 inline2md
+ *   canonical HTML 入 2_long_text.json 的 runs 段，步骤 6 inline2md
  *   确定性转 markdown——行内结构不再依赖 LLM 转录。详见各步骤注释与
  *   spec 修订记录。
  *
  * 带样式版简化（2026-08-28）：astro 解包两趟共享 + styled 属性白名单——
  * 带样式版是步骤 4-7 的输入源，脚手架标签与属性（astro props、data-v-*、
- * aria-* 等）曾一路流进 6_article.html（步骤 7 LLM 输入）。
+ * aria-* 等）曾一路流进文章视图（步骤 5 LLM 输入）。
  */
 function __u2mCleanSnapshot(cfg) {
   cfg = cfg || {};
@@ -77,7 +77,7 @@ function __u2mCleanSnapshot(cfg) {
   // 4. 按钮类控件保留（2026-08-25 起）：button 与 [role="button"]（div/span/a
   //    伪装）不再删除——FAQ 折叠头、CTA、卡片式 role=button 常是内容载体，
   //    整删或按字数取舍都会误伤正文，一律保留交步骤 3 语义判断。按钮型
-  //    input[type=button|submit|reset] 仍随步骤 7 的表单控件删除（无子内容，
+  //    input[type=button|submit|reset] 仍随步骤 5 的表单控件删除（无子内容，
   //    value 文本极罕为正文）。
 
   // 5. 删除页面骨架标签：<nav>/<footer>/<form> 及其 role 等价物——
@@ -259,8 +259,8 @@ function __u2mCleanSnapshot(cfg) {
   //    命名空间（astro-island/astro-slot/astro-static-slot 及未来变体），按前缀
   //    匹配而非枚举；子元素原样上提，包装自身属性（含其 data-idx 与巨量
   //    序列化 props）弃置。两趟共享的意义：步骤 3 引用集来自清洗版（从不引用
-  //    包装 id），带样式版同步解包使两版 id 集对齐，脚手架不再流进步骤 4-7
-  //    （曾实证 6_article.html 残留 59 个 astro 标签、27KB props 噪音）。
+  //    包装 id），带样式版同步解包使两版 id 集对齐，脚手架不再流进步骤 4-5
+  //    （曾实证文章视图残留 59 个 astro 标签、27KB props 噪音）。
   //    置于空元素级联之后（与原清洗版执行顺序一致，清洗版输出逐字节不变）、
   //    K5-K8 折叠之前——折叠统计的是解包后的真实子树。
   var astroWraps = [];
@@ -277,7 +277,7 @@ function __u2mCleanSnapshot(cfg) {
   // 注释节点剥离（两趟共享，spec 2026-09-09 §9.1-2）：框架 SSR 残留（<!---->
   //     Vue/React 占位注释）与模板注释零信息量；顺带消除原生注释与步骤 6 分块
   //     上下文标记（HTML 注释形态）的潜在混淆。pre/code 子树除外——代码样本
-  //     可能含 HTML 注释作为内容（styled 失败 live 代码块由步骤 7 LLM 阅读）。
+  //     可能含 HTML 注释作为内容（styled 失败 live 代码块由步骤 5 LLM 阅读）。
   //     先收集后删——避免 TreeWalker 活遍历中删节点的迭代陷阱。
   var commentsRemovedCount = 0;
   var commentWalker = document.createTreeWalker(document.documentElement, 128, null);
@@ -477,7 +477,7 @@ function __u2mCleanSnapshot(cfg) {
   // 9b. aria-label 值截断（两趟共享）：保留首句+末句，中间省略为 …。
   //     aria-label 是 icon-only 控件/链接的唯一可达名信号——clean 趟白名单
   //     保留它、styled 趟亦保留，但某些站点把整段描述塞进 aria-label，全量
-  //     流到步骤 7 LLM 输入费 token。按完整句末标点切句：终止符 = 。！？；
+  //     流到步骤 5 LLM 输入费 token。按完整句末标点切句：终止符 = 。！？；
   //     与 .!?;（不含逗号/顿号这类句中停顿）；≥3 句才截断，≤2 句（含无终止
   //     符的长单句）原样保留。共享段同位执行→两版截断值天然一致（孪生守卫
   //     不受影响）；aria-label 是元数据、不流入最终 markdown，无需进恢复清单。
@@ -500,7 +500,7 @@ function __u2mCleanSnapshot(cfg) {
   // ---- run 检测 + 规范化序列化（两趟共享段末尾；spec 2026-09-06 §3）----
   // 长文本折叠单位升级为「极大纯行内 run」：流容器内 text 与行内元素混排的
   // 整段内容折成一个 {{LONG_TEXT_k}}（两趟折叠执行见 foldLongText），原文以
-  // 规范化 HTML 片段入库（runs 段），步骤 8 inline2md 确定性转 markdown。
+  // 规范化 HTML 片段入库（runs 段），步骤 6 inline2md 确定性转 markdown。
   // 检测放共享段末尾：两趟 DOM 完全一致（空元素级联 + astro 解包已完），
   // 决策天然一致——孪生守卫 clean⊆styled 由构造保证，免疫 clean 趟 K5/K10/
   // K11 的纯性扰动（K 规则删子树会让 clean 侧容器「变纯」而 styled 不纯）。
@@ -543,7 +543,7 @@ function __u2mCleanSnapshot(cfg) {
     // KaTeX 视觉孪生原子化（§3.3「katex-html 不入库」的兑现机制，2026-09-07
     // 审阅修订）：span.katex = katex-mathml（clip 隐藏的 math 源，非
     // display:none）+ katex-html（视觉孪生，可含 svg 伸展符号）。整棵视为一个
-    // math 节点、只判源——否则孪生文本随 run 双份入文（步骤 8 产出
+    // math 节点、只判源——否则孪生文本随 run 双份入文（步骤 6 产出
     // $E=mc^2$*E*=*m**c*2），或孪生内 svg 把整段 run 误阻断（KaTeX 页失去
     // 折叠收益，spec §1 动机 3 落空）。内部免检纯性/隐藏（clip 非
     // display:none；svg 是排版符号非图片内容）；无源 → 阻断（同决策 3）
@@ -607,7 +607,7 @@ function __u2mCleanSnapshot(cfg) {
     if (node.nodeType === 3) return escHtmlText(node.textContent);   // 空白保真不归一
     if (node.nodeType !== 1) return '';
     // span.katex 原子序列化（runInnerOk 同款判定）：只输出极简 math，
-    // katex-html 视觉孪生不入库——否则步骤 8 源与孪生双份输出
+    // katex-html 视觉孪生不入库——否则步骤 6 源与孪生双份输出
     if (node.classList && node.classList.contains('katex')) {
       return serializeMathAtomic(node.querySelector('math'), node);
     }
@@ -641,11 +641,11 @@ function __u2mCleanSnapshot(cfg) {
         return serializeMathAtomic(node, null);
       default: {
         // code/br + 行内同族（u/mark/small/sub/sup/abbr/cite/q/kbd/samp/time/
-        // var/wbr）：保原名、属性剥净；wbr 零宽信号在步骤 8 解包
+        // var/wbr）：保原名、属性剥净；wbr 零宽信号在步骤 6 解包
         if (RUN_INLINE[tag] !== 1) return kids();   // 防御：允许集外透明（检测已挡）
         var lower = node.tagName.toLowerCase();
         // void 元素不带闭合标签：HTML5 解析规则把 `</br>` 当 `<br>` 起始标签
-        // 重建——步骤 8 jsdom 回读 `<br></br>` 得到两个 br，一个换行渲染成
+        // 重建——步骤 6 jsdom 回读 `<br></br>` 得到两个 br，一个换行渲染成
         // 两个（地址/签名/诗歌类高频形态）
         if (tag === 'BR' || tag === 'WBR') return '<' + lower + '>';
         var s4 = kids();
@@ -693,10 +693,10 @@ function __u2mCleanSnapshot(cfg) {
     }
 
     // 11. 属性白名单（styled 趟）：只留级联、还原链与内容信号所需——
-    //     (a) clean K2 八属性 + style（juice 输入）/href/src（步骤 7 链接与
-    //     图片 URL 源、步骤 8 下载源）/width/height（img 权重信号，与 style
+    //     (a) clean K2 八属性 + style（juice 输入）/href/src（步骤 5 链接与
+    //     图片 URL 源、步骤 6 下载源）/width/height（img 权重信号，与 style
     //     声明互补）；
-    //     (b) 内容信号：colspan/rowspan（步骤 7 判复杂跨格表格→trans2img）、
+    //     (b) 内容信号：colspan/rowspan（步骤 5 判复杂跨格表格→trans2img）、
     //     start（ol 起始编号）、aria-label（icon-only 控件/链接的唯一可达名，值已在共享段截断为首末句）、
     //     data-src/srcset（懒加载图片 URL 通道——步骤 1 只规范 img[src]）、
     //     datetime（time 日期原文）、open（details 展开态）、lang（语言信号，
@@ -730,7 +730,7 @@ function __u2mCleanSnapshot(cfg) {
     }
 
     // 注入 <meta charset="utf-8">（仅带样式版）：head 内 meta 已被共享清洗删除，而
-    // extract_styled 以 file:// 加载本产物——无 charset 声明时解码依赖 chromium 嗅探，
+    // render_article 以 file:// 加载本产物——无 charset 声明时解码依赖 chromium 嗅探，
     // 环境敏感（曾把 UTF-8 嗅成 Windows-1252 产出双重编码乱码）。清洗版无浏览器加载方，不注入。
     var metaCharset = document.createElement('meta');
     metaCharset.setAttribute('charset', 'utf-8');
@@ -934,7 +934,7 @@ function __u2mCleanSnapshot(cfg) {
   //     /__u2mFoldTables 一致，保证两版 k 对齐）。行 = 本表自身的 <tr> 数（嵌套
   //     表格的行归属其最近的 table、不计入外层），列 = 各行「单元格 colspan 之和」
   //     的最大值（网格列数而非单元格个数）；形状在 K2 前预计算（colspan 属性彼时
-  //     尚在）。步骤 3 以行列规模判读表格；成功表的原文存 2_tables.json、步骤 8
+  //     尚在）。步骤 3 以行列规模判读表格；成功表的原文存 2_tables.json、步骤 6
   //     还原，全表在后续步骤从带样式版保真（成功表带样式版也折叠为同形占位符）。
   //     带 hidden 的 table 由 K5 独占折叠（其构成 token 已就位），跳过防二次覆盖
   var tables = document.querySelectorAll('table');
@@ -989,7 +989,7 @@ function __u2mCleanSnapshot(cfg) {
 
   // （K8 行内 run token 化 2026-08-31 曾废除；2026-09-06 spec 重设计后
   //   「极大纯行内 run 整段折叠」已在两趟共享段末尾检测、趟分支内执行——
-  //   canonical HTML 入 runs 段、步骤 8 inline2md 确定性还原行内结构，
+  //   canonical HTML 入 runs 段、步骤 6 inline2md 确定性还原行内结构，
   //   旧废除理由（步骤 3 看不到行内骨架、行内结构保真依赖 LLM）随之作废，
   //   见 docs/superpowers/specs/2026-09-06-long-text-inline-run-design.md）
 
@@ -1019,7 +1019,7 @@ function __u2mCleanSnapshot(cfg) {
   //     在 step 3 之前无保护集——裸 span 是行内包装、内容流入可选块级父
   //     （p/section/h2-h6 等，实测占绝大多数），无内容丢失。
   //     仅 clean 趟执行：带样式版保留这些 span——其 style 携 font-weight/
-  //     color 供步骤 5 finalize 保留与步骤 7 LLM 判粗体/颜色，不能拆。孪生
+  //     color 供步骤 5 finalize 保留与步骤 5 LLM 判粗体/颜色，不能拆。孪生
   //     id 集由此由「相等」放宽为 clean ⊆ styled（step 3 在子集挑、step 4
   //     在超集查恒命中）；clean 趟长文本占位在 K10 之后才执行（2026-09-03
   //     后置），拆包挪的是原文文本节点；styled 趟不受影响（K10 仅 clean）。

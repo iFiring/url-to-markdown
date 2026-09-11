@@ -1,17 +1,17 @@
 // script/lib/chunk-article.mjs
 /**
  * 文章视图分块器（spec docs/superpowers/specs/2026-09-09-article-chunk-split-design.md）。
- * 纯函数：不碰文件系统与浏览器；由 extract_article.mjs 在 slim pass 后调用。
+ * 纯函数：不碰文件系统与浏览器；由 render_article.mjs 在 slim pass 后调用。
  *
  * 输入：page-slim 产物全文 slimHtml 与 body 逐子元素 outerHTML（同一 DOM、
- * 同一序列化器——每块 markup 与 6_article.html 逐字节一致）。输出完整独立
- * html 分块 6_article_chunk_X_of_N.html 的内容。
+ * 同一序列化器——每块 markup 与 4_article.html 逐字节一致）。输出完整独立
+ * html 分块 4_article_chunk_X_of_N.html 的内容。
  *
  * 算法（spec §3.3-§3.5）：
  *   1. 触发：slimHtml 字节 > splitThreshold 才分割
  *   2. 贪心装箱：按文档序累加，加入下一块会超 chunkMax 即封块（own 向
  *      40KB 靠齐）；单个段落块自身 > chunkMax 时独立成块（允许溢出——
- *      段落块是步骤 7 的原子契约单位）
+ *      段落块是步骤 5 的原子契约单位）
  *   3. 尾块合并（循环每轮重查）：最后一块段落块数 <5 且（前块+尾块 own）≤
  *      splitThreshold → 并入前块。守护必须用 splitThreshold：贪心封边处恒有
  *      前块+尾块首块 > chunkMax，而尾块 own ≥ 尾块首块，chunkMax 守护下条件
@@ -142,9 +142,9 @@ export function chunkArticle(slimHtml, children, { splitThreshold, chunkMax }) {
     const openingIdxs = i > 0 ? opening : [];
     const prevIdxs = i > 0 ? pickPrev(i) : [];
     const nextIdxs = i < n - 1 ? pickNext(i) : [];
-    // DOC_RE 捕获组从 <html 起——DOCTYPE 前缀在此补上，与 6_article.html
+    // DOC_RE 捕获组从 <html 起——DOCTYPE 前缀在此补上，与 4_article.html
     // 的 '<!DOCTYPE html>\n' + outerHTML 序列化形态逐字节同头；
-    // own 区逐字节拼接（与 6_article.html body 内容一致）
+    // own 区逐字节拼接（与 4_article.html body 内容一致）
     const parts = ['<!DOCTYPE html>\n', header];
     if (openingIdxs.length > 0) parts.push(commented(OPENING_MARK, openingIdxs));
     if (prevIdxs.length > 0) parts.push(commented(PREV_MARK, prevIdxs));

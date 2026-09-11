@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
- * render_markdown.mjs —— 步骤 8（终态步骤）：占位符还原 + 图片下载 + trans2img
- * 截图 + 骨架渲染 markdown。读 7_skeleton.json + 1_snapshot.html +
- * 2_long_text.json + 3_key_ids.json（分割时读分片 7_skeleton_chunk_X_of_N.json
- * 并按 X 序合并，spec 2026-09-09 §5；7_skeleton.json 存在时优先），产出：
+ * render_markdown.mjs —— 步骤 6（终态步骤）：占位符还原 + 图片下载 + trans2img
+ * 截图 + 骨架渲染 markdown。读 5_skeleton.json + 1_snapshot.html +
+ * 2_long_text.json + 3_key_ids.json（分割时读分片 5_skeleton_chunk_X_of_N.json
+ * 并按 X 序合并，spec 2026-09-09 §5；5_skeleton.json 存在时优先），产出：
  *
- *   8_markdown.md            最终产物（lib/skeleton2md.mjs 渲染，块间空行、
+ *   6_markdown.md            最终产物（lib/skeleton2md.mjs 渲染，块间空行、
  *                             文件以换行收尾）
  *
- *   8_resolved_skeleton.json  调试中间产物，结构同步骤 7，所有
+ *   6_resolved_skeleton.json  调试中间产物，结构同步骤 5，所有
  *                             {{LONG_TEXT_k[|suffix]}} 替换为真实文本；img
  *                             条目（![img](url) 形态）在下载成功后只换括号内
  *                             URL 改写为 ![img](assets/images/<name>) 并重写
@@ -27,14 +27,14 @@
  *
  * 四轮处理：
  *   1. 纯 Node（playwright 之前）：读骨架 + 2_long_text.json 做占位符替换，
- *      写出 8_resolved_skeleton.json（条目数、顺序、key 与步骤 7 完全一致，
+ *      写出 6_resolved_skeleton.json（条目数、顺序、key 与步骤 5 完全一致，
  *      value 全部为真实文本）。任一 value 引用了未定义编号 → 直接 error。
  *      骨架无 trans2img 也无 img 条目时跳过浏览器阶段直接渲染 markdown
  *      （skipped: "no_trans2img"）
  *   2. playwright · 图片下载：context.request（共享 U2M_PROXY 代理与
  *      storageState 登录态）按文档序去重下载 http(s) 图片（并发限 4），
  *      成功者把 resolved skeleton 的 img 值改写为 assets/images/<name>
- *      并重写 8_resolved_skeleton.json；失败不中断——保留原 URL、记入
+ *      并重写 6_resolved_skeleton.json；失败不中断——保留原 URL、记入
  *      failedImages、stderr 警告。仅此无 trans2img 时关浏览器渲染 markdown
  *      收工
  *   3. playwright · 截图（live 重渲染 + 严校验 + 快照兜底）：
@@ -62,11 +62,11 @@
  *      记录 boundingBox（展开后的真实尺寸），随后逐条目择优——宽度优先、
  *      等宽选高、宽高全同选最外层（数组首位）——把条目 value 回写为选中路径
  *   4. 纯 Node · 骨架渲染（浏览器关闭之后）：lib/skeleton2md.mjs 把最终
- *      resolved skeleton 转为 markdown 块写出 8_markdown.md；code 残留
+ *      resolved skeleton 转为 markdown 块写出 6_markdown.md；code 残留
  *      （{{CODE_k}} 未物化）或 trans2img 仍为数组 → 渲染守卫响亮报错
  *
  * stdout 输出（有且仅有一行 JSON，日志一律走 stderr）:
- *   `markdownPath`/`bytes`/`blocks` 为最终产物 8_markdown.md 路径/字节数/块数
+ *   `markdownPath`/`bytes`/`blocks` 为最终产物 6_markdown.md 路径/字节数/块数
  *   （skipped 路径同样产出）；`resolvedSkeleton` 为 resolved skeleton 路径；
  *   `count` 为截图数；`source` 为截图来源（`live` 全部来自重渲染 / `snapshot` 全部快照兜底 / `mixed` 混合——均无需处理）；
  *   `images` 为下载成功数、`failedImages` 为失败 URL（其骨架条目保留原 URL，无需处理）；
@@ -171,13 +171,13 @@ function sameSignature(a, b) {
     && a.text === b.text;
 }
 
-// 终态渲染（第 4 轮，纯 Node）：resolved skeleton → 8_markdown.md。
+// 终态渲染（第 4 轮，纯 Node）：resolved skeleton → 6_markdown.md。
 // 只在所有成功 emit 之前调用——浏览器已关、emit 未发，渲染守卫抛错
 // 冒泡到 main().catch → emitError，与 emit 互斥不产生第二行 stdout。
 // 文件以换行收尾（POSIX 文本惯例；空骨架写空串不写裸 \n）。
 async function renderAndWriteMarkdown(resolvedSkeleton, dir) {
   const md = convertSkeleton(resolvedSkeleton);
-  const outPath = path.join(dir, '8_markdown.md');
+  const outPath = path.join(dir, '6_markdown.md');
   await fsPromises.writeFile(outPath, md ? md + '\n' : '');
   log(`markdown 已生成: ${outPath}（${md.length} 字节）`);
   return {
@@ -195,16 +195,16 @@ async function main() {
 
   const dir = urlDir(url);
   const snapshotPath = path.join(dir, '1_snapshot.html');
-  const skeletonPath = path.join(dir, '7_skeleton.json');
+  const skeletonPath = path.join(dir, '5_skeleton.json');
   const longTextPath = path.join(dir, '2_long_text.json');
 
   if (!fs.existsSync(snapshotPath)) {
     return emitError(`找不到 ${snapshotPath}，请先运行步骤 1`);
   }
-  // ── 骨架读取：未分割直读 7_skeleton.json；分割则 glob 分片、校验、按 X 序
-  //    合并（spec 2026-09-09 §5）。7_skeleton.json 存在时优先——升级前跑了一
+  // ── 骨架读取：未分割直读 5_skeleton.json；分割则 glob 分片、校验、按 X 序
+  //    合并（spec 2026-09-09 §5）。5_skeleton.json 存在时优先——升级前跑了一
   //    半的目录防御；步骤 6 的 stale 清理已保证两者不并存 ──
-  const CHUNK_SKELETON_RE = /^7_skeleton_chunk_(\d+)_of_(\d+)\.json$/;
+  const CHUNK_SKELETON_RE = /^5_skeleton_chunk_(\d+)_of_(\d+)\.json$/;
   let skeleton = null;
   let chunksMerged; // 分片合并路径才有值
   if (fs.existsSync(skeletonPath)) {
@@ -215,18 +215,18 @@ async function main() {
       .filter(Boolean)
       .map((mm) => ({ file: mm[0], x: Number(mm[1]), n: Number(mm[2]) }));
     if (found.length === 0) {
-      return emitError(`找不到 ${skeletonPath}，请先运行步骤 7`);
+      return emitError(`找不到 ${skeletonPath}，请先运行步骤 5`);
     }
     const ns = new Set(found.map((f) => f.n));
     if (ns.size !== 1) {
-      return emitError(`骨架分片 N 不一致: ${found.map((f) => f.file).join(', ')}——请重跑步骤 7`);
+      return emitError(`骨架分片 N 不一致: ${found.map((f) => f.file).join(', ')}——请重跑步骤 5`);
     }
     const n = found[0].n;
     const xs = new Set(found.map((f) => f.x));
     const missing = [];
     for (let i = 1; i <= n; i++) if (!xs.has(i)) missing.push(i);
     if (missing.length > 0) {
-      return emitError(`骨架分片缺失（应共 ${n} 片，缺 ${missing.join(', ')}）——请补跑对应分块的步骤 7 后重试`);
+      return emitError(`骨架分片缺失（应共 ${n} 片，缺 ${missing.join(', ')}）——请补跑对应分块的步骤 5 后重试`);
     }
     if (found.some((f) => f.x > n)) {
       return emitError(`骨架分片编号越界（>N=${n}）: ${found.filter((f) => f.x > n).map((f) => f.file).join(', ')}`);
@@ -294,7 +294,7 @@ async function main() {
     resolvedSkeleton.push({ [key]: resolved });
   }
 
-  const resolvedPath = path.join(dir, '8_resolved_skeleton.json');
+  const resolvedPath = path.join(dir, '6_resolved_skeleton.json');
   await fsPromises.writeFile(resolvedPath, JSON.stringify(resolvedSkeleton, null, 2));
 
   if (undefinedRefs.size > 0) {
@@ -369,7 +369,7 @@ async function main() {
     const okShape = Array.isArray(v) && v.length > 0 && v.every((id) => Number.isInteger(id) && id > 0);
     if (!okShape) {
       return emitError(
-        `trans2img 条目 value 应为非空正整数 ID 数组（截图边界链），实际为: ${JSON.stringify(v)}——请按步骤 7 指南修正 7_skeleton.json`,
+        `trans2img 条目 value 应为非空正整数 ID 数组（截图边界链），实际为: ${JSON.stringify(v)}——请按步骤 5 指南修正 5_skeleton.json`,
         1
       );
     }
@@ -472,7 +472,7 @@ async function main() {
       await browser.close();
       browser = null;
       return emitError(
-        `trans id 在 1_snapshot 中未命中: ${missingA.join(', ')}（骨架与视图不匹配，请重跑步骤 7）`,
+        `trans id 在 1_snapshot 中未命中: ${missingA.join(', ')}（骨架与视图不匹配，请重跑步骤 5）`,
         1
       );
     }
@@ -498,7 +498,7 @@ async function main() {
     }
 
     // ── 截图：live 命中在 B，失配/缺失在 A 兜底 ──
-    // 折叠模块（手风琴收起等，步骤 2 检测、带样式版保真流到步骤 7 的合法
+    // 折叠模块（手风琴收起等，步骤 2 检测、带样式版保真流到步骤 5 的合法
     // trans2img）两侧同为隐藏态：el.screenshot() 自动等可见会挂到超时，
     // 被塌缩祖先裁剪的模块更会截出空白图——每 id 截图前先跑共享
     // page-reveal-hidden.js 强制展开（只覆写正在隐藏的属性，可见时零改动，
@@ -571,7 +571,7 @@ async function main() {
       await browser.close();
       browser = null;
       return emitError(
-        `trans id 无法截图（隐藏且强制展开无效）: ${failedIds.join(', ')}（请检查该模块是否值得 trans2img，必要时调整步骤 7 标记后重跑）`,
+        `trans id 无法截图（隐藏且强制展开无效）: ${failedIds.join(', ')}（请检查该模块是否值得 trans2img，必要时调整步骤 5 标记后重跑）`,
         1
       );
     }
@@ -596,7 +596,7 @@ async function main() {
       await browser.close();
       browser = null;
       return emitError(
-        `trans2img 条目全部 id 结构性无盒（如 display:contents 透明包装链）: ${boxlessEntries.join('; ')}（请调整步骤 7 标记，选有真实视觉盒的元素后重跑）`,
+        `trans2img 条目全部 id 结构性无盒（如 display:contents 透明包装链）: ${boxlessEntries.join('; ')}（请调整步骤 5 标记，选有真实视觉盒的元素后重跑）`,
         1
       );
     }

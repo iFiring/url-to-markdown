@@ -1,5 +1,5 @@
 // CODE 还原测试基座：准备最小工作目录（1_snapshot + 2_long_text + 2_code +
-// 3_key_ids + 7_skeleton）。无 trans2img/img 条目——步骤 8 浏览器阶段不触发
+// 3_key_ids + 5_skeleton）。无 trans2img/img 条目——步骤 6 浏览器阶段不触发
 // （早退 emit），无需可达 URL。
 import fs from 'node:fs';
 import path from 'node:path';
@@ -21,6 +21,6 @@ export function setupCodeRestore(name, skeleton) {
   }, null, 2));
   fs.writeFileSync(path.join(dir, '3_key_ids.json'),
     JSON.stringify({ titleId: 1, descriptionIds: [], paragraphIds: [2], dumpIds: [] }));
-  fs.writeFileSync(path.join(dir, '7_skeleton.json'), JSON.stringify(skeleton, null, 2));
+  fs.writeFileSync(path.join(dir, '5_skeleton.json'), JSON.stringify(skeleton, null, 2));
   return { tmpRoot, url, dir };
 }

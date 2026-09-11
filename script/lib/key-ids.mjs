@@ -1,7 +1,7 @@
 /**
  * key-ids.mjs —— 3_key_ids.json 四键契约（titleId/descriptionIds/
  * paragraphIds/dumpIds）的共享解析与校验。
- * 步骤 3 产出的 key_ids 被步骤 4/6（及后续步骤 8）各自读取，校验规则
+ * 步骤 3 产出的 key_ids 被步骤 4 render_article 与步骤 6 render_markdown 读取，校验规则
  * 单一事实源在此：形状拦截（类型/正整数）、paragraphIds 嵌套展开
  * （数组 = 子段落流，展开为扁平块清单 blockIds——页面函数只收扁平
  * 清单，展开逻辑不分叉）、四键约束（titleId/descriptionIds 可与

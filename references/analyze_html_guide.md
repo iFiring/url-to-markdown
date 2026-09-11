@@ -212,9 +212,9 @@
 
 - `{{LONG_TEXT|n_chars}}` / `{{LONG_TEXT|n_words}}` 为长文本占位符（清洗版**无编号**——编号只存在于带样式版还原链，与判读无关）。**整段形态是常态**：超阈值（>16 汉字 / >12 词）的极大纯行内 run（段落内 text 与 strong/em/code/a 等行内元素混排的整段内容）折叠为单个占位符；夹在块级子元素之间的散长文本节点同样占位；短文本（≤16 汉字 / ≤12 词）保留原文。占位符分布是判读线索——段落/标题/按钮的位置与体量看得到；`<title>` 原文保留（不占位）
 
-- `{{CODE_k|x_lines}}` 为代码块内容占位，k = 文档序编号（1 起、跳过 `[hidden]` pre）、x = 代码行数（按占位前原文的行结构计）；`data-language` 在 pre 属性上。ok/failed 在清洗版同为占位符（clean 恒折叠），标 paragraphIds 的方式与表格占位符一致；成功代码块的原文已由步骤 2 预计算存 `2_code.json`、步骤 8 还原
+- `{{CODE_k|x_lines}}` 为代码块内容占位，k = 文档序编号（1 起、跳过 `[hidden]` pre）、x = 代码行数（按占位前原文的行结构计）；`data-language` 在 pre 属性上。ok/failed 在清洗版同为占位符（clean 恒折叠），标 paragraphIds 的方式与表格占位符一致；成功代码块的原文已由步骤 2 预计算存 `2_code.json`、步骤 6 还原
 
-- `{{TABLE_k|y×x}}`：表格整体占位，k = 文档序编号（1 起、跳过 `[hidden]` 表），y = 行数（`<tr>` 数），x = 列数（各行 colspan 之和的最大值，即网格列数）。行列规模是判读表格的信号——大表（如 `30×` 级）大概率是核心数据载体。成功表的 GFM markdown 已由步骤 2 预计算存 `2_tables.json`、步骤 8 还原；步骤 3 仅需标记其 `data-idx` 入 paragraphIds
+- `{{TABLE_k|y×x}}`：表格整体占位，k = 文档序编号（1 起、跳过 `[hidden]` 表），y = 行数（`<tr>` 数），x = 列数（各行 colspan 之和的最大值，即网格列数）。行列规模是判读表格的信号——大表（如 `30×` 级）大概率是核心数据载体。成功表的 GFM markdown 已由步骤 2 预计算存 `2_tables.json`、步骤 6 还原；步骤 3 仅需标记其 `data-idx` 入 paragraphIds
 
 - `{{HIDDEN_TAG|n_chars;n_a/n_div/…}}` 为带 `hidden` 属性的元素，折叠了子树；token 是真实文本规模与标签构成（计数降序），标明其后是整块折叠内容。hidden 元素按内容语义判身份：文章正文（FAQ/附录/展开收起）→ 段落块（也是锚点）；页面功能（模态/抽屉/移动端导航）→ 流内标 `dumpIds`、流外不标。自 2026-09-09 起也覆盖 **body 边界脚手架区的 CSS 隐藏**（body 直接子孙与独子链上的 display:none/visibility:hidden）——判读方式不变；正文流深处的 CSS 隐藏内容（非激活 tab、FAQ 收起答案）不折叠、原文可见
 - `{{DIALOG_TAG|n_chars;构成}}` 为 `role="dialog"`/`aria-modal` 弹窗折叠壳（任意深度）——**chrome，不要选入任何键**；壳 data-idx 也不需要标 dumpIds（步骤 4 对键外分支整枝删除）

@@ -4,7 +4,7 @@
  * 剔除之后、序列化之前对文章视图执行六条结构规则（spec：
  * docs/superpowers/specs/2026-08-29-step6-article-slimming-design.md §5，
  * 固定执行顺序——前面的规则改变后面规则看到的输入）：
- *  ① data-* 清理：保留 {data-idx, data-language}（后者是步骤 7 判
+ *  ① data-* 清理：保留 {data-idx, data-language}（后者是步骤 5 判
  *     代码语言的机械信号），其余 data-*（组件库脚手架/交互状态）全删。
  *     白名单而非黑名单——陌上站点的 data-* 安全默认删除
  *  ② MathML→LaTeX：annotation 有 LaTeX 源才替换（KaTeX 双胞胎结构整体
@@ -15,13 +15,13 @@
  *  ⑤ 非白名单协议 href 剥除（scheme ∉ http/https/mailto/tel 的 <a>
  *     解包——参考页 codex:// 营销链接单个 ~1KB prompt 曾漏进最终 markdown）
  *  ⑥ 空壳 span 拆包（属性只剩 data-idx，迭代到不动点——pre 内语法
- *     高亮 token span 的样式已被步骤 5 清空，结构在、信息不在）
+ *     高亮 token span 的样式已被步骤 4 轮 B 清空，结构在、信息不在）
  * 保护集 protectedIds = 迁入的 key 元素全集（titleId ∪ descriptionIds
- * ∪ paragraphIds 块——四键契约，由 extract_article.mjs 组装）：删除/
+ * ∪ paragraphIds 块——四键契约，由 render_article.mjs 组装）：删除/
  * 解包类（③④⑤⑥）跳过保护元素本身、其后代照常瘦身——body 顶层全是
  * 步骤 3 显式标记的内容单元，启发式只清理块内部的未标记残留、不重塑
  * 被标记单元；保真替换类（②）不受约束——替换保留内容只换形态。
- * id 随元素消失只影响 6/7 血统：步骤 8 用 1_snapshot/
+ * id 随元素消失只影响 5/6 血统：步骤 6 用 1_snapshot/
  * live 的 id 对位，零影响。
  */
 function __u2mSlimArticle(protectedIds) {
@@ -57,7 +57,7 @@ function __u2mSlimArticle(protectedIds) {
   }
 
   // ② MathML→LaTeX：annotation 有 LaTeX 源才替换（__u2mLatexText 来自
-  // page-latex.js，由 extract_article.mjs 组合注入同一作用域；独立
+  // page-latex.js，由 render_article.mjs 组合注入同一作用域；独立
   // evaluate 时优雅降级跳过）。KaTeX 双胞胎结构识别：父 span 仅含 math
   // 一个元素子（空白文本子忽略）且祖父恰两元素子、另一为 span →
   // 祖父整体替换（katex-html 孪生一并消灭）；孪生整体替换要求 p/g

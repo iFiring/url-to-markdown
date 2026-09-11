@@ -14,7 +14,7 @@ description: "将 URL（网页）的主体内容转换成 Markdown；在需要�
 ## 工作原则
 
 - 没有明确要求或流程需要的话，你**不要去读脚本的产物及其内容**，仅需确认执行了命令，产物存在即可
-- 你自己负责 "步骤 3" 和 "步骤 7" 的语义化操作：当你有权限调用子智能体（Sub-Agent）时，**优先把任务交给子智能体**
+- 你自己负责 "步骤 3" 和 "步骤 5" 的语义化操作：当你有权限调用子智能体（Sub-Agent）时，**优先把任务交给子智能体**
 
 ## 核心参数
 
@@ -30,7 +30,7 @@ description: "将 URL（网页）的主体内容转换成 Markdown；在需要�
 ```
 SKILL.md                 # Skill 主体文件
 script/                  # 脚本
-references/              # 步骤 3/7 的任务说明（渐进披露）
+references/              # 步骤 3/5 的任务说明（渐进披露）
 package.json
 
 working/                 # 工作目录
@@ -42,10 +42,10 @@ working/                 # 工作目录
       trans/
     1_snapshot.html
     ...
-    8_markdown.md
+    6_markdown.md
 ```
 
-## 操作手册（步骤 0-8）
+## 操作手册（步骤 0-6）
 
 ### 步骤 0 · 初始化执行环境
 
@@ -129,90 +129,70 @@ node <skill-root>/script/clean_snapshot.mjs --url <url>
 
 当产物 `<url-working-path>/3_key_ids.json` 完成后，进入步骤 4
 
-### 步骤 4 · 用脚本裁剪 DOM
+### 步骤 4 · 用脚本渲染文章视图
 
 ```bash
-node <skill-root>/script/extract_styled.mjs --url <url>
+node <skill-root>/script/render_article.mjs --url <url>
 ```
 
-产物：`<url-working-path>/4_styled_extract.html`（你自己不要去读脚本的产物内容，确认有即可）
+单个 chromium 实例三轮处理一气呵成（裁剪 DOM → 内联样式 → 提取文章视图 + 瘦身 + 分块，原步骤 4/5/6 合并）。
+
+产物：`<url-working-path>/4_article.html`（始终产出）；超过 60KB 时另产出分块 `4_article_chunk_X_of_N.html`（主内容 ≤40KB、只读上下文侧不计，每块带 ✅/❌ 转换边界标记——首块 ✅ 在 body 开头、末块 ❌ 在 body 末尾）（你自己不要去读脚本的产物内容，确认有即可）；调试中间产物 `4_extract.html` / `4_juice.html` 同轮落盘
 
 | stdout.status | 动作 |
 |---|---|
-| `ok` | 把 stdout 反馈给用户，进入步骤 5。 |
-| `error` | 把 `stdout.reason` 反馈给用户并终止 |
-
-### 步骤 5 · 用脚本计算内联样式
-
-```bash
-node <skill-root>/script/compute_styles.mjs --url <url>
-```
-
-产物：`<url-working-path>/5_juice_styles.html`（你自己不要去读脚本的产物内容，确认有即可）
-
-| stdout.status | 动作 |
-|---|---|
-| `ok` | 把 stdout 反馈给用户，进入步骤 6。 |
-| `error` | 把 `stdout.reason` 反馈给用户并终止 |
-
-### 步骤 6 · 用脚本提取视图
-
-```bash
-node <skill-root>/script/extract_article.mjs --url <url>
-```
-
-产物：`<url-working-path>/6_article.html`（始终产出）；超过 60KB 时另产出分块 `6_article_chunk_X_of_N.html`（主内容 ≤40KB、只读上下文侧不计，每块带 ✅/❌ 转换边界标记——首块 ✅ 在 body 开头、末块 ❌ 在 body 末尾）（你自己不要去读脚本的产物内容，确认有即可）
-
-| stdout.status | 动作 |
-|---|---|
-| `ok` | 把 stdout 反馈给用户，进入步骤 7——`chunks.split=true` 时步骤 7 按 `chunks.files` 并行派发子代理；`false` 时单子代理照旧 |
+| `ok` | 把 stdout 反馈给用户，进入步骤 5——`chunks.split=true` 时步骤 5 按 `chunks.files` 并行派发子代理；`false` 时单子代理照旧 |
 | `error` | 把 `stdout.reason` 反馈给用户并终止 |
 
 **stdout.status=ok 结构示例**
 ```json
 {
   "status": "ok",
-  "article": "/path/6_article.html",
+  "article": "/path/4_article.html",
   "elementCount": 509,
+  "removedCount": 123,
+  "keptCount": 45,
+  "dumpCollapsedCount": 2,
+  "styledCount": 2632,
   "slim": {},
-  "chunks": { "split": true, "count": 8, "files": ["/path/6_article_chunk_1_of_8.html"] }
+  "chunks": { "split": true, "count": 8, "files": ["/path/4_article_chunk_1_of_8.html"] }
 }
 ```
 
-### 步骤 7 · 你负责 markdown 骨架生成
+### 步骤 5 · 你负责 markdown 骨架生成
 
 > **可调用子智能体时，优先把任务交给子智能体**
 
-#### 未分割（步骤 6 stdout `chunks.split=false`）
+#### 未分割（步骤 4 stdout `chunks.split=false`）
 
 单个子代理，任务提示词：
 
 - 必须严格按照手册 `<skill-root>/references/markdown_skeleton_guide.md` 的要求完成任务
-- 当前任务期间你只能使用 "Read/Write/Edit" 工具（**完整读取** `6_article.html`，一次性写入 `7_skeleton.json`），其他文件和你完全无关
+- 当前任务期间你只能使用 "Read/Write/Edit" 工具（**完整读取** `4_article.html`，一次性写入 `5_skeleton.json`），其他文件和你完全无关
 - 当前工作路径: `/path/to/xxx`（取步骤 1 stdout 的 `url-working-path`）
-- 不要总结报告，只需产出 `7_skeleton.json` 即可
+- 不要总结报告，只需产出 `5_skeleton.json` 即可
 
-#### 已分割（步骤 6 stdout `chunks.split=true`）
+#### 已分割（步骤 4 stdout `chunks.split=true`）
 
 **单条消息并行派发 `chunks.count` 个子代理**，每个子代理的任务提示词按各自分块文件定制（X 为分块号、N 为总块数）：
 
 - 必须严格按照手册 `<skill-root>/references/markdown_skeleton_guide.md` 的要求完成任务
-- 当前任务期间你只能使用 "Read/Write/Edit" 工具（**完整读取** `6_article_chunk_X_of_N.html`，一次性写入 `7_skeleton_chunk_X_of_N.json`），其他文件和你完全无关
+- 当前任务期间你只能使用 "Read/Write/Edit" 工具（**完整读取** `4_article_chunk_X_of_N.html`，一次性写入 `5_skeleton_chunk_X_of_N.json`），其他文件和你完全无关
 - 当前工作路径: `/path/to/xxx`（取步骤 1 stdout 的 `url-working-path`）
-- 不要总结报告，只需产出 `7_skeleton_chunk_X_of_N.json` 即可
+- 不要总结报告，只需产出 `5_skeleton_chunk_X_of_N.json` 即可
 
 #### 后续
 
-- 未分割：产物 `<url-working-path>/7_skeleton.json` 完成后进入步骤 8
-- 已分割：**全部 `chunks.count` 个分片文件都存在**后进入步骤 8（步骤 8 会自动检测并合并分片）；个别分片失败/缺失时重新派发该分片一次，仍失败则把缺失清单反馈用户并终止
+- 未分割：产物 `<url-working-path>/5_skeleton.json` 完成后进入步骤 6
+- 已分割：**全部 `chunks.count` 个分片文件都存在**后进入步骤 6（步骤 6 会自动检测并合并分片）；个别分片失败/缺失时重新派发该分片一次，仍失败则把缺失清单反馈用户并终止
 
-### 步骤 8 · 用脚本还原占位符 + 图片下载 + 截图 + 生成 Markdown（终态步骤）
+### 步骤 6 · 用脚本还原占位符 + 图片下载 + 截图 + 生成 Markdown（终态步骤）
 
 ```bash
 node <skill-root>/script/render_markdown.mjs --url <url>
 ```
 
-产物：`<url-working-path>/8_markdown.md`（最终产物，路径见 stdout 的 `markdownPath`；你自己不要去读脚本的产物内容，确认有即可）；中间产物 `8_resolved_skeleton.json` 与 `assets/` 同轮落盘
+产物：`<url-working-path>/6_markdown.md`（最终产物，路径见 stdout 的 `markdownPath`；你自己不要去读脚本的产物内容，确认有即可）；中间产物 `6_resolved_skeleton.json` 与 `assets/` 同轮落盘
 
 | stdout.status | 动作 |
 |---|---|
@@ -230,6 +210,6 @@ node <skill-root>/script/render_markdown.mjs --url <url>
 | `snapshot` 报 `virtual_list` 但用户确信是普通长页 | 该站可能主动裁剪离屏 DOM（与虚拟列表同构，产出亦只是部分窗口），属已知边界；建议改用其他抓取方式 |
 | 页面加载报 `net::ERR_TUNNEL_CONNECTION_FAILED` / `ERR_PROXY_CONNECTION_FAILED` | 本机系统代理不可用或拒绝目标站：设 `U2M_PROXY=direct` 绕过系统代理，或 `U2M_PROXY=http://<host>:<port>` 显式指定可用代理后重跑 |
 | `clean_snapshot` 报找不到快照 | 先运行步骤 1 生成 `1_snapshot.html` |
-| `extract_article` 报找不到纯内联视图 | 先运行步骤 5 生成 `5_juice_styles.html` |
-| `render_markdown` 报 code 条目 value 应为 `{lang, content}` 对象 | 步骤 7 引用了未还原的代码占位符（`2_code.json` 中不存在或 failed 的 k）：检查 `7_skeleton.json` 的 code 条目——占位符块用 `{"code": "{{CODE_k}}"}` 引用、live 代码块自转（见骨架指南），修正后重跑步骤 8 |
-| `extract_styled` / `extract_article` 报找不到 key_ids | 先运行步骤 3 生成 `3_key_ids.json` |
+| `render_article` 报找不到带样式版快照 | 先运行步骤 2 生成 `2_clean_style_snapshot.html` |
+| `render_markdown` 报 code 条目 value 应为 `{lang, content}` 对象 | 步骤 5 引用了未还原的代码占位符（`2_code.json` 中不存在或 failed 的 k）：检查 `5_skeleton.json` 的 code 条目——占位符块用 `{"code": "{{CODE_k}}"}` 引用、live 代码块自转（见骨架指南），修正后重跑步骤 6 |
+| `render_article` / `render_markdown` 报找不到 key_ids | 先运行步骤 3 生成 `3_key_ids.json` |

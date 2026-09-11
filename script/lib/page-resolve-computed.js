@@ -1,6 +1,6 @@
 /**
- * 步骤 5 函数值解析。在浏览器 evaluate 中执行，运行于「原始
- * 4_styled_extract.html」页面（完整 <style> + class + @property——浏览器
+ * 步骤 4 轮 B 函数值解析。在浏览器 evaluate 中执行，运行于「原始
+ * 4_extract.html（轮 A 产物）」页面（完整 <style> + class + @property——浏览器
  * 真实渲染上下文），接收 page-collect-fn-values.js 收集的声明对，逐对取
  * getComputedStyle 计算值，返回 map：
  *   { "<data-idx>": { "<prop>": "<计算值>", … }, … }
