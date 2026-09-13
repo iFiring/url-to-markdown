@@ -1,86 +1,86 @@
-# 任务
+# Task
 
-这是**一篇文章页面**的快照，读取页面 `1_clean_snapshot.html` 的 DOM 结构（元素层级、标签类型、语义 class）与**文本规模**分布，找到该页面文章四类关键元素的 `data-idx`（**以下统称 ID**）：
+This is a snapshot of an **article page**. Read the DOM structure of `1_clean_snapshot.html` (element hierarchy, tag types, semantic classes) together with the **text-volume** distribution, and locate the `data-idx` (**hereafter "ID"**) of the page's four kinds of key article elements:
 
-1. **标题分块**（`titleId`）：文章主标题对应的元素 ID。通常是文章主体范围（见「原则/约束」）内层级最高的 `<h1>`-`<h3>` 或结构上处于段落流外部或顶部的标题性容器；**无论在段落流内还是流外都标这里**——若标题元素本身落在段落流中，**可同时保留其在 `paragraphIds` 的原位**；无主标题或不可判时为 `null`
+1. **Title block** (`titleId`): the ID of the element holding the article's main title. Usually the highest-level `<h1>`–`<h3>` inside the article body scope (see "Principles / Constraints"), or a heading-like container positioned outside or at the top of the paragraph flow; **mark it here whether it sits inside the paragraph flow or not** — if the title element itself falls inside the flow, it **may simultaneously keep its original position in `paragraphIds`**; `null` when there is no main title or it cannot be determined
 
-2. **说明分块**（`descriptionIds`）：描述性元数据对应的元素 ID 集合，如作者、日期、摘要、副标题、开篇词；**无论在段落流内还是流外都标这里**——落在段落流中者同样可保留其在 `paragraphIds` 的原位；可为空数组
+2. **Description blocks** (`descriptionIds`): the set of IDs of elements holding descriptive metadata — author, date, summary, subtitle, opening remarks; **mark them here whether inside or outside the paragraph flow** — those falling inside the flow may likewise keep their original position in `paragraphIds`; may be an empty array
 
-3. **段落流**（`paragraphIds`）：文章**段落块的嵌套序列**，整棵按文档序——**标量是段落块 ID，数组是一个子段落流的块列表**
+3. **Paragraph flow** (`paragraphIds`): the **nested sequence of the article's paragraph blocks**, the whole tree in document order — **a scalar is a paragraph-block ID; an array is the block list of one sub-flow**
 
-  - 常见段落块元素（清单为指引，非白名单）：
-    - 段落：`<p>`
-    - 标题：`<h1>`-`<h6>`
-    - 预格式块/代码块：`<pre>`（内容折叠为 `{{CODE_k|x_lines}}` 占位，k 为文档序编号、x = 代码行数）
-    - 表格块：`<table>`（内容折叠为 `{{TABLE_k|y×x}}` 占位，k 为文档序编号、y = 行数、x = 列数）
-    - 复合单元：`<figure>`（图 + `<figcaption>`）
-    - 列表：`<ul>`、`<ol>`
-    - 定义列表 `<dl>`（`<dt>`/`<dd>` 的术语对、问答、元信息对）
-    - 引用块 `<blockquote>`
-    - 折叠块：`<details>`、带 `hidden` 属性的折叠树（FAQ/手风琴/折叠块/展开收起块）
-    - 展开钮：`<button>`（手风琴/折叠项的成行控件）
-    - 结构块：`<section>`、`<aside>`、`<header>`
-    - 媒体块：`<img>`、`<picture>`
-    - 图解/图表容器（多级 `<div>` 的可视模块）、卡片/提示框——整棵作为一个子块，内部不拆（内部文本可能折叠为 `{{VIEW_TEXT|n_chars}}` 占位，见「结构说明」）
+  - Common paragraph-block elements (the list is guidance, not a whitelist):
+    - Paragraphs: `<p>`
+    - Headings: `<h1>`–`<h6>`
+    - Preformatted / code blocks: `<pre>` (content folded into a `{{CODE_k|x_lines}}` placeholder; k is the document-order index, x = number of code lines)
+    - Table blocks: `<table>` (content folded into a `{{TABLE_k|y×x}}` placeholder; k is the document-order index, y = row count, x = column count)
+    - Composite units: `<figure>` (image + `<figcaption>`)
+    - Lists: `<ul>`, `<ol>`
+    - Definition lists `<dl>` (`<dt>`/`<dd>` term pairs, Q&A, metadata pairs)
+    - Quotation blocks `<blockquote>`
+    - Collapsible blocks: `<details>`, collapsed trees carrying the `hidden` attribute (FAQ / accordion / collapsible / expand-collapse blocks)
+    - Toggle buttons: `<button>` (row-level controls of accordion / collapsible items)
+    - Structural blocks: `<section>`, `<aside>`, `<header>`
+    - Media blocks: `<img>`, `<picture>`
+    - Diagram / chart containers (visual modules of nested `<div>`s), cards / callouts — marked whole as one block, never split internally (inner text may be folded into a `{{VIEW_TEXT|n_chars}}` placeholder, see "Structure notes")
 
-  - 段落块是**完整子树**，内部不拆
+  - A paragraph block is a **complete subtree** and is never split internally
 
-  - **行内元素与分隔符通常不是段落级块**：`<span>`、`<a>`、`<strong>`、`<b>`、`<em>`、`<i>`、行内 `<code>`、`<br>` 等行内元素，以及 `<hr>` 分隔符；**当它们是段落流的直接子元素时除外**
+  - **Inline elements and separators are usually not paragraph-level blocks**: `<span>`, `<a>`, `<strong>`, `<b>`, `<em>`, `<i>`, inline `<code>`, `<br>` and other inline elements, plus the `<hr>` separator; **except when they are direct children of the paragraph flow**
 
-  - **段落块通常不是固定的元素**，而是包装容器 + 语义内容的组合（见结构说明），嵌套链如：`<div> > <h1>`（容器包标题）/ `<div> > <table>`（容器包表格）/ `<section> > <div> > <pre>`（多层容器包代码块）
+  - **A paragraph block is usually not a fixed element** but a combination of wrapper container + semantic content (see Structure notes), with nesting chains like `<div> > <h1>` (container wrapping a heading) / `<div> > <table>` (container wrapping a table) / `<section> > <div> > <pre>` (multi-level container wrapping a code block)
 
-  - **主段落流与子段落流的判定逻辑不同**——主段落流是文章正文的最外层内容序列；子段落流是嵌套其中的序列。两者分开判定，通用性更高：
+  - **The main paragraph flow and sub-flows are judged by different logic** — the main paragraph flow is the outermost content sequence of the article body; a sub-flow is a sequence nested inside it. Judging them separately is more general:
 
-    | | 主段落流 | 子段落流 |
+    | | Main paragraph flow | Sub-flow |
     |---|---|---|
-    | 标题头块 | 不排除：计规模、可留原位 | 首个直接子块若为标题头：排除计数、居流首位标量 |
-    | 锚点/子流 | 不要求 | 要求：\|R\|≥2 须含锚点或已成立子流；\|R\|=1 须为子流且带标题头 |
-    | 最小规模 | ≥2 个内容子块（标题/说明计入、噪音不计） | 排标题头/噪音后 \|R\|≥2，或标题头 + 单子流 |
+    | Heading block | Not excluded: counts toward size, may stay in place | If the first direct child is a heading block: excluded from the count, placed as the leading scalar of the flow |
+    | Anchor / sub-flow | Not required | Required: \|R\|≥2 must contain an anchor or an already-formed sub-flow; \|R\|=1 must be a sub-flow with a heading block |
+    | Minimum size | ≥2 content child blocks (title/description count, noise does not) | After excluding heading block/noise, \|R\|≥2, or heading block + a single sub-flow |
 
-  - **主段落流（顶层）**——文章正文的最外层内容序列容器（在「文章主体范围」内语义识别：承载正文主体、排除页眉/导航/页脚/封面等页面级包装；页面级包装不因包含段落流而成流）：
-    - **不做标题头块排除**——文章主标题是 `titleId`、hero/元数据是 `descriptionIds`；二者**可保留在主段落流原位**（与 `titleId`/`descriptionIds` 重叠），不必为 disjoint 而剔出。主段落流中出现的非主级标题（如扁平分部 `<h2>`）是普通标量块，不特殊处理
-    - **不要求锚点块**——直接子块可全是平行的、无嵌套关系的子段落流，如 `[[1,[2]], [3,[4]]]`；只要 ≥ 2 个内容子块（段落块/子流；**标题/说明块计入规模**、可同时留在 `paragraphIds` 原位、噪音不计）即成流。剔除标题/说明/噪音后只剩一个内容子块者是**透明包装层**，向内取（见「一流一维」）
-    - 块按文档序排列；子段落流占一个数组槽、其容器 ID 不进 JSON
+  - **Main paragraph flow (top level)** — the outermost content-sequence container of the article body (identified semantically within the "article body scope": it carries the body proper and excludes page-level wrappers such as page header/navigation/footer/cover; a page-level wrapper does not become a flow merely by containing one):
+    - **No heading-block exclusion** — the article's main title is `titleId` and hero/metadata are `descriptionIds`; both **may keep their original position in the main paragraph flow** (overlapping with `titleId`/`descriptionIds`); they need not be pulled out for disjointness. Non-primary headings appearing inside the main flow (e.g. flat section `<h2>`s) are ordinary scalar blocks and get no special treatment
+    - **No anchor block required** — direct children may all be parallel, non-nested sub-flows, e.g. `[[1,[2]], [3,[4]]]`; as long as there are ≥2 content child blocks (paragraph blocks / sub-flows; **title/description blocks count toward size** and may simultaneously stay in place in `paragraphIds`; noise does not count), it forms a flow. If only one content child remains after removing title/description/noise, that container is a **transparent wrapper** — descend into it (see "One flow, one dimension")
+    - Blocks are ordered by document order; a sub-flow occupies one array slot and its container ID never enters the JSON
 
-  - **子段落流（嵌套）**——主段落流或更上层子流内、嵌套的内容序列：
-    - 首个直接子块若为**标题头块**（子树含 `<h1>`-`<h6>`；裸标题、`<header>`/标题性容器均可），将其**排除出规模计数**并居该子流首位为标量块；再剔除噪音子块，设剩余为 R：
-      1. **|R| ≥ 2** 且 R 中至少一个锚点块或已成立子段落流 → 成流；或
-      2. **|R| = 1** 且该子块为已成立子段落流（此时须带标题头块——「带标题的流」；无标题头块而只剩一个子流者是透明包装层，见「一流一维」）→ 成流
-    - **要求锚点或子流**——以区分内容序列与单个复合单体；不满足者整棵作为上层流的一个块（标题头块 + 单个非流块是典型「带标题单体」，不成流）
-    - 成流时：标题头块（若有）居首位标量；子段落流占数组槽、容器 ID 不进 JSON。无标题头块时首个子块不排除、直接计 R（如收束区 `[label, [body…], ul]`，首块是 label 非标题、不排除，靠 ≥2 + 锚点成流）
+  - **Sub-flows (nested)** — content sequences nested inside the main paragraph flow or a higher-level sub-flow:
+    - If the first direct child is a **heading block** (subtree contains `<h1>`–`<h6>`; bare headings and `<header>`/heading-like containers all qualify), exclude it from the size count and place it as the leading scalar of the sub-flow; then remove noise children and let the remainder be R:
+      1. **|R| ≥ 2** and R contains at least one anchor block or an already-formed sub-flow → it forms a flow; or
+      2. **|R| = 1** and that child is an already-formed sub-flow (which must carry a heading block — a "titled flow"; a lone sub-flow without a heading block is a transparent wrapper, see "One flow, one dimension") → it forms a flow
+    - **An anchor or sub-flow is required** — this distinguishes a content sequence from a single composite monolith; when not satisfied, the whole subtree is one block of the parent flow (heading block + a single non-flow block is the typical "titled monolith" and does not form a flow)
+    - When it forms a flow: the heading block (if any) is the leading scalar; a sub-flow occupies one array slot and its container ID never enters the JSON. Without a heading block the first child is not excluded and goes straight into R (e.g. a closing section `[label, [body…], ul]` — the leading label is not a heading, is not excluded, and the flow forms via ≥2 + anchor)
 
-  - **锚点块**是一眼可辨的明显段落块：`<p>` / `<h1>`-`<h6>` / `<table>` / `<pre>` / `<figure>` / `<ul>` / `<ol>` / `<block><img/></block>` / `<blockquote>` / `<button>` / `<dl>` / `<details>` / hidden 属性元素。共同性质：**内容语义标签 ∧ 默认渲染独占一行**——标签本身就宣告「我是段落/标题/列表/表格/引用/代码块/图片块」，无须看样式即可确认（快照不带样式，成行性来自标签语义）；清单为指引，此性质才是判据。`<div>`/`<section>`/`<aside>` 等结构容器标签默认也是块级、但装什么由内容决定——**可作块、不能作锚点**。**例外——单层锚点穿透**：某直接子块的子树**恰含一个**锚点块时（`<div><p>…</p></div>`、`<div><table>…</table></div>`），该包装块按锚点判定——真实页面几乎全是这类包装形态，锚点性看内容不看壳；子树含多块者不适用穿透。`<button>` 默认行内块，但作为段落流直接子元素出现时即手风琴/折叠的成行展开钮
-    - 当容器直接子块全为 `<div>` 但文本/结构明显呈段落序列时（如 prose 容器、同 class 重复段落实例），可依语义判为流——锚点是强默认信号，不是死门槛；但需谨慎，避免把多级嵌套 div 误判为流
+  - An **anchor block** is an unmistakable, obvious paragraph block: `<p>` / `<h1>`–`<h6>` / `<table>` / `<pre>` / `<figure>` / `<ul>` / `<ol>` / `<block><img/></block>` / `<blockquote>` / `<button>` / `<dl>` / `<details>` / elements with the hidden attribute. Common property: **content-semantic tag ∧ renders on its own line by default** — the tag itself announces "I am a paragraph / heading / list / table / quote / code block / image block", confirmable without looking at styles (the snapshot carries no styles; line-ness comes from tag semantics). The list is guidance; this property is the criterion. Structural container tags like `<div>`/`<section>`/`<aside>` are also block-level by default, but what they hold is decided by content — **they can serve as blocks, but never as anchors**. **Exception — single-level anchor pass-through**: when a direct child's subtree contains **exactly one** anchor block (`<div><p>…</p></div>`, `<div><table>…</table></div>`), the wrapper is judged as the anchor — real pages are almost entirely of this wrapped form; anchor-ness is determined by content, not by the shell. Not applicable when the subtree holds multiple blocks. `<button>` is inline-block by default, but as a direct child of the paragraph flow it is the row-level toggle of an accordion/collapsible
+    - When a container's direct children are all `<div>`s yet the text/structure clearly reads as a paragraph sequence (e.g. prose containers, repeated same-class paragraph instances), it may be judged a flow semantically — the anchor is a strong default signal, not a hard gate; stay careful, though, to avoid misjudging deeply nested divs as flows
 
-  - **折叠块 / 可视模块的优先级**：`<details>`、div 类折叠块（button 标题 + content 容器，功能等同 `<details>`，不论 snapshot 中 content 是否可见）、带 `hidden` 属性的折叠树，以及图解/图表/卡片/提示框等多级 div 可视模块，一律作为**标量锚点块整棵标记、内部不拆**——即使其内部含 `<p>`/`<h4>`/`<table>` 等锚点元素，也**不触发子段落流分裂**（子流判据不穿透这些语义壳）；图解/图表内部的 `<h4>`/`<h5>` 是图表标注，不计为标题头块。此优先级高于 div 的结构性子流判据
+  - **Priority of collapsible blocks / visual modules**: `<details>`, div-style collapsible blocks (button title + content container, functionally identical to `<details>` regardless of whether the content is visible in the snapshot), collapsed trees carrying the `hidden` attribute, and multi-level div visual modules such as diagrams/charts/cards/callouts are all marked whole as **scalar anchor blocks, never split internally** — even when they contain anchor elements like `<p>`/`<h4>`/`<table>`, they **do not trigger sub-flow splitting** (the sub-flow criteria do not penetrate these semantic shells); `<h4>`/`<h5>` inside a diagram/chart are chart annotations, not heading blocks. This priority overrides the div structural sub-flow criteria
 
-  - **一流一维**：数组与段落流一一对应；流之间的非流包装层（剔除噪音后只剩一个子流、且无标题头块的中间容器）**透明、不占维度**，其子流的数组直接并入上层
+  - **One flow, one dimension**: arrays correspond one-to-one with paragraph flows; non-flow wrapper layers between flows (intermediate containers that, after noise removal, hold just one sub-flow and no heading block) are **transparent and occupy no dimension** — their sub-flow's array merges directly into the parent level
 
-  - 嵌套结构示例 `paragraphIds: [1, 2, [3, 4, [5, 6]], 7]`：`1/2/7` 在外层段落流，`3/4` 在「子段落流」，`5/6` 在更深的「子段落流」（单元素、无标题头的子流不成立——规模不足，见子段落流规则）。顶层就是文档序序列——段落流之外的游离内容块（流的兄弟元素）同为顶层标量，不做区分；若页面无单一容器、正文直接平铺在 `<body>` 下，顶层即 body 直接子块的文档序序列（body 自身不进 JSON）
+  - Nesting example `paragraphIds: [1, 2, [3, 4, [5, 6]], 7]`: `1/2/7` are in the outer paragraph flow, `3/4` in a "sub-flow", `5/6` in a deeper "sub-flow" (a single-element sub-flow without a heading block does not form — insufficient size, see sub-flow rules). The top level is simply the document-order sequence — loose content blocks outside the flow (siblings of the flow) are likewise top-level scalars, with no distinction drawn; if the page has no single container and the body lies flat directly under `<body>`, the top level is the document-order sequence of body's direct children (body itself never enters the JSON)
 
-4. **噪音元素**（`dumpIds`）：**段落流之内**、未入选 `paragraphIds` 的非文章内容元素的 ID 集合；流外噪音**无须标记**
-  - 菜单、导航、目录（TOC）、面包屑、页脚链接、相关推荐、评论列表、分享栏、广告、弹窗、表单
-  - **必须确定不属于文章内容**，不确定不能带上；噪音元素内部可能会有 `<ul>`（导航/目录/推荐）/`<p>`/`<h>` 等段落元素——**语义门独立于成流判据**，导航/目录结构上完全符合成流条件，语义上仍是噪音
-  - dumpIds 应该优先取流内最高的父元素/祖先元素，而不是一堆子孙元素——**上限：任一 dump 不得是任何 key（`titleId`/`descriptionIds`/`paragraphIds` 块）的祖先**；取「子树内不含任何 key 元素」的最高祖先
-  - 已标块（段落块/标题/说明）子树**内部**的噪音无须单独标——块整棵标记、内部不拆
+4. **Noise elements** (`dumpIds`): the ID set of non-article content elements **inside the paragraph flow** that are not selected into `paragraphIds`; noise outside the flow **needs no marking**
+  - Menus, navigation, table of contents (TOC), breadcrumbs, footer links, related-post recommendations, comment lists, share bars, ads, popups, forms
+  - You **must be certain** the element is not article content; when uncertain, do not include it. Noise elements may internally contain `<ul>` (nav/TOC/recommendations) / `<p>` / `<h>` and other paragraph elements — **the semantic gate is independent of the flow-formation criteria**: a nav/TOC can fully satisfy the structural flow conditions and still be noise semantically
+  - dumpIds should prefer the highest parent/ancestor element inside the flow over a pile of descendants — **ceiling: no dump may be an ancestor of any key (`titleId`/`descriptionIds`/`paragraphIds` block)**; take the highest ancestor whose subtree contains no key element
+  - Noise inside the subtree of an already-marked block (paragraph block / title / description) needs no separate marking — blocks are marked whole and never split internally
 
-### 「段落流」示例
+### "Paragraph flow" examples
 
-> **优先找 `titleId`(`<h1>`-`<h3>`)**，`descriptionIds` 一定在它之后；`paragraphIds` 从区间起点起（见下「文档序区间」）
+> **Locate `titleId` (`<h1>`–`<h3>`) first**; `descriptionIds` always come after it; `paragraphIds` start at the interval start (see "Document-order interval" below)
 
-#### 主段落流（P）
+#### Main paragraph flow (P)
 
 ```html
 
 <div data-idx="A">
-  <h1 data-idx="A1">文章标题</h1>
+  <h1 data-idx="A1">Article title</h1>
 </div>
 
 <div data-idx="B">
-  <p data-idx="B1">文章说明</p>
+  <p data-idx="B1">Article description</p>
 </div>
 
-<!-- 主段落流 [P] + 锚点块 [P1, P2] + 子段落流 [P3] -->
+<!-- main paragraph flow [P] + anchor blocks [P1, P2] + sub-flow [P3] -->
 <article data-idx="P">
   <h2 data-idx="P1">…</h2>
   <p data-idx="P2">…</p>
@@ -90,20 +90,20 @@
     <p data-idx="P6">…</p>
   </section>
 </article>
-<!-- 标题块：A1 ；说明块：[B1] -->
-<!-- 主段落流：[P1, P2, [P4, P5, …]]（P/P3 只是容器，自身不进 JSON）-->
+<!-- title block: A1; description blocks: [B1] -->
+<!-- main paragraph flow: [P1, P2, [P4, P5, …]] (P/P3 are mere containers, never in the JSON themselves) -->
 ```
 
-#### 主段落流（K）包含标题/说明
+#### Main paragraph flow (K) containing title/description
 
 ```html
-<!-- 主段落流 [K] + 标题/说明(计入 ≥ 2 规模) -->
+<!-- main paragraph flow [K] + title/description (count toward the ≥2 size) -->
 <article data-idx="K">
-  <!-- titleId/descriptionIds 在主段落流内时：首 `paragraphIds` 块 [A] < titleId/descriptionIds（嵌于首块子树）< 后续块；首块即区间起点 -->
-  <!-- 段落块一定取流的直接子元素 [A]，而不是其内部 [A1, A2] -->
+  <!-- when titleId/descriptionIds sit inside the main paragraph flow: first `paragraphIds` block [A] < titleId/descriptionIds (nested in the first block's subtree) < subsequent blocks; the first block is the interval start -->
+  <!-- the paragraph block is always the flow's direct child [A], not its inner [A1, A2] -->
   <div data-idx="A">
-    <h1 data-idx="A1">文章标题</h1>
-    <p data-idx="A2">文章说明</p>
+    <h1 data-idx="A1">Article title</h1>
+    <p data-idx="A2">Article description</p>
   </div>
   <section data-idx="M1">
     <div data-idx="M2"><h2 data-idx="x">…</h2></div>
@@ -116,30 +116,30 @@
     <div data-idx="M8"><p data-idx="x">…</p></div>
   </section>
 </article>
-<!-- 标题块：A1 ；说明块：[A2] -->
-<!-- 主段落流：[A, [M2, M3, M4, …], [M6, M7, M8, …]]（K/M1/M5 只是容器，自身不进 JSON）；标题/说明块也可保留在 paragraphIds 原位-->
+<!-- title block: A1; description blocks: [A2] -->
+<!-- main paragraph flow: [A, [M2, M3, M4, …], [M6, M7, M8, …]] (K/M1/M5 are mere containers, never in the JSON themselves); the title/description blocks may also stay in place in paragraphIds -->
 ```
 
-#### 主段落流（M）包含平行子流（M1 + M7(M5)）
+#### Main paragraph flow (M) containing parallel sub-flows (M1 + M7(M5))
 
 ```html
 
 <div data-idx="A">
-  <h1 data-idx="A1">文章标题</h1>
+  <h1 data-idx="A1">Article title</h1>
 </div>
 
 <div data-idx="B">
-  <p data-idx="B1">文章说明</p>
+  <p data-idx="B1">Article description</p>
 </div>
 
-<!-- 主段落流平行子流：直接子块全是子流、无锚点 → 主段落流不要求锚点，仍成流 -->
+<!-- parallel sub-flows of the main paragraph flow: direct children are all sub-flows, no anchor → the main paragraph flow requires no anchor and still forms -->
 <article data-idx="M">
   <section data-idx="M1">
     <div data-idx="M2"><h2 data-idx="x">…</h2></div>
     <div data-idx="M3"><p data-idx="x">…</p></div>
     <div data-idx="M4"><ol data-idx="x">…</ol></div>
   </section>
-  <!-- M5 是带标题的流（规则 2：标题头 M6 + 单子流 M7），与 M1（规则 1：标题头 M2 排除后 R = M3/M4 ≥2、锚点穿透成立）形态不同；M7 是子流、占一个数组槽（容器 ID 不进 JSON）→ M5 数组 = [M6, [M8, M9, M10]] -->
+  <!-- M5 is a titled flow (rule 2: heading block M6 + single sub-flow M7), unlike M1 (rule 1: after excluding heading block M2, R = M3/M4 ≥2, anchor pass-through holds); M7 is a sub-flow occupying one array slot (container ID never in the JSON) → the M5 array = [M6, [M8, M9, M10]] -->
   <section data-idx="M5">
     <div data-idx="M6"><h2 data-idx="x">…</h2></div>
     <div data-idx="M7">
@@ -149,173 +149,173 @@
     </div>
   </section>
 </article>
-<!-- 标题块：A1 ；说明块：[B1]-->
-<!-- 主段落流：[[M2, M3, M4, …], [M6, [M8, M9, …]]]（M/M1/M5 只是容器，自身不进 JSON）-->
+<!-- title block: A1; description blocks: [B1] -->
+<!-- main paragraph flow: [[M2, M3, M4, …], [M6, [M8, M9, …]]] (M/M1/M5 are mere containers, never in the JSON themselves) -->
 ```
 
-#### 子段落流三形态（A/B/C）
+#### Three sub-flow forms (A/B/C)
 
 ```html
-<!-- 形态 A：裸标题 + 扁平正文（无 body 包装）——首个 h2 是标题头块、居首位标量；正文 ≥2 锚点 → 成流 -->
+<!-- form A: bare heading + flat body (no body wrapper) — the first h2 is the heading block and the leading scalar; the body has ≥2 anchors → forms a flow -->
 <div data-idx="A">
-  <h2 data-idx="A1">章节标题</h2>
+  <h2 data-idx="A1">Section heading</h2>
   <p data-idx="A2">…</p>
   <p data-idx="A3">…</p>
 </div>
-<!-- 在上层流中：[A1, A2, A3] -->
+<!-- in the parent flow: [A1, A2, A3] -->
 ```
 
 ```html
-<!-- 形态 B：div + body 子流-->
-<!-- [B1] 标题头块标量；[B3] 是子流 → 占数组槽；B/B3 本身只是容器，自身不进 JSON -->
+<!-- form B: div + body sub-flow -->
+<!-- [B1] heading-block scalar; [B3] is a sub-flow → occupies an array slot; B/B3 themselves are mere containers, never in the JSON -->
 <section data-idx="B">
-  <div data-idx="B1"><span>01</span><h2 data-idx="B2">章节标题</h2></div>
+  <div data-idx="B1"><span>01</span><h2 data-idx="B2">Section heading</h2></div>
   <div data-idx="B3" class="section__body">
     <p data-idx="B4">…</p>
     <p data-idx="B5">…</p>
-    <div data-idx="B6" class="diagram">…多级 div 可视模块，整块不拆…</div>
+    <div data-idx="B6" class="diagram">…multi-level div visual module, one whole block, never split…</div>
   </div>
 </section>
-<!-- 在上层流中：[B1, [B4, B5, B6]] -->
+<!-- in the parent flow: [B1, [B4, B5, B6]] -->
 ```
 
 ```html
-<!-- 形态 C：标题头块 + 单个「非流块/说明块」 → 不成流，整棵是上层流的一个块 -->
+<!-- form C: heading block + a single "non-flow block / description block" → does not form a flow; the whole subtree is one block of the parent flow -->
 <section data-idx="C">
-  <header data-idx="C1"><span>02</span><h2 data-idx="C2">章节标题</h2></header>
+  <header data-idx="C1"><span>02</span><h2 data-idx="C2">Section heading</h2></header>
   <p data-idx="C3">…</p>
 </section>
-<!-- 在上层流中：标量 C（C1/C2/C3 都不进 JSON，整棵一个块）-->
+<!-- in the parent flow: the scalar C (C1/C2/C3 never enter the JSON; the whole subtree is one block) -->
 ```
 
-## 原则/约束
+## Principles / Constraints
 
-- 段落流（`paragraphIds`）**必须排除**噪音元素，只收文章主体核心内容
+- The paragraph flow (`paragraphIds`) **must exclude** noise elements; collect only the article's core body content
 
-- 四键约束——`titleId`/`descriptionIds` 可与 `paragraphIds` **重叠**（流内标题/说明保留其在流中原位）；其余组合（`titleId`∩`descriptionIds`、任一键 ∩ `dumpIds`）互不相交、同一键内不得重复列举
+- Four-key constraints — `titleId`/`descriptionIds` may **overlap** with `paragraphIds` (title/description inside the flow keep their in-flow position); all other combinations (`titleId`∩`descriptionIds`, any key ∩ `dumpIds`) are mutually disjoint, and no key may list the same ID twice
 
-- 不选 `<body>` 或 `<html>`——它们的 ID 无意义
+- Never select `<body>` or `<html>` — their IDs are meaningless
 
-- **文章主体范围**（成流判据的应用域）= 承载文章标题/说明/正文的最小内容容器（常为 `<article>`、`<main>`，或 class 含 article/content/post/prose 的容器）；站点级页眉（站名/导航）、侧栏、页脚、封面等页面级包装不在其内，也不因包含段落流而成流。站点级 `<h1>`（站名/logo，位于页眉）不是文章主标题——文章主标题在主体范围内，层级可能是 `<h2>`/`<h3>`
+- **Article body scope** (the domain where the flow-formation criteria apply) = the smallest content container carrying the article title/description/body (often `<article>`, `<main>`, or a container whose class contains article/content/post/prose); the site-level header (site name/navigation), sidebars, footers, covers and other page-level wrappers lie outside it, and none of them becomes a flow merely by containing one. A site-level `<h1>` (site name/logo in the page header) is not the article's main title — the article main title lives inside the body scope and may be an `<h2>`/`<h3>`
 
-- **文档序区间（产物原则）**：文章主体在文档中是一段连续区间，顺序固定为 `titleId` → `descriptionIds` → `paragraphIds`——`titleId` ≤ 所有 `descriptionIds`。标题/说明可在流外（`descriptionIds` < `paragraphIds` 最小值，标题/说明在流前），或在流内首段（`paragraphIds` 最小值 ≤ `titleId`——标题/说明即首 `paragraphIds` 块、或按「取直接子元素」嵌于首块子树；首块即区间起点）。**区间起点 = min(`titleId`, `paragraphIds` 最小值)**。据此：
-  - **区间起点之前**、不在任何键中的元素（封面、页眉、站点导航、hero 标题上方的 eyebrow / 装饰性 tagline）是**外部元素**——不标（流外噪音无须标记）
-  - **落在 `paragraphIds` 区间内**（导语/正文之后）的「摘要 / 路线图 / 要点」类卡片，归 `paragraphIds` 作标量块，**不归 `descriptionIds`**——它已是正文内容，不是前置元数据
-  - 该区间是文章主体的边界判据：区间之外的非文章结构（footer、相关推荐、评论、浮窗等）一律外部、不标
-  - **技巧**：优先找 `titleId`(`<h1>`-`<h3>`)，`descriptionIds` 一定在它之后；`paragraphIds` 从区间起点起——流外时起点 = `titleId`，流内首段时起点 = 首 `paragraphIds` 块（≤ `titleId`）
+- **Document-order interval (output principle)**: the article body is one contiguous interval in the document, fixed in the order `titleId` → `descriptionIds` → `paragraphIds` — `titleId` ≤ all `descriptionIds`. The title/description may sit outside the flow (`descriptionIds` < the minimum of `paragraphIds`; title/description before the flow), or inside the flow's first block (minimum of `paragraphIds` ≤ `titleId` — the title/description is the first `paragraphIds` block itself, or nested in the first block's subtree per "take the direct child"; the first block is then the interval start). **Interval start = min(`titleId`, minimum of `paragraphIds`)**. From this:
+  - Elements **before the interval start** that are in no key (cover, page header, site navigation, eyebrow / decorative tagline above the hero title) are **external** — do not mark them (noise outside the flow needs no marking)
+  - "Summary / roadmap / key points" cards falling **inside the `paragraphIds` interval** (after the lead-in/body) belong to `paragraphIds` as scalar blocks, **not to `descriptionIds`** — they are already body content, not front matter
+  - This interval is the boundary criterion for the article body: non-article structures outside it (footer, related posts, comments, floating widgets, …) are external across the board — do not mark
+  - **Tip**: locate `titleId` (`<h1>`–`<h3>`) first; `descriptionIds` always come after it; `paragraphIds` start at the interval start — outside the flow the start is `titleId`; inside the flow's first block the start is the first `paragraphIds` block (≤ `titleId`)
 
-## 结构说明（`1_clean_snapshot.html`）
+## Structure notes (`1_clean_snapshot.html`)
 
-- `data-idx` 是 body 内元素的**文档序递增整数**（1, 2, 3, …）：编号大小即文档前后位置，可直接比较——「文档序区间」等位置推理均依赖这一点
+- `data-idx` is a **document-order increasing integer** over the elements inside body (1, 2, 3, …): a larger number means a later position and the values compare directly — all positional reasoning such as the "document-order interval" relies on this
 
-- 链接与图片元素**不带 URL**（href/src 已清空，链接文本与 alt 保留）
+- Link and image elements **carry no URLs** (href/src emptied; link text and alt remain)
 
-- `{{LONG_TEXT|n_chars}}` / `{{LONG_TEXT|n_words}}` 为长文本占位符（清洗版**无编号**——编号只存在于带样式版还原链，与判读无关）。**整段形态是常态**：超阈值（>16 汉字 / >12 词）的极大纯行内 run（段落内 text 与 strong/em/code/a 等行内元素混排的整段内容）折叠为单个占位符；夹在块级子元素之间的散长文本节点同样占位；短文本（≤16 汉字 / ≤12 词）保留原文。占位符分布是判读线索——段落/标题/按钮的位置与体量看得到；`<title>` 原文保留（不占位）
+- `{{LONG_TEXT|n_chars}}` / `{{LONG_TEXT|n_words}}` are long-text placeholders (the clean version carries **no index** — indices exist only in the styled version's restore chain and are irrelevant to reading). **Whole-run folding is the norm**: a maximal pure inline run above the threshold (>16 CJK characters / >12 words — a paragraph's entire content mixing text with inline elements like strong/em/code/a) folds into a single placeholder; loose long text nodes sandwiched between block-level children are likewise folded; short text (≤16 CJK characters / ≤12 words) stays verbatim. Placeholder distribution is a reading clue — the position and volume of paragraphs/headings/buttons remain visible; `<title>` keeps its original text (not folded)
 
-- `{{CODE_k|x_lines}}` 为代码块内容占位，k = 文档序编号（1 起、跳过 `[hidden]` pre）、x = 代码行数（按占位前原文的行结构计）；`data-language` 在 pre 属性上。ok/failed 在清洗版同为占位符（clean 恒折叠），标 paragraphIds 的方式与表格占位符一致；成功代码块的原文已由步骤 1 预计算存 `1_code.json`、步骤 5 还原
+- `{{CODE_k|x_lines}}` is a code-block content placeholder; k = the document-order index (from 1, skipping `[hidden]` pre), x = the code's line count (counted on the pre-fold original's line structure); `data-language` sits on the pre attribute. ok and failed blocks are both placeholders in the clean version (clean always folds); mark them into paragraphIds exactly like table placeholders; the original text of a successful code block has been precomputed into `1_code.json` by step 1 and is restored by step 5
 
-- `{{TABLE_k|y×x}}`：表格整体占位，k = 文档序编号（1 起、跳过 `[hidden]` 表），y = 行数（`<tr>` 数），x = 列数（各行 colspan 之和的最大值，即网格列数）。行列规模是判读表格的信号——大表（如 `30×` 级）大概率是核心数据载体。成功表的 GFM markdown 已由步骤 1 预计算存 `1_tables.json`、步骤 5 还原；步骤 2 仅需标记其 `data-idx` 入 paragraphIds
+- `{{TABLE_k|y×x}}`: whole-table placeholder; k = the document-order index (from 1, skipping `[hidden]` tables), y = row count (number of `<tr>`), x = column count (max over rows of the sum of colspans, i.e. the grid width). The scale is a signal for reading the table — a big table (e.g. the `30×` class) is very likely a core data carrier. The GFM markdown of a successful table has been precomputed into `1_tables.json` by step 1 and is restored by step 5; step 2 only needs to mark its `data-idx` into paragraphIds
 
-- `{{HIDDEN_TAG|n_chars;n_a/n_div/…}}` 为带 `hidden` 属性的元素，折叠了子树；token 是真实文本规模与标签构成（计数降序），标明其后是整块折叠内容。hidden 元素按内容语义判身份：文章正文（FAQ/附录/展开收起）→ 段落块（也是锚点）；页面功能（模态/抽屉/移动端导航）→ 流内标 `dumpIds`、流外不标。自 2026-09-09 起也覆盖 **body 边界脚手架区的 CSS 隐藏**（body 直接子孙与独子链上的 display:none/visibility:hidden）——判读方式不变；正文流深处的 CSS 隐藏内容（非激活 tab、FAQ 收起答案）不折叠、原文可见
-- `{{DIALOG_TAG|n_chars;构成}}` 为 `role="dialog"`/`aria-modal` 弹窗折叠壳（任意深度）——**chrome，不要选入任何键**；壳 data-idx 也不需要标 dumpIds（步骤 3 对键外分支整枝删除）
-- `{{OVERLAY_TAG|n_chars;构成}}` 为 body 边界独子链上的可见 fixed/absolute/sticky 浮层折叠壳（登录横幅/吸顶工具条等）——**chrome，不要选入任何键**
+- `{{HIDDEN_TAG|n_chars;n_a/n_div/…}}` marks an element carrying the `hidden` attribute whose subtree was folded; the token reports the real text volume and tag composition (counts descending), signaling a wholly folded block. Judge a hidden element by its content semantics: article body (FAQ/appendix/expand-collapse) → a paragraph block (and an anchor); page furniture (modal/drawer/mobile nav) → mark `dumpIds` inside the flow, leave unmarked outside. Since 2026-09-09 it also covers **CSS-hidden scaffolding at the body boundary** (display:none/visibility:hidden on body's direct descendants and only-child chains) — the reading method is unchanged; CSS-hidden content deep in the body flow (inactive tabs, collapsed FAQ answers) is not folded and its text stays visible
+- `{{DIALOG_TAG|n_chars;composition}}` is the folded shell of a `role="dialog"`/`aria-modal` popup (at any depth) — **chrome, never select it into any key**; the shell's data-idx does not need dumpIds either (step 3 prunes whole branches outside the keys)
+- `{{OVERLAY_TAG|n_chars;composition}}` is the folded shell of a visible fixed/absolute/sticky overlay on body-boundary only-child chains (login banners / sticky toolbars, …) — **chrome, never select it into any key**
 
-- `{{VIEW_TEXT|n_chars}}` / `{{VIEW_TEXT|n_words}}` 为**纯视图文本占位符**：可视模块（图解/图表/对比卡片/公式渲染等）内部「只含 div + 行内文本元素（span/a/strong/em/code/br/MathML 等）+ 文本」的极大子树、或「只含文本与行内元素」的 p 根折叠、**壳元素保留**——标签、class、data-idx、aria-label 原样。模块内即使含长文本也**整棵折叠、原文随折吞没**（`n` 是整模块文本体量信号）。判读要点：① **壳的 class/aria-label 标识模块身份**（如 `ra-raw`、`katex-html`）、`n` 是模块文本体量信号；② 标 paragraphIds 时以**壳的 `data-idx` 整块标记**（可视模块整棵标记、内部不拆），占位符不是段落文本、不要标记壳内已被折叠的后代 id。文本量不足（<8 汉字/6 词）、结构单薄（纯 div 树 ≤6 内部 div、含行内元素树 ≤4 元素）的子树**保留原样**；链接/按钮/标题（h1-h3）内的文本结构、含图片（img）的子树也不折叠
+- `{{VIEW_TEXT|n_chars}}` / `{{VIEW_TEXT|n_words}}` are **pure-view-text placeholders**: inside a visual module (diagram / chart / comparison card / rendered formula, …), the maximal subtree holding "only div + inline text elements (span/a/strong/em/code/br/MathML, …) + text", or a p root holding "only text and inline elements", is folded — **the shell element stays**: tag, class, data-idx and aria-label untouched. Even if the module contains long text it is **folded whole and the original text is swallowed by the fold** (`n` is the module's overall text-volume signal). Reading points: ① **the shell's class/aria-label identifies the module** (e.g. `ra-raw`, `katex-html`) and `n` signals the module's text volume; ② when marking paragraphIds, mark **the shell's `data-idx` as one whole block** (visual modules are marked whole, never split internally); the placeholder is not paragraph text — do not mark already-folded descendant ids inside the shell. Subtrees with insufficient text (<8 CJK characters / 6 words) or thin structure (pure div trees with ≤6 inner divs; inline-bearing trees with ≤4 elements) **stay verbatim**; text structures inside links/buttons/headings (h1-h3) and subtrees containing images (img) are not folded either
 
-    折叠前后对照（折叠前形态仅示意，你在 `1_clean_snapshot.html` 里看到的是折叠后形态）：
+    Before/after folding (the pre-fold form is illustrative only — what you see in `1_clean_snapshot.html` is the folded form):
 
     ```html
-    <!-- 折叠前：可视模块内部是 div/span + 文本碎片 -->
+    <!-- before folding: inside the visual module are div/span + text fragments -->
     <div class="ra-raw" data-idx="90">
       <div data-idx="91">
         <div data-idx="93">
-          <div data-idx="95">健康</div>
+          <div data-idx="95">Health</div>
           <div data-idx="96">1×</div>
         </div>
-        <div data-idx="98">95% 命中</div>
+        <div data-idx="98">95% hit rate</div>
         <div data-idx="99">~1× cost</div>
       </div>
     </div>
 
-    <!-- 折叠后：壳保留（class/data-idx 可引用），内部折为单个占位符 -->
+    <!-- after folding: the shell stays (class/data-idx still referenceable), the inside collapses into a single placeholder -->
     <div class="ra-raw" data-idx="90">{{VIEW_TEXT|24_chars}}</div>
     ```
 
-    同款折叠也出现在：图表轴刻度行（一组 `0`/`2.5k`/`5k` 刻度 div）、图解步骤（`Step 1`/箭头碎片）、KaTeX 视觉孪生（class 含 `katex-html` 的 span 树——公式渲染的 HTML 副本，其兄弟 MathML 才是语义本体）、**p>行内 形态**——p 通常不嵌 p、只含 text 或行内元素，行内元素（span/a/code/strong/MathML 等）数 >4 的纯行内段落（样式化词组/链接密集/行内公式段）整段折叠：
+    The same folding also appears in: chart axis-tick rows (a row of `0`/`2.5k`/`5k` tick divs), diagram steps (`Step 1` / arrow fragments), KaTeX visual twins (a span tree whose class contains `katex-html` — the HTML rendering copy of a formula; its sibling MathML is the semantic original), and the **p>inline form** — p usually does not nest p and holds only text or inline elements; a pure-inline paragraph with more than 4 inline elements (span/a/code/strong/MathML, …) (styled phrases / dense links / inline-formula runs) folds as a whole:
 
     ```html
-    <!-- 折叠前：p 内是纯行内内容（无 div/p/img 等块级标签；a/code/strong 等行内元素可混排） -->
+    <!-- before folding: p holds purely inline content (no block tags like div/p/img; inline elements like a/code/strong may interleave) -->
     <p data-idx="2"><span class="k">alpha</span><span class="k">beta</span><span class="k">gamma</span><span class="k">delta</span><span class="k">epsilon zeta</span></p>
 
-    <!-- 折叠后：p 壳保留 -->
+    <!-- after folding: the p shell stays -->
     <p data-idx="2">{{VIEW_TEXT|6_words}}</p>
     ```
 
-    反例不折：纯文本段落、含 img 的段落、行内元素 ≤4 的段落——正常正文段落流原样可见。占位符所在位置即模块原位，按普通可视模块参与成流/锚点判定（div 壳可作块、不能作锚点）
+    Counter-examples not folded: plain-text paragraphs, paragraphs containing img, paragraphs with ≤4 inline elements — normal body paragraphs stay fully visible. The placeholder sits exactly where the module was; it participates in flow/anchor judgment like any ordinary visual module (a div shell can serve as a block, but not as an anchor)
 
-### 示例（`1_clean_snapshot.html`）：
+### Example (`1_clean_snapshot.html`):
 
 ```html
 <html>
 <body>
   <div data-idx="1" class="xxx">
 
-    <!-- 全局唯一标题 → titleId = 2 -->
+    <!-- the page's only title → titleId = 2 -->
     <h1 data-idx="2"><span>Title…</span></h1>
   </div>
 
-  <!-- [3]/[4] 为独立的文章说明，纳入 descriptionIds；因为是独立的，选 [3] 和选 [4] 没有本质区别 -->
+  <!-- [3]/[4] are standalone article descriptions → into descriptionIds; being standalone, choosing [3] or [4] makes no real difference -->
   <div data-idx="3">
     <p data-idx="4"><span>This is an article about …</span></p>
   </div>
-  <!-- 最外层段落流容器 [6] 的祖先元素 [5]，不能算在 paragraphIds 内（多包一层 "[]" 没有意义） -->
+  <!-- [5], an ancestor of the outermost paragraph-flow container [6], must not be counted into paragraphIds (one extra "[]" layer carries no meaning) -->
   <div data-idx="5" class="xxx">
 
-    <!-- `paragraphIds` 顶层从最外层段落流容器 [6] 的子块开始：
-         内容子块 [7]（说明计入规模）/[10]/[13]/[14] ≥2、噪音 [9]/[37] 不计 → [6] 成流（主段落流不要求锚点） -->
+    <!-- the paragraphIds top level starts from the children of the outermost paragraph-flow container [6]:
+         content children [7] (description counts toward size) / [10]/[13]/[14] ≥2, noise [9]/[37] not counted → [6] forms a flow (the main paragraph flow requires no anchor) -->
     <section data-idx="6" class="article main content">
-      <!-- [7] 为段落流之内的文章说明——无论位置，统一纳入 descriptionIds -->
-      <!-- 段落块一定取流的直接子元素 [7]，而不是其内部 [8]；[7] 也可留在 paragraphIds 原位 -->
+      <!-- [7] is an article description inside the paragraph flow — wherever it sits, it goes into descriptionIds -->
+      <!-- the paragraph block is always the flow's direct child [7], not its inner [8]; [7] may also stay in place in paragraphIds -->
       <div data-idx="7">
         <p data-idx="8"><span>Author: xxx</span><span>Name: xxx</span></p>
       </div>
 
-      <!-- 噪音元素 [9] 在段落流之内 → 标 dumpIds -->
+      <!-- noise element [9] inside the paragraph flow → mark dumpIds -->
       <div data-idx="9" class="ad">Ad…</div>
 
-      <!-- 段落块通常不是固定的元素，而是包装容器 + 语义内容的组合 -->
-      <!-- [10] 首块 <h2>[11] 是标题头、排除计数后 R 只剩 <pre>[12] 一块（非流）→ 不成流（带标题单体）——整个作为 [6] 的一个块，取 [10] 而不是 [11, 12] -->
+      <!-- a paragraph block is usually not a fixed element but a combination of wrapper container + semantic content -->
+      <!-- [10]: first child <h2>[11] is the heading; after excluding it from the count, R is just <pre>[12] (not a flow) → no flow forms (titled monolith) — the whole thing is one block of [6]; take [10], not [11, 12] -->
       <div data-idx="10">
         <h2 data-idx="11">…</h2>
         <pre data-idx="12">{{CODE_k|x_lines}}</pre>
       </div>
 
-      <!-- 例外：当行内元素是段落流的直接子元素时，应该当作独立段落块 -->
+      <!-- exception: when an inline element is a direct child of the paragraph flow, treat it as an independent paragraph block -->
       <span data-idx="13">{{LONG_TEXT|n_chars}}</span>
 
-      <!-- 段落流下的独立章节模块，内部还有「子段落流」 -->
-      <!-- [14] 首块 [15] 是标题头 → 排除计数、居该子流首位；R = [18]/[31]/[36] ≥2、
-           锚点 [36]（hidden）→ 是子段落流；在 [6] 的序列里以一个数组占位，[14] 本身不出现在 JSON 中 -->
+      <!-- a standalone section module under the paragraph flow, containing further "sub-flows" -->
+      <!-- [14]: first child [15] is the heading → excluded from the count, placed first in the sub-flow; R = [18]/[31]/[36] ≥2,
+           anchor [36] (hidden) → a sub-flow; in [6]'s sequence it occupies one array; [14] itself never appears in the JSON -->
       <section data-idx="14" class="block">
-        <!-- 独立段落块 [15] -->
+        <!-- standalone paragraph block [15] -->
         <header class="head" data-idx="15">
           <span data-idx="16">01</span>
-          <h2 data-idx="17">章节标题</h2>
+          <h2 data-idx="17">Section heading</h2>
         </header>
 
-        <!-- [18] 剔除噪音 [19] 后只剩子流 [20]、无标题头 → 透明包装层、不占维度（见「一流一维」） -->
+        <!-- [18]: after removing noise [19], only sub-flow [20] remains, no heading → transparent wrapper, occupies no dimension (see "One flow, one dimension") -->
         <section data-idx="18" class="article main content">
 
-          <!-- [19] 没有有效内容（段落/文本），是噪音元素（在流 [14] 之内）→ 标 dumpIds -->
+          <!-- [19] has no valid content (paragraph/text); it is noise (inside flow [14]) → mark dumpIds -->
           <div data-idx="19"></div>
 
-          <!-- 独立「子段落流」 [20]：首块 [21] 标题头排除计数、居首位；R = [23]/[27]/[28] ≥2、锚点 <figure>[23]/<p>[27]/<dl>[28] -->
+          <!-- standalone "sub-flow" [20]: first child [21] is the heading, excluded from the count, placed first; R = [23]/[27]/[28] ≥2, anchors <figure>[23]/<p>[27]/<dl>[28] -->
           <div data-idx="20">
             <header class="head" data-idx="21">
-              <h2 data-idx="22"><span>01</span>章节标题</h2>
+              <h2 data-idx="22"><span>01</span>Section heading</h2>
             </header>
             <figure class="table" data-idx="23">
-              <figcaption data-idx="24">表题</figcaption>
+              <figcaption data-idx="24">Table caption</figcaption>
               <div data-idx="25">
                 <table data-idx="26">{{TABLE_3|8×4}}</table>
               </div>
@@ -328,21 +328,21 @@
           </div>
         </section>
 
-        <!-- [31] 首块 header[32] 是标题头、排除计数后 R 只剩 <p>[35] 一块（非流）→ 不成流（带标题单体）——整个作为一个段落块 -->
+        <!-- [31]: first child header[32] is the heading; after excluding it, R is just <p>[35] (not a flow) → no flow forms (titled monolith) — the whole thing is one paragraph block -->
         <section data-idx="31" class="article main content">
           <header class="head" data-idx="32">
             <span data-idx="33">02</span>
-            <h2 data-idx="34">章节标题</h2>
+            <h2 data-idx="34">Section heading</h2>
           </header>
           <p data-idx="35"><span>…</span></p>
         </section>
 
-        <!-- 被 hidden 折叠的隐藏元素，在段落流中要算作一个段落块（也是 [14] 成流的锚点） -->
+        <!-- a hidden element folded by hidden counts as a paragraph block in the flow (and is the anchor that lets [14] form) -->
         <div data-idx="36" hidden class="expand">{{HIDDEN_TAG|120_chars;3_p}}</div>
       </section>
 
-      <!-- 明确是目录/导航等噪音元素（内部有 h/ul/li/p，结构上符合成流条件但语义是导航）→ 标 dumpIds -->
-      <!-- dumpIds 应该优先取最高的父元素/祖先元素 [37]，而不是一堆子孙元素 [38,39,40] -->
+      <!-- clearly noise like TOC/navigation (contains h/ul/li/p; structurally qualifies as a flow but semantically is navigation) → mark dumpIds -->
+      <!-- dumpIds should prefer the highest parent/ancestor [37], not a pile of descendants [38,39,40] -->
       <nav class="toc" data-idx="37">
         <p data-idx="38">01 xxx</p>
         <ul data-idx="39">
@@ -355,7 +355,7 @@
     </section>
   </div>
 
-  <!-- 明确是噪音元素，但在段落流之外——无须标记 -->
+  <!-- clearly noise, but outside the paragraph flow — no marking needed -->
   <div data-idx="44" class="dialog">
     <h2 data-idx="45">…</h2>
     <p data-idx="46">…</p>
@@ -366,11 +366,11 @@
 </html>
 ```
 
-## 输出 `2_key_ids.json` 要求
+## Output requirements for `2_key_ids.json`
 
-**JSON 契约**：四键全部写出；`titleId` 为正整数，无主标题或不可判时为 `null`；`descriptionIds`/`dumpIds` 可为空数组；`paragraphIds` **必填且非空**（至少标一个段落块）；数组成员为正整数（块）或嵌套数组（子段落流），各数组按文档序书写
+**JSON contract**: write out all four keys; `titleId` is a positive integer, or `null` when there is no main title or it cannot be determined; `descriptionIds`/`dumpIds` may be empty arrays; `paragraphIds` is **required and non-empty** (mark at least one paragraph block); array members are positive integers (blocks) or nested arrays (sub-flows), each array written in document order
 
-完整 JSON 结构：
+Full JSON structure:
 
 ```json
 {
@@ -381,7 +381,7 @@
 }
 ```
 
-无标题/无说明/无流内噪音时的最小形态：
+Minimal form when there is no title / no description / no in-flow noise:
 
 ```json
 {
