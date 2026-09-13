@@ -110,10 +110,20 @@ node <skill-root>/script/snapshot.mjs --url <url> [--timeout 300000] [--scroll-r
 
 #### 任务（提示词/Prompt）
 
-- 必须严格按照手册 `<skill-root>/references/analyze_html_guide.md` 的要求完成任务
-- 当前任务期间你只能使用 "Read/Write/Edit" 工具（**完整读取** `1_clean_snapshot.html`，写入 `2_key_ids.json`），其他文件和你完全无关
-- 当前工作路径: `/path/to/xxx`（取步骤 1 stdout 的 `url-working-path`）
-- 不要总结报告，只需产出 `2_key_ids.json` 即可
+派发前替换提示词中的 `<skill-root>`、`<url-working-path>` 为步骤 1 stdout 对应字段：
+
+> 你是网页 DOM 分析专家，请读取 HTML 文件并生成结构化 JSON。
+>
+> **任务**
+>
+> 1. 读取任务手册: `<skill-root>/references/analyze_html_guide.md`
+> 2. 一次性完整读取并分析: `<url-working-path>/1_clean_snapshot.html`
+> 3. 分析后一次性完整写入: `<url-working-path>/2_key_ids.json`
+>
+> **原则**
+> - 不要读取其他文件，和你完全无关
+> - 任务期间你只能使用 "Read/Write/Edit" 工具
+> - 写入 JSON 后不要总结报告，输出"任务完成"即可
 
 #### 后续
 
@@ -148,21 +158,37 @@ node <skill-root>/script/render_article.mjs --url <url>
 
 #### 未分割（步骤 3 stdout `chunks.split=false`）
 
-单个子代理，任务提示词：
+单个子代理，任务提示词（派发前替换其中的 `<skill-root>`、`<url-working-path>` 为步骤 1 stdout 对应字段）：
 
-- 必须严格按照手册 `<skill-root>/references/markdown_skeleton_guide.md` 的要求完成任务
-- 当前任务期间你只能使用 "Read/Write/Edit" 工具（**完整读取** `3_article.html`，一次性写入 `4_skeleton.json`），其他文件和你完全无关
-- 当前工作路径: `/path/to/xxx`（取步骤 1 stdout 的 `url-working-path`）
-- 不要总结报告，只需产出 `4_skeleton.json` 即可
+> 你是 markdown 骨架生成专家，请读取 HTML 文章视图并生成结构化 JSON。
+>
+> **任务**
+>
+> 1. 读取任务手册: `<skill-root>/references/markdown_skeleton_guide.md`
+> 2. 一次性完整读取并分析: `<url-working-path>/3_article.html`
+> 3. 分析后一次性完整写入: `<url-working-path>/4_skeleton.json`
+>
+> **原则**
+> - 不要读取其他文件，和你完全无关
+> - 任务期间你只能使用 "Read/Write/Edit" 工具
+> - 写入 JSON 后不要总结报告，输出"任务完成"即可
 
 #### 已分割（步骤 3 stdout `chunks.split=true`）
 
-**单条消息并行派发 `chunks.count` 个子代理**，每个子代理的任务提示词按各自分块文件定制（X 为分块号、N 为总块数）：
+**单条消息并行派发 `chunks.count` 个子代理**，每个子代理的任务提示词按各自分块文件定制（X 为分块号、N 为总块数；派发前替换其中的 `<skill-root>`、`<url-working-path>` 为步骤 1 stdout 对应字段）：
 
-- 必须严格按照手册 `<skill-root>/references/markdown_skeleton_guide.md` 的要求完成任务
-- 当前任务期间你只能使用 "Read/Write/Edit" 工具（**完整读取** `3_article_chunk_X_of_N.html`，一次性写入 `4_skeleton_chunk_X_of_N.json`），其他文件和你完全无关
-- 当前工作路径: `/path/to/xxx`（取步骤 1 stdout 的 `url-working-path`）
-- 不要总结报告，只需产出 `4_skeleton_chunk_X_of_N.json` 即可
+> 你是 markdown 骨架生成专家，请读取 HTML 文章视图并生成结构化 JSON。
+>
+> **任务**
+>
+> 1. 读取任务手册: `<skill-root>/references/markdown_skeleton_guide.md`
+> 2. 一次性完整读取并分析: `<url-working-path>/3_article_chunk_X_of_N.html`
+> 3. 分析后一次性完整写入: `<url-working-path>/4_skeleton_chunk_X_of_N.json`
+>
+> **原则**
+> - 不要读取其他文件，和你完全无关
+> - 任务期间你只能使用 "Read/Write/Edit" 工具
+> - 写入 JSON 后不要总结报告，输出"任务完成"即可
 
 #### 后续
 

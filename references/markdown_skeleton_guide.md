@@ -1,6 +1,6 @@
 # 任务
 
-读取 HTML 文章视图（任务指定的文件：未分割 = `<url-working-path>/3_article.html`；分割 = `<url-working-path>/3_article_chunk_X_of_N.html`）的 DOM 结构，把**待转换内容**转换成一份 **markdown 骨架**——数组按文档序排列，每项一个单键对象，key 是语义标签，value 是该块的内容模板。占位符（`{{LONG_TEXT_k|…}} / {{CODE_k|…}} / {{TABLE_k|…}}`）只引用占位编号，去除所有后缀（包括 `|`）。
+读取 HTML 文章视图（任务指定的输入文件）的 DOM 结构，把**待转换内容**转换成一份 **markdown 骨架**——数组按文档序排列，每项一个单键对象，key 是语义标签，value 是该块的内容模板。占位符（`{{LONG_TEXT_k|…}} / {{CODE_k|…}} / {{TABLE_k|…}}`）只引用占位编号，去除所有后缀（包括 `|`）。
 
 ## 专有名词
 
@@ -555,7 +555,7 @@ DOM 结构示例（`trans2img`判定场景）：
 
 ## 输出要求
 
-输出路径：以任务指定为准——未分割 = `<url-working-path>/4_skeleton.json`；分割 = `<url-working-path>/4_skeleton_chunk_X_of_N.json`（与输入分块同号）
+输出路径：以任务指定的为准（与输入分块同号）
 
 完整 JSON 结构：
 
