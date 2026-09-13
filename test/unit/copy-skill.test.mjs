@@ -1,5 +1,5 @@
 // test/unit/copy-skill.test.mjs
-// 双语导出（scripts/copy-skill.mjs）的结构契约：两目录自包含、文件名归一、package.json 改写。
+// 双语导出（copy-skill.mjs）的结构契约：两目录自包含、文件名归一、package.json 改写。
 // 副作用仅写 .temp/（已 gitignore）；脚本依赖 cwd 为仓库根——node --test 从仓库根启动，天然满足。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,7 +17,7 @@ function listFiles(dir, prefix = dir) {
 }
 
 test('copy:skill: 导出双语言目录，结构恒等且文件名归一', async () => {
-  const r = await runScript(process.execPath, ['scripts/copy-skill.mjs']);
+  const r = await runScript(process.execPath, ['copy-skill.mjs']);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
 
   // 1) 两目录文件清单恒等
