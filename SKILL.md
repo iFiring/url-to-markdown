@@ -22,7 +22,7 @@ description: "将 URL（网页）的主体内容转换成 Markdown；在需要�
 
 > 以下参数由步骤 1 输出，全局使用
 - `<skill-root>`：本技能 SKILL.md 所在目录（**绝对路径**）
-- `<url-name>`：当前 URL 的专属目录名；`replace(/[^A-Za-z0-9.-]/g, '_')` 生成（剥去 `http(s)://` 前缀）。**内嵌占优内容 iframe 的页面为特殊名 `redirected_<原名>`**（管线已自动重定向到 frame 真实 URL 转换）
+- `<url-name>`：当前 URL 的专属目录名。**占优内容 iframe 页面为特殊名 `redirected_<原名>`**（管线已自动重定向到 frame 真实 URL）
 - `<url-working-path>`：当前 URL 的专属目录 `<skill-root>/working/<url-name>`；其后产物都存放在此目录下
 
 本技能目录结构：
@@ -58,7 +58,7 @@ bash <skill-root>/script/init.sh
 | `ok` | 环境就绪，进入步骤 1 |
 | `error` | **终止全部流程**，把 `stdout.reason` 反馈给用户 |
 
-纯环境自检（node/pnpm/chromium/字体），不产出 URL 相关参数。**stdout.status=ok 结构示例**
+纯环境自检（node/pnpm/chromium/字体）。**stdout.status=ok 结构示例**
 ```json
 { "status": "ok", "skill-root": "/root/path/to/skill", "node": "20.x", "pm": "pnpm", "chromium": true }
 ```
@@ -69,11 +69,11 @@ bash <skill-root>/script/init.sh
 node <skill-root>/script/snapshot.mjs --url <url> [--timeout 300000] [--scroll-rounds 60] [--table-engine self|turndown]
 ```
 
-单条命令一气呵成（原步骤 1/2 合并，单 chromium 实例贯穿）：登录检测（需要时自动打开浏览器弹出 Screencast viewer 供人工登录）→ 渐进滚动 → **重定向门**（占优内容 iframe → 自动跳转 frame 真实 URL 续跑）→ 虚拟列表检测 → 全保真快照抓取，随后同一浏览器对快照做两趟结构清洗（带样式版供步骤 3 裁剪、清洗版供步骤 2 判读；表格/代码块预计算 markdown）。
+单条命令完成网页抓取与结构清洗：登录检测（需要时自动弹出浏览器 viewer 供人工登录）→ 滚动加载 → 重定向处理（占优内容 iframe 自动跳转真实 URL）→ 虚拟列表检测 → 快照抓取 + 结构清洗（表格/代码块预计算 markdown）。
 
 可选参数：
 - `--table-engine self|turndown`（或 `U2M_TABLE_ENGINE`，默认 `self`）：表格占位符转换引擎
-- `--from-snapshot`：跳过抓取五阶段，直接读工作目录已有 `1_snapshot.html` 进清洗——换表格引擎重跑、清洗逻辑升级后的重放用（不重新访问网络）
+- `--from-snapshot`：跳过抓取，直接用工作目录已有 `1_snapshot.html` 进清洗（不重新访问网络）
 
 产物（生成后不要擅自读取内容）：
 ```
@@ -81,16 +81,16 @@ node <skill-root>/script/snapshot.mjs --url <url> [--timeout 300000] [--scroll-r
   1_snapshot.html               # 全保真快照
   1_clean_snapshot.html         # 结构视图（步骤 2 输入）
   1_clean_style_snapshot.html   # 带样式版（步骤 3 输入）
-  1_long_text.json              # 占位符原文映射（texts 散文本 + runs 行内 run 规范化 HTML）
+  1_long_text.json              # 长文本占位符原文映射
   1_tables.json / 1_code.json   # 表格/代码块预计算
 ```
 
 | stdout.status | 动作 |
 |---|---|
-| `ok` | 把 stdout 反馈给用户，进入步骤 2。`redirect` 字段仅信息通报（管线内部已消化），步骤 2 起仍以原始 `<url>` 调用各脚本；`<url-name>`/`<url-working-path>` 以本行 stdout 为准（重定向页是特殊名）；`tables.failed`/`codes.failed` 是合法分支（下游 LLM 兜底），无需处理 |
+| `ok` | 把 stdout 反馈给用户，进入步骤 2；`<url-name>`/`<url-working-path>` 以本行 stdout 为准（重定向页是特殊名），`redirect` 字段仅通报（后续步骤仍用原始 `<url>`），`tables.failed`/`codes.failed` 是合法分支无需处理 |
 | `error`（reason=`virtual_list`） | 告知用户"该页面为虚拟列表，仅渲染部分内容，无法全文转化为 Markdown"，**终止** |
 | `error`（reason=`login_timeout`/`login_aborted`） | 询问用户是否重试登录；重试则再次运行本命令 |
-| `error`（其他） | 把 `stdout.reason` 反馈给用户并终止；若 `1_snapshot.html` 已落盘（错误发生在清洗阶段），可加 `--from-snapshot` 重试、免重新抓取 |
+| `error`（其他） | 把 `stdout.reason` 反馈给用户并终止；若 `1_snapshot.html` 已落盘，可加 `--from-snapshot` 重试、免重新抓取 |
 
 **stdout.status=ok 结构示例**
 ```json
@@ -137,9 +137,9 @@ node <skill-root>/script/snapshot.mjs --url <url> [--timeout 300000] [--scroll-r
 node <skill-root>/script/render_article.mjs --url <url>
 ```
 
-单个 chromium 实例三轮处理一气呵成（裁剪 DOM → 内联样式 → 提取文章视图 + 瘦身 + 分块，原步骤 4/5/6 合并）。
+依据关键 ID 从带样式版快照渲染出文章视图（裁剪 DOM → 内联样式 → 提取瘦身）。
 
-产物：`<url-working-path>/3_article.html`（始终产出）；超过 60KB 时另产出分块 `3_article_chunk_X_of_N.html`（主内容 ≤40KB、只读上下文侧不计，每块带 ✅/❌ 转换边界标记——首块 ✅ 在 body 开头、末块 ❌ 在 body 末尾）（你自己不要去读脚本的产物内容，确认有即可）；调试中间产物 `3_extract.html` / `3_juice.html` 同轮落盘
+产物：`<url-working-path>/3_article.html`；超过 60KB 时另产出分块 `3_article_chunk_X_of_N.html`（你自己不要去读脚本的产物内容，确认有即可）
 
 | stdout.status | 动作 |
 |---|---|
@@ -194,7 +194,7 @@ node <skill-root>/script/render_article.mjs --url <url>
 node <skill-root>/script/render_markdown.mjs --url <url>
 ```
 
-产物：`<url-working-path>/5_markdown.md`（最终产物，路径见 stdout 的 `markdownPath`；你自己不要去读脚本的产物内容，确认有即可）；中间产物 `5_resolved_skeleton.json` 与 `assets/` 同轮落盘
+产物：`<url-working-path>/5_markdown.md`（最终产物，路径见 stdout 的 `markdownPath`；你自己不要去读脚本的产物内容，确认有即可）
 
 | stdout.status | 动作 |
 |---|---|
@@ -208,7 +208,7 @@ node <skill-root>/script/render_markdown.mjs --url <url>
 | `init.sh` 报 `未找到 pnpm/yarn/npm` | 请用户安装任一包管理器后重试步骤 0 |
 | `init.sh`(Linux) 报 fontconfig/字体安装失败（需 root/sudo） | 步骤 0 自动修复未成功（无 root 或无包管理器）：请用户以 root 手动安装 fontconfig 与字体（西文如 liberation、中文如 noto-cjk）后重试步骤 0；不装的话 chromium 渲染任何带文字的页面都会 FATAL 崩溃 |
 | `snapshot` 判定已登录但页面仍是登录墙 | 请用户手动删除 `working/cookies/storage_state.json` 后重跑步骤 1 |
-| `snapshot` 对无需登录的页面弹出登录 viewer | 用户在 viewer 点「⏭️ 跳过登录」并确认即可继续，本次命中的弱信号按站点记入 `working/cookies/login_decisions_skips.json`（后续命中全在记忆内不再弹 viewer，emit 以 `loginSkippedByMemory` 通报；强信号不记忆、跳过仅本次生效）；想重置裁决则删除该文件对应域名条目后重跑步骤 1 |
+| `snapshot` 对无需登录的页面弹出登录 viewer | 用户在 viewer 点「⏭️ 跳过登录」并确认即可继续（该站点后续不再弹，emit 以 `loginSkippedByMemory` 通报）；想重置裁决则删除 `working/cookies/login_decisions_skips.json` 对应域名条目后重跑步骤 1 |
 | `snapshot` 报 `virtual_list` 但用户确信是普通长页 | 该站可能主动裁剪离屏 DOM（与虚拟列表同构，产出亦只是部分窗口），属已知边界；建议改用其他抓取方式 |
 | 页面加载报 `net::ERR_TUNNEL_CONNECTION_FAILED` / `ERR_PROXY_CONNECTION_FAILED` | 本机系统代理不可用或拒绝目标站：设 `U2M_PROXY=direct` 绕过系统代理，或 `U2M_PROXY=http://<host>:<port>` 显式指定可用代理后重跑 |
 | `snapshot --from-snapshot` 报找不到快照 | 去掉 `--from-snapshot` 重新运行本命令（重新抓取快照） |
