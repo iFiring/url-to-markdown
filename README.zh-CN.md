@@ -53,7 +53,8 @@
 ```text
 SKILL.md                 # Skill 主体文件（步骤 0-5 操作手册）
 CLAUDE.md                # 面向 Claude Code 的开发约定（技术细节唯一事实源）
-README.md / README.zh-CN.md # 项目概览（英文 / 中文，本文件为中文版）
+README.md                # 项目概览（英文版）
+README.zh-CN.md          # 项目概览（中文版）
 script/                  # CLI 脚本
   lib/                   # 共享模块（contract / env / browser…）与页面脚本 page-*.js
 test/                    # 单元 / 集成测试 + fixtures + smoke 冒烟清单

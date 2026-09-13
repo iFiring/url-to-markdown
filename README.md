@@ -53,7 +53,8 @@ Traditional script-based converters (`markdown-it / turndown`) all suffer from t
 ```text
 SKILL.md                 # Skill main file (step 0-5 operations manual)
 CLAUDE.md                # Development conventions for Claude Code (single source of truth for technical details)
-README.md / README.zh-CN.md # This overview (English / Chinese)
+README.md                # This overview (English)
+README.zh-CN.md          # This overview (Chinese)
 script/                  # CLI scripts
   lib/                   # Shared modules (contract / env / browser…) and page scripts page-*.js
 test/                    # Unit / integration tests + fixtures + smoke checklist
