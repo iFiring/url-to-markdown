@@ -20,7 +20,8 @@ async function runClean(snapshot, urlPath = 'chrome-emit', env = {}) {
     [path.resolve(thisDir, '../../script/snapshot.mjs'), '--url', url, '--from-snapshot'],
     { env: { ...env, U2M_WORKING_ROOT: tmpRoot }, timeoutMs: 60000 });
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  return { out: JSON.parse(r.stdout), stderr: r.stderr,
+  // stdout 已精简为流程字段；统计断言读完整载荷 result 文件
+  return { out: JSON.parse(fs.readFileSync(path.join(dir, 'logs', '1_snapshot_result.json'), 'utf8')), stderr: r.stderr,
     cleanup: () => fs.rmSync(tmpRoot, { recursive: true, force: true }) };
 }
 

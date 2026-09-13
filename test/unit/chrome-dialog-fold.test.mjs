@@ -20,7 +20,7 @@ async function runClean(snapshot, urlPath = 'chrome-dlg', env = {}) {
     [path.resolve(thisDir, '../../script/snapshot.mjs'), '--url', url, '--from-snapshot'],
     { env: { ...env, U2M_WORKING_ROOT: tmpRoot }, timeoutMs: 60000 });
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(dir, 'logs', '1_snapshot_result.json'), 'utf8'));
   return {
     out,
     cleaned: fs.readFileSync(out.cleanedSnapshot, 'utf8'),

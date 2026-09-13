@@ -51,7 +51,8 @@ test('表格管线：步骤 1 产 1_tables.json + logs，成功/失败计数正�
   const { r, dir } = await runClean(tmpRoot, url, { U2M_TABLE_ENGINE: 'self' });
   try {
     assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-    const out = JSON.parse(r.stdout);
+    // stdout 已精简；统计断言读完整载荷 result 文件
+    const out = JSON.parse(fs.readFileSync(path.join(dir, 'logs', '1_snapshot_result.json'), 'utf8'));
     assert.equal(out.tables.total, 3);
     assert.equal(out.tables.ok, 2, '简单表 + 跨行跨列表成功');
     assert.equal(out.tables.failed, 1, '无表头表失败');
@@ -71,7 +72,7 @@ test('表格管线：成功表 styled 折叠、失败表 styled 保 live + data-
   const { r, dir } = await runClean(tmpRoot, url, { U2M_TABLE_ENGINE: 'self' });
   try {
     assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-    const out = JSON.parse(r.stdout);
+    const out = JSON.parse(fs.readFileSync(path.join(dir, 'logs', '1_snapshot_result.json'), 'utf8'));
     const styled = fs.readFileSync(out.styledSnapshot, 'utf8');
     const okCount = (styled.match(/\{\{TABLE_\d+\|\d+×\d+\}\}/g) || []).length;
     assert.equal(okCount, 2, '两成功表折叠');
@@ -104,7 +105,7 @@ test('表格管线：步骤 5 {{TABLE_k}} 还原 + GFM markdown 输出', async (
     const r8 = await runScript(process.execPath, [path.resolve('script/render_markdown.mjs'), '--url', url],
       { env: { U2M_WORKING_ROOT: tmpRoot }, timeoutMs: 60000 });
     assert.equal(r8.code, 0, `stderr: ${r8.stderr}`);
-    const out8 = JSON.parse(r8.stdout);
+    const out8 = JSON.parse(fs.readFileSync(path.join(dir, 'logs', '5_markdown_result.json'), 'utf8'));
     assert.equal(out8.tablesResolved, 2, '两成功表还原');
     const resolved = JSON.parse(fs.readFileSync(out8.resolvedSkeleton, 'utf8'));
     assert.match(resolved[2].table, /\| Setting \| Impact \|/);

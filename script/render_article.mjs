@@ -88,7 +88,7 @@ import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import juice from 'juice';
-import { emit, emitError, usage, log, debug } from './lib/contract.mjs';
+import { emitError, emitLogged, usage, log, debug } from './lib/contract.mjs';
 import { urlDir } from './lib/env.mjs';
 import { parseKeyIds } from './lib/key-ids.mjs';
 import { readSharedScript } from './lib/placeholder.mjs';
@@ -318,7 +318,10 @@ async function main() {
       log(`文章分块: ${chunkPaths.length} 块（阈值 ${splitThreshold}B / 上限 ${chunkMax}B）`);
     }
 
-    emit({
+    // stdout 只留步骤 4 派发依据（chunks：split/count/files，split=false 时
+    // files[0] 即 3_article.html 路径）；三轮计数与 article 路径落
+    // logs/3_article_result.json 供排查
+    emitLogged(dir, '3_article_result.json', {
       status: 'ok',
       article: articlePath,
       elementCount: migrated.count,
@@ -330,7 +333,7 @@ async function main() {
       chunks: split
         ? { split: true, count: chunkPaths.length, files: chunkPaths }
         : { split: false, count: 1, files: [articlePath] },
-    });
+    }, ['status', 'chunks']);
   } catch (e) {
     if (browser) await browser.close().catch(() => {});
     emitError(e.message, 1);

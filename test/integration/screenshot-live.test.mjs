@@ -73,8 +73,9 @@ test('步骤 5 live 重渲染：同内容两次渲染 id 对位 → source:"live
   const out1 = JSON.parse(r1.stdout);
   assert.equal(out1.status, 'ok');
 
-  const urlDir = path.dirname(out1.snapshot);
-  const snapHtml = fs.readFileSync(out1.snapshot, 'utf8');
+  // stdout 已精简；快照路径从保留的 url-working-path 派生
+  const urlDir = out1['url-working-path'];
+  const snapHtml = fs.readFileSync(path.join(urlDir, '1_snapshot.html'), 'utf8');
 
   // 从快照解析模块的 data-idx（属性序两种可能都兼容）
   const m = snapHtml.match(/<div[^>]*(?:class="module"[^>]*data-idx="(\d+)"|data-idx="(\d+)"[^>]*class="module")[^>]*>/);
@@ -98,8 +99,9 @@ test('步骤 5 live 重渲染：同内容两次渲染 id 对位 → source:"live
     timeoutMs: 90000,
   });
   assert.equal(r2.code, 0, `stderr: ${r2.stderr}`);
-  const out2 = JSON.parse(r2.stdout);
-  assert.equal(out2.status, 'ok');
+  assert.equal(JSON.parse(r2.stdout).status, 'ok');
+  // 统计字段已移入 result 文件
+  const out2 = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '5_markdown_result.json'), 'utf8'));
   assert.equal(out2.count, 1, '应截图 1 个');
   assert.equal(out2.source, 'live', '同内容重渲染应命中 live');
 
@@ -116,8 +118,8 @@ test('步骤 5 live 重渲染：同内容两次渲染 id 对位 → source:"live
     timeoutMs: 90000,
   });
   assert.equal(r3.code, 0, `stderr: ${r3.stderr}`);
-  const out3 = JSON.parse(r3.stdout);
-  assert.equal(out3.status, 'ok');
+  assert.equal(JSON.parse(r3.stdout).status, 'ok');
+  const out3 = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '5_markdown_result.json'), 'utf8'));
   assert.equal(out3.count, 1, '兜底仍应出图');
   assert.equal(out3.source, 'snapshot', '翻版后签名失配应自动走快照兜底');
   assert.ok(fs.existsSync(webp), '兜底截图应覆盖写入');

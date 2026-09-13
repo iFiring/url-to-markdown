@@ -126,14 +126,16 @@ test('render_article.mjs: 轮 A 四键裁剪——块子树+骨架链一字不�
   });
   const r = await runArticle(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  // stdout 只留流程驱动字段（步骤 4 派发依据 chunks）；统计明细在 result 文件
+  assert.deepEqual(Object.keys(JSON.parse(r.stdout)), ['status', 'chunks']);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '3_article_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
   assert.equal(out.article, path.join(urlDir, '3_article.html'));
   assert.equal(out.removedCount, 5, '应删除 5 个元素（9/14/15/16/17）');
   assert.equal(out.dumpCollapsedCount, 1, '应折叠 1 个 dump（8）');
-  // emit 加法式契约：三段计数超集；中间产物路径字段已删（无消费者）
-  assert.equal(out.styledExtract, undefined, 'emit 不应再含 styledExtract 字段');
-  assert.equal(out.juiceStyles, undefined, 'emit 不应再含 juiceStyles 字段');
+  // result 加法式契约：三段计数超集；中间产物路径字段已删（无消费者）
+  assert.equal(out.styledExtract, undefined, 'result 不应再含 styledExtract 字段');
+  assert.equal(out.juiceStyles, undefined, 'result 不应再含 juiceStyles 字段');
   assert.equal(typeof out.styledCount, 'number');
   assert.ok(out.slim && typeof out.slim.spansUnwrapped === 'number');
   assert.deepEqual(out.chunks, { split: false, count: 1, files: [out.article] });
@@ -192,7 +194,7 @@ test('render_article.mjs: titleId 为 null 时正常；流外游离块为顶层�
   }, { snapshot: snap });
   const r = await runArticle(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '3_article_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
   assert.equal(out.dumpCollapsedCount, 0);
 
@@ -215,7 +217,7 @@ test('render_article.mjs: dump 落在保留区外——随分支删除、不报�
   });
   const r = await runArticle(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '3_article_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
   assert.equal(out.dumpCollapsedCount, 0, '保留区外的 dump 不折叠');
   const html = fs.readFileSync(path.join(urlDir, '3_extract.html'), 'utf8');
@@ -234,6 +236,7 @@ test('render_article.mjs: dump 是 key 元素祖先时报 error（折叠会摧�
   });
   const r = await runArticle(tmpRoot);
   assert.equal(r.code, 1);
+  // error 路径不产 result 文件，断言走 stdout
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'error');
   assert.ok(out.reason.includes('冲突'), `reason 应说明冲突: ${out.reason}`);
@@ -252,6 +255,7 @@ test('render_article.mjs: key id 未命中时报 error 并列出缺失 id（轮 
   });
   const r = await runArticle(tmpRoot);
   assert.equal(r.code, 1);
+  // error 路径不产 result 文件，断言走 stdout
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'error');
   assert.ok(out.reason.includes('99'), `reason 应含缺失 id: ${out.reason}`);
@@ -318,7 +322,7 @@ test('render_article.mjs: 轮 B juice 内联并删净 <style> 与 class', async 
   }, { snapshot: EXTRACT });
   const r = await runArticle(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '3_article_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
   assert.equal(out.styledCount, 4, '带内联样式的元素应为 4 个（div 1 / p 2 / div 3 / span 4）');
 
@@ -383,7 +387,7 @@ test('render_article.mjs: img 的 style 宽高保留（步骤 4 语义信号）�
   }, { snapshot: IMG_SIZE_EXTRACT });
   const r = await runArticle(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '3_article_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
 
   const juiced = fs.readFileSync(path.join(urlDir, '3_juice.html'), 'utf8');
@@ -416,7 +420,7 @@ test('render_article.mjs: 行内 style 属性含 &quot; 实体引号时不再崩
   }, { snapshot: ENTITY_EXTRACT });
   const r = await runArticle(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '3_article_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
 
   const juiced = fs.readFileSync(path.join(urlDir, '3_juice.html'), 'utf8');
@@ -443,7 +447,7 @@ test('render_article.mjs: 引号混排（字面单引号 × 实体双引号 × �
   }, { snapshot: MIXED_QUOTE_EXTRACT });
   const r = await runArticle(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '3_article_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
 
   const juiced = fs.readFileSync(path.join(urlDir, '3_juice.html'), 'utf8');
@@ -467,7 +471,7 @@ test('render_article.mjs: data-style 等后缀属性不被引号处理波及', a
   }, { snapshot: DATA_STYLE_EXTRACT });
   const r = await runArticle(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '3_article_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
 
   const juiced = fs.readFileSync(path.join(urlDir, '3_juice.html'), 'utf8');
@@ -512,7 +516,7 @@ test('render_article.mjs: @layer 内的工具类规则解包后正常内联（Ta
   }, { snapshot: LAYERED_EXTRACT });
   const r = await runArticle(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '3_article_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
 
   const juiced = fs.readFileSync(path.join(urlDir, '3_juice.html'), 'utf8');
@@ -562,7 +566,7 @@ test('render_article.mjs: var/color-mix/calc 残留替换为浏览器计算的�
   }, { snapshot: FUNCVAL_EXTRACT });
   const r = await runArticle(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '3_article_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
 
   const juiced = fs.readFileSync(path.join(urlDir, '3_juice.html'), 'utf8');
@@ -607,7 +611,7 @@ test('render_article.mjs: 隐藏声明剥离——收起元素展开、自然 di
   }, { snapshot: HIDDEN_STRIP_EXTRACT });
   const r = await runArticle(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '3_article_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
 
   const juiced = fs.readFileSync(path.join(urlDir, '3_juice.html'), 'utf8');
@@ -676,7 +680,7 @@ test('render_article.mjs: 零值声明过滤——等于全元素初始值的声
   }, { snapshot: ZERO_VOID_EXTRACT });
   const r = await runArticle(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '3_article_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
 
   const juiced = fs.readFileSync(path.join(urlDir, '3_juice.html'), 'utf8');
@@ -720,7 +724,7 @@ test('render_article.mjs: pre 内 token span 样式全删（markdown 无需）�
   }, { snapshot: PRE_CODE_EXTRACT });
   const r = await runArticle(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '3_article_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
 
   const juiced = fs.readFileSync(path.join(urlDir, '3_juice.html'), 'utf8');
@@ -754,7 +758,7 @@ test('render_article.mjs: 轮 C 四键块迁移——子树一字不动，嵌套
   }, { snapshot: JUICED });
   const r = await runArticle(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '3_article_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
   assert.equal(out.article, path.join(urlDir, '3_article.html'));
   assert.equal(out.elementCount, 8, '应迁移 8 个元素（标题 + 说明 + 6 个段落块）');
@@ -802,7 +806,7 @@ test('render_article.mjs: titleId 为 null 正常；description 落在段落块�
   }, { snapshot: nestedDesc });
   const r = await runArticle(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '3_article_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
   assert.equal(out.elementCount, 4, '应迁移 4 个元素（desc 3 + 块 5/6/7），desc 51 随块 5 带入不单列');
 
@@ -826,7 +830,7 @@ test('render_article.mjs: paragraphIds 乱序列举时输出仍按文档序', as
   }, { snapshot: shuffled });
   const r = await runArticle(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '3_article_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
 
   const html = fs.readFileSync(path.join(urlDir, '3_article.html'), 'utf8');
@@ -864,7 +868,7 @@ test('render_article.mjs: 瘦身规则①——data-* 只留 data-idx 与 data-l
   }, { snapshot: DATASTAR_JUICED });
   const r = await runArticle(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '3_article_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
 
   const html = fs.readFileSync(path.join(urlDir, '3_article.html'), 'utf8');
@@ -903,7 +907,7 @@ test('render_article.mjs: 瘦身规则②——MathML 按三档替换为 $LaTeX$
   }, { snapshot: MATH_JUICED });
   const r = await runArticle(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '3_article_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
 
   const html = fs.readFileSync(path.join(urlDir, '3_article.html'), 'utf8');
@@ -946,7 +950,7 @@ test('render_article.mjs: 瘦身规则③④——块内残留按钮清理、but
   }, { snapshot: BUTTON_JUICED });
   const r = await runArticle(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '3_article_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
 
   const html = fs.readFileSync(path.join(urlDir, '3_article.html'), 'utf8');
@@ -978,7 +982,7 @@ test('render_article.mjs: 瘦身规则⑤——非白名单协议 <a> 解包、�
   }, { snapshot: HREF_JUICED });
   const r = await runArticle(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '3_article_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
 
   const html = fs.readFileSync(path.join(urlDir, '3_article.html'), 'utf8');
@@ -1006,7 +1010,7 @@ test('render_article.mjs: 瘦身规则⑥——空壳 span 塌缩为纯文本、
   }, { snapshot: SPAN_JUICED });
   const r = await runArticle(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '3_article_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
 
   const html = fs.readFileSync(path.join(urlDir, '3_article.html'), 'utf8');
@@ -1036,7 +1040,7 @@ test('render_article.mjs: 超阈值分割——分块文件落盘 + emit chunks 
   const { tmpRoot, urlDir } = setupTmp('chunk-split', BIG_KEY_IDS, { snapshot: BIG_JUICED });
   const r = await runArticle(tmpRoot, { U2M_ARTICLE_SPLIT_THRESHOLD: '60000' });
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '3_article_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
   assert.equal(out.chunks.split, true);
   assert.ok(out.chunks.count >= 2, `应至少分 2 块: ${out.chunks.count}`);
@@ -1075,7 +1079,7 @@ test('render_article.mjs: 未分割——emit chunks 恒定形状 + 清另一模
   fs.writeFileSync(path.join(urlDir, '4_skeleton_chunk_1_of_2.json'), '[]');
   const r = await runArticle(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '3_article_result.json'), 'utf8'));
   assert.deepEqual(out.chunks, { split: false, count: 1, files: [out.article] });
   // stale 清理：旧骨架（两种形态）与旧分块 html 全清
   assert.ok(!fs.existsSync(path.join(urlDir, '4_skeleton.json')), '应清 stale 4_skeleton.json');
@@ -1090,7 +1094,7 @@ test('render_article.mjs: 分割时清 stale 骨架与越界旧分块（X>N）',
   fs.writeFileSync(path.join(urlDir, '3_article_chunk_9_of_9.html'), '<html></html>');
   const r = await runArticle(tmpRoot, { U2M_ARTICLE_SPLIT_THRESHOLD: '60000' });
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '3_article_result.json'), 'utf8'));
   assert.ok(out.chunks.split);
   assert.ok(!fs.existsSync(path.join(urlDir, '4_skeleton.json')), '分割也应清 stale 单文件骨架');
   assert.ok(!fs.existsSync(path.join(urlDir, '3_article_chunk_9_of_9.html')), 'X>N 旧分块应清');

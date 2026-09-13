@@ -45,10 +45,10 @@ test('分块链路：步骤 3 分割 → 分片骨架 → 步骤 5 合并 + 渲�
       JSON.stringify([{ p: `分片${x}专属内容` }]));
   }
 
-  // 步骤 5：合并 + 还原 + 渲染
+  // 步骤 5：合并 + 还原 + 渲染（统计在 result 文件）
   const r8 = await runScript(process.execPath, [path.resolve('script/render_markdown.mjs'), '--url', URL], { env, timeoutMs: 60000 });
   assert.equal(r8.code, 0, `stderr: ${r8.stderr}`);
-  const out8 = JSON.parse(r8.stdout);
+  const out8 = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '5_markdown_result.json'), 'utf8'));
   assert.equal(out8.status, 'ok');
   assert.equal(out8.chunksMerged, N);
   assert.equal(out8.skipped, 'no_trans2img');

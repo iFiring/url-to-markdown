@@ -52,7 +52,10 @@ test('壳页+占优 iframe → redirected_ 目录快照 + emit 四字段 + marke
   assert.equal(fs.readFileSync(marker, 'utf8'), `to: ${server.url}/redirect-content.html\n`);
 
   // 清洗在单命令内完成：marker 定位在进程内传导——清洗产物同落 redirected_ 目录
-  assert.ok(out.cleanedSnapshot.startsWith(path.join(tmpRoot, redirectedDirName(url))), 'cleanedSnapshot 应落 redirected_ 目录');
+  // （统计字段已从 stdout 移入 result 文件，读回验证路径归属）
+  const result = JSON.parse(fs.readFileSync(
+    path.join(tmpRoot, redirectedDirName(url), 'logs', '1_snapshot_result.json'), 'utf8'));
+  assert.ok(result.cleanedSnapshot.startsWith(path.join(tmpRoot, redirectedDirName(url))), 'cleanedSnapshot 应落 redirected_ 目录');
   assert.ok(fs.existsSync(path.join(tmpRoot, redirectedDirName(url), '1_clean_snapshot.html')), '清洗产物应在 redirected_ 目录');
 });
 

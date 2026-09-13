@@ -58,10 +58,12 @@ test('viewer 跳过 → 弱信号入档 + 弹窗状态还原 + 管线继续 + st
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);
   assert.equal(out.status, 'ok', '跳过登录后管线应继续到快照完成');
-  assert.ok(fs.existsSync(out.snapshot), '1_snapshot.html 应存在');
+  // stdout 已精简；快照路径从保留的 url-working-path 派生
+  const snapPath = path.join(out['url-working-path'], '1_snapshot.html');
+  assert.ok(fs.existsSync(snapPath), '1_snapshot.html 应存在');
   assert.deepEqual(readSkips(root)['127.0.0.1'], ['loginButton'],
     '仅弱信号 loginButton 入档；强信号 loginConfirmed 永不落盘');
-  const snap = fs.readFileSync(out.snapshot, 'utf8');
+  const snap = fs.readFileSync(snapPath, 'utf8');
   assert.ok(!snap.includes('signin-modal'),
     '跳过后应还原探测点开的弹窗——快照抓干净页而非登录弹窗');
   assert.ok(fs.existsSync(path.join(root, 'cookies', 'storage_state.json')),
@@ -98,7 +100,7 @@ test('预置记忆全命中 → 豁免：不弹 viewer、emit 通报 loginSkippe
   assert.ok(!r.stderr.includes('viewer:'), '豁免后不应弹 viewer');
   assert.deepEqual(out.loginSkippedByMemory, ['loginButton'],
     'emit 应如实通报「有信号命中但全在跳过记忆」');
-  const snap = fs.readFileSync(out.snapshot, 'utf8');
+  const snap = fs.readFileSync(path.join(out['url-working-path'], '1_snapshot.html'), 'utf8');
   assert.ok(!snap.includes('signin-modal'), '豁免路径零探测零点击，页面应保持原状');
 });
 

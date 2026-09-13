@@ -1,5 +1,7 @@
 // script/lib/contract.mjs
 /** 统一脚本契约：stdout 有且仅有一行 JSON；日志走 stderr；退出码 0/1/2。 */
+import fs from 'node:fs';
+import path from 'node:path';
 
 export function log(...parts) {
   console.error(...parts);
@@ -40,4 +42,21 @@ export function emitError(reason, code = 1) {
 /** 参数错误：也守契约（先输出 JSON 再退出 2）。 */
 export function usage(msg) {
   emit({ status: 'usage_error', reason: msg }, 2);
+}
+
+/**
+ * 成功路径的精简 emit：完整载荷（统计计数、产物路径等）先写
+ * <dir>/logs/<resultName>.json 供排查，stdout 只 emit keepKeys 挑出的
+ * 流程驱动字段——agent 手册只关心后者，字段越少上下文噪音越小。
+ * result 文件是完整载荷（含 status 与保留字段），排查时一个文件即全部真相。
+ * keepKeys 里的键不存在时 stringify 自然丢键，可选字段（如 skipped）无需特判。
+ * 写盘失败抛异常由调用方 catch → emitError（系统级故障如实报错）。
+ */
+export function emitLogged(dir, resultName, payload, keepKeys) {
+  const logsDir = path.join(dir, 'logs');
+  fs.mkdirSync(logsDir, { recursive: true });
+  fs.writeFileSync(path.join(logsDir, resultName), JSON.stringify(payload, null, 2) + '\n', 'utf8');
+  const slim = {};
+  for (const k of keepKeys) slim[k] = payload[k];
+  emit(slim);
 }

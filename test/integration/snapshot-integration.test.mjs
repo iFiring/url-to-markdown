@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { runScript } from '../helpers/run-script.mjs';
 import { startFixtureServer } from '../helpers/fixture-server.mjs';
+import { urlToDirName } from '../../script/lib/env.mjs';
 
 const snapshotScript = path.resolve('script/snapshot.mjs');
 let server;
@@ -27,7 +28,14 @@ test('snapshot.mjs: 静态文章页 → ok + 快照与全部清洗产物（单�
     timeoutMs: 60000,
   });
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  // stdout 只留流程驱动字段（核心参数 + redirect/loginSkippedByMemory 通报）
+  assert.deepEqual(
+    Object.keys(JSON.parse(r.stdout)).sort(),
+    ['loginSkippedByMemory', 'redirect', 'skill-root', 'status', 'url-name', 'url-working-path'],
+    `stdout 键应为六保留键: ${r.stdout}`,
+  );
+  const out = JSON.parse(fs.readFileSync(
+    path.join(tmpRoot, urlToDirName(url), 'logs', '1_snapshot_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
   assert.ok(out.elements > 0, '应有标记元素');
   assert.ok(fs.existsSync(out.snapshot), '1_snapshot.html 应存在');
@@ -42,8 +50,8 @@ test('snapshot.mjs: 静态文章页 → ok + 快照与全部清洗产物（单�
   assert.ok(fs.existsSync(out.styledSnapshot), '1_clean_style_snapshot.html 应存在');
   assert.ok(fs.existsSync(out.tablesJson), '1_tables.json 应存在');
   assert.ok(fs.existsSync(out.codeJson), '1_code.json 应存在');
-  assert.ok(typeof out.chrome === 'object' && out.chrome !== null, 'emit 应含 chrome 统计对象');
-  assert.ok(typeof out.longTextCount === 'object' && typeof out.longTextCount.total === 'number', 'emit 应含 longTextCount');
+  assert.ok(typeof out.chrome === 'object' && out.chrome !== null, 'result 应含 chrome 统计对象');
+  assert.ok(typeof out.longTextCount === 'object' && typeof out.longTextCount.total === 'number', 'result 应含 longTextCount');
 });
 
 // 请求头日志（反爬诊断）：只记「打开的页面」——主 frame 的 document 导航
@@ -109,7 +117,8 @@ test('snapshot.mjs: 标记 body 全部元素（排除纯文本修饰标签与 sv
     timeoutMs: 60000,
   });
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(
+    path.join(tmpRoot, urlToDirName(url), 'logs', '1_snapshot_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
   assert.ok(out.elements > 0, '应有标记元素');
   const html = fs.readFileSync(out.snapshot, 'utf8');

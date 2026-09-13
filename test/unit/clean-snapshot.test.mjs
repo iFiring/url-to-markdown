@@ -23,7 +23,7 @@ async function runClean(snapshot, urlPath = 'slim-article', env = {}) {
     timeoutMs: 60000,
   });
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(dir, "logs", "1_snapshot_result.json"), "utf8"));
   return {
     out,
     cleaned: fs.readFileSync(out.cleanedSnapshot, 'utf8'),
@@ -61,7 +61,7 @@ test('snapshot.mjs --from-snapshot: 对 article-1 快照执行清洗', async () 
     timeoutMs: 30000,
   });
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, "logs", "1_snapshot_result.json"), "utf8"));
   assert.equal(out.status, 'ok');
 
   // 验证清洗结果
@@ -113,7 +113,7 @@ test('snapshot.mjs --from-snapshot: 空元素级联删除，有内容的元素�
     timeoutMs: 30000,
   });
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, "logs", "1_snapshot_result.json"), "utf8"));
   assert.equal(out.status, 'ok');
   const cleaned = fs.readFileSync(out.cleanedSnapshot, 'utf8');
 
@@ -165,7 +165,7 @@ test('snapshot.mjs --from-snapshot: 删除 nav/footer/form 及 role 等价物，
     timeoutMs: 30000,
   });
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, "logs", "1_snapshot_result.json"), "utf8"));
   assert.equal(out.status, 'ok');
   const cleaned = fs.readFileSync(out.cleanedSnapshot, 'utf8');
 
@@ -226,7 +226,7 @@ test('snapshot.mjs --from-snapshot: 删除 video/audio 与残余表单控件，h
     timeoutMs: 30000,
   });
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, "logs", "1_snapshot_result.json"), "utf8"));
   assert.equal(out.status, 'ok');
   const cleaned = fs.readFileSync(out.cleanedSnapshot, 'utf8');
 
@@ -409,7 +409,7 @@ test('snapshot.mjs --from-snapshot: 纯空白文本节点（缩进）不占位',
     timeoutMs: 30000,
   });
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, "logs", "1_snapshot_result.json"), "utf8"));
   assert.equal(out.status, 'ok');
 
   // 只有真实长文本被占位，纯空白不计入
@@ -452,7 +452,7 @@ test('snapshot.mjs --from-snapshot: 中英文分标准占位，并生成 1_long_
     timeoutMs: 30000,
   });
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, "logs", "1_snapshot_result.json"), "utf8"));
   assert.equal(out.status, 'ok');
   assert.equal(out.longTextCount.total, 3, '仅中文 17 字、英文 13 词、混合 18 字三段应被占位');
 
@@ -502,7 +502,7 @@ test('snapshot.mjs --from-snapshot: 带样式快照保留样式，SVG 瘦身为�
     timeoutMs: 30000,
   });
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, "logs", "1_snapshot_result.json"), "utf8"));
   assert.equal(out.status, 'ok');
 
   const cleaned = fs.readFileSync(out.cleanedSnapshot, 'utf8');

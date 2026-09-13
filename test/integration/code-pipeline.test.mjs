@@ -23,7 +23,8 @@ test('代码管线：1_code.json 各形态判定与内容（spec §6.3 验收基
   try {
     const { r, dir } = await runClean(tmpRoot, URL);
     assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-    const out = JSON.parse(r.stdout);
+    // stdout 已精简；统计断言读完整载荷 result 文件
+    const out = JSON.parse(fs.readFileSync(path.join(dir, 'logs', '1_snapshot_result.json'), 'utf8'));
     // 11 个非 hidden pre：b6 non_textual、b7 empty、b8 single_line_suspect 失败
     assert.equal(out.codes.total, 11);
     assert.equal(out.codes.ok, 8);
@@ -71,9 +72,9 @@ test('代码管线：1_code.json 各形态判定与内容（spec §6.3 验收基
 test('代码管线：styled ok 折 / failed live，clean 恒折，k 对齐，data-language 提升', async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-integ-code-'));
   try {
-    const { r } = await runClean(tmpRoot, URL);
+    const { r, dir } = await runClean(tmpRoot, URL);
     assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-    const out = JSON.parse(r.stdout);
+    const out = JSON.parse(fs.readFileSync(path.join(dir, 'logs', '1_snapshot_result.json'), 'utf8'));
     const styled = fs.readFileSync(out.styledSnapshot, 'utf8');
     const cleaned = fs.readFileSync(out.cleanedSnapshot, 'utf8');
     assert.equal((styled.match(/\{\{CODE_\d+\|\d+_lines\}\}/g) || []).length, 8, '8 ok 块折叠');
@@ -105,7 +106,7 @@ test('代码管线：步骤 5 精确匹配还原 + 自适应围栏（端到端�
     const r8 = await runScript(process.execPath, [path.resolve('script/render_markdown.mjs'), '--url', URL],
       { env: { U2M_WORKING_ROOT: tmpRoot }, timeoutMs: 60000 });
     assert.equal(r8.code, 0, `stderr: ${r8.stderr}`);
-    const out8 = JSON.parse(r8.stdout);
+    const out8 = JSON.parse(fs.readFileSync(path.join(dir, 'logs', '5_markdown_result.json'), 'utf8'));
     assert.equal(out8.codesResolved, 2);
     assert.deepEqual(out8.failedCodes, []);
     const resolved = JSON.parse(fs.readFileSync(out8.resolvedSkeleton, 'utf8'));

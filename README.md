@@ -78,7 +78,7 @@ working/                 # 运行时工作目录（gitignore，仅保留骨架�
 
 ### 关键机制
 
-- **stdout 单行 JSON 契约**：每个 CLI（含 `init.sh`）向 stdout 输出恰好一行 JSON，失败路径也不例外；日志走 stderr；退出码 0/1/2（usage_error=2）。agent 依据 `status` 字段分支，这是整个技能的骨架约定。
+- **stdout 单行 JSON 契约**：每个 CLI（含 `init.sh`）向 stdout 输出恰好一行 JSON，失败路径也不例外；日志走 stderr；退出码 0/1/2（usage_error=2)。agent 依据 `status` 字段分支，这是整个技能的骨架约定。stdout 只携带流程驱动字段（核心参数/派发依据/最终产物路径）；完整运行统计（计数、产物路径明细）由 `lib/contract.mjs` 的 `emitLogged` 写入 `working/<url-name>/logs/{1_snapshot,3_article,5_markdown}_result.json`——仅排查问题时由用户/开发者查阅，agent 流程不读取。
 - **共享页面脚本是分类的唯一事实源**：`script/lib/page-*.js` 由 Node 编排层当文本读入注入页面，分类、清理、iframe 合并、样式内联等页面侧逻辑只存在于这些文件，不重复实现于 `.mjs` 层。
 - **登录态**：`working/cookies/storage_state.json` 是唯一全局登录态，仅步骤 1 的登录流程写入（cookie 按 name|domain|path 去重、localStorage 按 origin+name、读取时剔除过期）；转换脚本只读。需要人工登录时弹出 CDP Screencast viewer（无头 chromium → HTTP+WS 页面，JS/CSS 全内联）。
 - **登录检测两级制（2026-09-07 v2）**：强信号 = 密码框 / **登录入口点击探测确认**（点击候选入口后出现全屏弹窗（表单+按钮，≥50% 视口）或页面跳转）单独判定需登录；弱信号（URL 特征 / 标题正文关键词 / 重定向 / SPA 等待 / 登录按钮可见但点击无确认）≥2 合议。cookieMissing 信号已删除（匿名会话 cookie 假阴性）。viewer 的「跳过登录」经确认框后把本次命中的**弱信号名**记入 `working/cookies/login_decisions_skips.json`（`{hostname: [信号]}`）——后续命中**全部**在记忆内才整体豁免（emit `loginSkippedByMemory` 如实通报），出现新信号时记忆内信号照常计票；强信号永不记忆、跳过仅本次生效。重置裁决删除对应条目；旧版 `login_decisions.json` 已废弃不读。探测点开的弹窗/跳转在跳过或无需登录时自动还原（gotoSettled 原 URL），快照恒抓干净页。

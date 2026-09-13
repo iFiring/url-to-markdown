@@ -88,7 +88,7 @@ import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
-import { emit, emitError, usage, log, debug } from './lib/contract.mjs';
+import { emitError, emitLogged, usage, log, debug } from './lib/contract.mjs';
 import { urlDir, storageStatePath } from './lib/env.mjs';
 import { parseKeyIds } from './lib/key-ids.mjs';
 import { readSharedScript } from './lib/placeholder.mjs';
@@ -396,12 +396,12 @@ async function main() {
   if (transIds.length === 0 && imgUrls.length === 0) {
     log('骨架无 trans2img 条目也无 img 条目（已写出 resolved skeleton）');
     const md = await renderAndWriteMarkdown(resolvedSkeleton, dir);
-    return emit({
+    return emitLogged(dir, '5_markdown_result.json', {
       status: 'ok', skipped: 'no_trans2img', resolvedSkeleton: resolvedPath,
       runsResolved, tablesResolved, failedTables, codesResolved, failedCodes,
       ...md,
       ...(chunksMerged !== undefined && { chunksMerged }),
-    });
+    }, ['status', 'skipped', 'markdownPath']);
   }
 
   const sigFn = await readSharedScript('page-element-signature.js');
@@ -447,7 +447,7 @@ async function main() {
       await browser.close();
       browser = null;
       const md = await renderAndWriteMarkdown(resolvedSkeleton, dir);
-      return emit({
+      return emitLogged(dir, '5_markdown_result.json', {
         status: 'ok',
         skipped: 'no_trans2img',
         resolvedSkeleton: resolvedPath,
@@ -456,7 +456,7 @@ async function main() {
         failedImages,
         ...md,
         ...(chunksMerged !== undefined && { chunksMerged }),
-      });
+      }, ['status', 'skipped', 'markdownPath']);
     }
 
     // ── 页 A：file://1_snapshot.html——签名基准 + 兜底截图源 ──
@@ -614,7 +614,9 @@ async function main() {
 
     const md = await renderAndWriteMarkdown(resolvedSkeleton, dir);
 
-    emit({
+    // stdout 只留 status/skipped/markdownPath；截图与还原统计全量落
+    // logs/5_markdown_result.json 供排查
+    emitLogged(dir, '5_markdown_result.json', {
       status: 'ok',
       count: screenshots.length,
       screenshots,
@@ -629,7 +631,7 @@ async function main() {
       failedCodes,
       ...md,
       ...(chunksMerged !== undefined && { chunksMerged }),
-    });
+    }, ['status', 'markdownPath']);
   } catch (e) {
     if (browser) await browser.close().catch(() => {});
     emitError(e.message, 1);

@@ -76,7 +76,7 @@
 import fsSync from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
-import { emit, emitError, usage, log, debug } from './lib/contract.mjs';
+import { emitError, emitLogged, usage, log, debug } from './lib/contract.mjs';
 import { storageStatePath, ensureUrlDirs, projectRoot, urlToDirName, redirectedDirName, writeRedirectMarker, clearRedirectMarker, urlDir, redirectMarkerPath } from './lib/env.mjs';
 import { proxyLaunchOptions, newU2MContext } from './lib/browser.mjs';
 import { readSharedScript } from './lib/placeholder.mjs';
@@ -206,7 +206,9 @@ async function main() {
     // 先关浏览器再 emit
     await browser.close().catch(() => {});
 
-    emit({
+    // stdout 只留流程驱动字段（核心参数 + 通报）；统计与产物路径全量落
+    // logs/1_snapshot_result.json 供排查
+    emitLogged(workingDir, '1_snapshot_result.json', {
       status: 'ok',
       snapshot: snapshotPath,
       elements,
@@ -216,7 +218,7 @@ async function main() {
       redirect,
       loginSkippedByMemory,
       ...cleanResult,
-    });
+    }, ['status', 'skill-root', 'url-name', 'url-working-path', 'redirect', 'loginSkippedByMemory']);
   } catch (e) {
     await context?.close().catch(() => {});
     await browser.close().catch(() => {});

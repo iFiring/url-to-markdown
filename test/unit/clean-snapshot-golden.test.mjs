@@ -28,7 +28,7 @@ for (const name of ['article-1', 'clean-simplify']) {
         { env: { U2M_WORKING_ROOT: tmpRoot }, timeoutMs: 60000 }
       );
       assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-      const out = JSON.parse(r.stdout);
+      const out = JSON.parse(fs.readFileSync(path.join(dir, "logs", "1_snapshot_result.json"), "utf8"));
       assert.equal(out.status, 'ok');
       assert.ok(
         fs.readFileSync(out.styledSnapshot).equals(fs.readFileSync(path.resolve('test/fixtures/golden', `${name}.styled.html`))),

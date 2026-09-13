@@ -120,7 +120,10 @@ test('render_markdown.mjs: live 不可达时快照兜底截图 + resolved skelet
     timeoutMs: 60000,
   });
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  // stdout 只留流程驱动字段；统计明细在 result 文件
+  assert.ok(Object.keys(JSON.parse(r.stdout)).every((k) => ['status', 'skipped', 'markdownPath'].includes(k)),
+    `stdout 键应 ⊆ status/skipped/markdownPath: ${r.stdout}`);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '5_markdown_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
   assert.equal(out.count, 2, '链上每个 id 各截一张（9、10）');
 
@@ -169,7 +172,7 @@ test('render_markdown.mjs: 择优按宽度优先——内层更宽时选内层',
     timeoutMs: 60000,
   });
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '5_markdown_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
   assert.equal(out.count, 2);
 
@@ -192,7 +195,7 @@ test('render_markdown.mjs: 宽高全同的平局选最外层', async () => {
     timeoutMs: 60000,
   });
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '5_markdown_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
   assert.equal(out.count, 2);
 
@@ -241,7 +244,7 @@ test('render_markdown.mjs: display:none 折叠模块强制展开后出图，不�
     timeoutMs: 120000,
   });
   assert.equal(r.code, 0, `stderr: ${r.stderr}\nstdout: ${r.stdout}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '5_markdown_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
   assert.equal(out.count, 3, '链上三个 id（含折叠的 51/52）各出一张');
   assert.equal(out.source, 'snapshot', 'live 不可达（死端口）→ 快照兜底');
@@ -278,7 +281,7 @@ test('render_markdown.mjs: max-height:0 裁剪模块强制展开后出真实内�
     timeoutMs: 120000,
   });
   assert.equal(r.code, 0, `stderr: ${r.stderr}\nstdout: ${r.stdout}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '5_markdown_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
   assert.equal(out.count, 2, '链上两个 id（含盒高为 0 的 71）各出一张');
 
@@ -323,7 +326,7 @@ test('render_markdown.mjs: display:contents 透明包装跳过不报错，视觉
     timeoutMs: 120000,
   });
   assert.equal(r.code, 0, `stderr: ${r.stderr}\nstdout: ${r.stdout}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '5_markdown_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
   assert.equal(out.count, 1, '只截内层 84（83 为 contents 结构性无盒）');
 
@@ -404,7 +407,7 @@ test('render_markdown.mjs: 超宽表格横向 reveal 截全 + 遮挡者隐藏 + 
       timeoutMs: 120000,
     });
     assert.equal(r.code, 0, `stderr: ${r.stderr}\nstdout: ${r.stdout}`);
-    const out = JSON.parse(r.stdout);
+    const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '5_markdown_result.json'), 'utf8'));
     assert.equal(out.status, 'ok');
     assert.equal(out.count, 2, '链上 91、92 各截一张');
     assert.equal(out.source, 'snapshot', '死端口 → 快照兜底');
@@ -490,7 +493,7 @@ test('render_markdown.mjs: 无 trans2img 条目时 skipped 但仍输出 resolved
     timeoutMs: 60000,
   });
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '5_markdown_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
   assert.equal(out.skipped, 'no_trans2img');
   assert.ok(!fs.existsSync(path.join(assetsDir, 'trans')), 'skipped 不应创建 trans 目录');
@@ -535,7 +538,7 @@ test('render_markdown.mjs: code 条目 content 内的占位符同样还原', asy
     timeoutMs: 60000,
   });
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '5_markdown_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
   assert.equal(out.skipped, 'no_trans2img');
 
@@ -657,7 +660,7 @@ test('render_markdown.mjs: img 条目下载到 assets/images/（解包 ![img](ur
       timeoutMs: 60000,
     });
     assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-    const out = JSON.parse(r.stdout);
+    const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '5_markdown_result.json'), 'utf8'));
     assert.equal(out.status, 'ok');
     assert.equal(out.skipped, 'no_trans2img', '无 trans2img 仍应 skipped');
     assert.equal(out.images, 3, '应成功下载 3 张（同 URL 去重后）');
@@ -707,7 +710,7 @@ test('render_markdown.mjs: trans2img 与 img 混合时截图、下载同轮完�
       timeoutMs: 60000,
     });
     assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-    const out = JSON.parse(r.stdout);
+    const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '5_markdown_result.json'), 'utf8'));
     assert.equal(out.status, 'ok');
     assert.equal(out.count, 2, 'trans2img 链上 9、10 各截 1 张');
     assert.equal(out.source, 'snapshot', '死端口 --url 下混合用例同样走快照兜底');
@@ -746,7 +749,7 @@ test('render_markdown: {{TABLE_k}} 还原为 1_tables.json 的 markdown', async 
   const r = await runScript(process.execPath, [path.resolve('script/render_markdown.mjs'), '--url', url],
     { env: { U2M_WORKING_ROOT: tmpRoot }, timeoutMs: 60000 });
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(dir, 'logs', '5_markdown_result.json'), 'utf8'));
   assert.equal(out.tablesResolved, 1);
   assert.deepEqual(out.failedTables, ['2']);
   const resolved = JSON.parse(fs.readFileSync(out.resolvedSkeleton, 'utf8'));
@@ -761,7 +764,7 @@ test('render_markdown: {{TABLE_k}} 还原为 1_tables.json 的 markdown', async 
 import { setupCodeRestore } from '../helpers/code-restore.mjs';
 
 test('render_markdown: {{CODE_k}} 字符串引用整体物化为 {lang, content}（lang 取 JSON）', async () => {
-  const { tmpRoot, url } = setupCodeRestore('strref', [
+  const { tmpRoot, url, dir } = setupCodeRestore('strref', [
     { code: '{{CODE_1}}' },
     { p: '段落' },
     { code: { lang: 'wrong', content: '{{CODE_2}}' } },   // 对象形态兼容 + lang 覆写
@@ -773,7 +776,7 @@ test('render_markdown: {{CODE_k}} 字符串引用整体物化为 {lang, content}
       [path.resolve('script/render_markdown.mjs'), '--url', url],
       { env: { U2M_WORKING_ROOT: tmpRoot }, timeoutMs: 60000 });
     assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-    const out = JSON.parse(r.stdout);
+    const out = JSON.parse(fs.readFileSync(path.join(dir, 'logs', '5_markdown_result.json'), 'utf8'));
     assert.equal(out.codesResolved, 2);
     assert.deepEqual(out.failedCodes, []);
     const resolved = JSON.parse(fs.readFileSync(out.resolvedSkeleton, 'utf8'));
@@ -831,7 +834,7 @@ test('render_markdown: runs 段经 inline2md 转 markdown 合并还原 + runsRes
     const r = await runScript(process.execPath, [path.resolve('script/render_markdown.mjs'), '--url', url],
       { env: { U2M_WORKING_ROOT: tmpRoot }, timeoutMs: 60000 });
     assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-    const out = JSON.parse(r.stdout);
+    const out = JSON.parse(fs.readFileSync(path.join(dir, 'logs', '5_markdown_result.json'), 'utf8'));
     assert.equal(out.runsResolved, 2);
     const resolved = JSON.parse(fs.readFileSync(out.resolvedSkeleton, 'utf8'));
     assert.equal(resolved[0].p, '这是**关键**：见[文档](https://example.com/d)，命令 `u2m --run`。');
@@ -873,7 +876,7 @@ test('render_markdown.mjs: 分片按 X 序合并 + chunksMerged 通报', async (
   });
   const r = await runTrans(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '5_markdown_result.json'), 'utf8'));
   assert.equal(out.status, 'ok');
   assert.equal(out.skipped, 'no_trans2img');
   assert.equal(out.chunksMerged, 3);
@@ -927,13 +930,13 @@ test('render_markdown.mjs: 坏 JSON / 非数组报 error 指明文件', async ()
 });
 
 test('render_markdown.mjs: 4_skeleton.json 存在时优先（忽略分片、无 chunksMerged）', async () => {
-  const { tmpRoot } = setupChunksTmp('merge-priority', {
+  const { tmpRoot, urlDir } = setupChunksTmp('merge-priority', {
     '4_skeleton_chunk_1_of_2.json': [{ p: '分片内容' }],
     '4_skeleton_chunk_2_of_2.json': [{ p: '分片内容2' }],
   }, { skeleton: [{ p: '单文件内容' }] });
   const r = await runTrans(tmpRoot);
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
-  const out = JSON.parse(r.stdout);
+  const out = JSON.parse(fs.readFileSync(path.join(urlDir, 'logs', '5_markdown_result.json'), 'utf8'));
   assert.equal(out.chunksMerged, undefined, '单文件路径不应有 chunksMerged');
   assert.ok(!fs.readFileSync(path.join(tmpRoot, urlToDirName(LIVE_URL), '5_resolved_skeleton.json'), 'utf8').includes('分片内容'));
   fs.rmSync(tmpRoot, { recursive: true, force: true });

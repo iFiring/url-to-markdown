@@ -87,7 +87,7 @@ node <skill-root>/script/snapshot.mjs --url <url> [--timeout 300000] [--scroll-r
 
 | stdout.status | 动作 |
 |---|---|
-| `ok` | 把 stdout 反馈给用户，进入步骤 2；`<url-name>`/`<url-working-path>` 以本行 stdout 为准（重定向页是特殊名），`redirect` 字段仅通报（后续步骤仍用原始 `<url>`），`tables.failed`/`codes.failed` 是合法分支无需处理 |
+| `ok` | 把 stdout 反馈给用户，进入步骤 2；`<url-name>`/`<url-working-path>` 以本行 stdout 为准（重定向页是特殊名），`redirect` 字段仅通报（后续步骤仍用原始 `<url>`） |
 | `error`（reason=`virtual_list`） | 告知用户"该页面为虚拟列表，仅渲染部分内容，无法全文转化为 Markdown"，**终止** |
 | `error`（reason=`login_timeout`/`login_aborted`） | 询问用户是否重试登录；重试则再次运行本命令 |
 | `error`（其他） | 把 `stdout.reason` 反馈给用户并终止；若 `1_snapshot.html` 已落盘，可加 `--from-snapshot` 重试、免重新抓取 |
@@ -96,23 +96,11 @@ node <skill-root>/script/snapshot.mjs --url <url> [--timeout 300000] [--scroll-r
 ```json
 {
   "status": "ok",
-  "snapshot": "/path/1_snapshot.html",
-  "elements": 123,
   "skill-root": "/root/path/to/skill",
   "url-name": "redirected_www.example.com_article__ai-article_skill",
   "url-working-path": "/root/path/to/skill/working/redirected_www.example.com_article__ai-article_skill",
   "redirect": { "to": "https://www.example.com/article/skill.html" },
-  "loginSkippedByMemory": null,
-  "cleanedSnapshot": "/path/1_clean_snapshot.html",
-  "styledSnapshot": "/path/1_clean_style_snapshot.html",
-  "longText": "/path/1_long_text.json",
-  "longTextCount": { "texts": 12, "runs": 8, "total": 20 },
-  "tables": { "total": 3, "ok": 3, "failed": 0 },
-  "tablesJson": "/path/1_tables.json",
-  "codes": { "total": 2, "ok": 2, "failed": 0 },
-  "codeJson": "/path/1_code.json",
-  "viewText": { "count": 5 },
-  "chrome": { "removed": 9, "cssHiddenFolded": 1, "dialogFolded": 0, "overlayFolded": 2, "commentsRemoved": 14 }
+  "loginSkippedByMemory": null
 }
 ```
 
@@ -150,13 +138,6 @@ node <skill-root>/script/render_article.mjs --url <url>
 ```json
 {
   "status": "ok",
-  "article": "/path/3_article.html",
-  "elementCount": 509,
-  "removedCount": 123,
-  "keptCount": 45,
-  "dumpCollapsedCount": 2,
-  "styledCount": 2632,
-  "slim": {},
   "chunks": { "split": true, "count": 8, "files": ["/path/3_article_chunk_1_of_8.html"] }
 }
 ```
@@ -200,6 +181,11 @@ node <skill-root>/script/render_markdown.mjs --url <url>
 |---|---|
 | `ok` | 把 stdout 反馈给用户，**所有步骤完成**（`skipped: "no_trans2img"` 仅信息通报，无需处理） |
 | `error` | 把 `stdout.reason` 反馈给用户并终止 |
+
+**stdout.status=ok 结构示例**
+```json
+{ "status": "ok", "markdownPath": "/path/5_markdown.md" }
+```
 
 ## 常见错误处理
 
