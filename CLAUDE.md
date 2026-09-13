@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 一个 Claude Code Skill 的源码：给定 URL，把网页主体内容转换成干净的 Markdown。`SKILL.md` 是技能的操作手册（步骤 0-5）；`script/` 下的 CLI 由遵循该手册的 agent 调用。
 
-**双语手册（2026-09-13 起）**：`SKILL.md`（英文，占标准文件名）+ `SKILL.zh-CN.md`（中文）；`references/{analyze_html_guide,markdown_skeleton_guide}.md`（英文）+ 同名 `.zh-CN.md`（中文）。**手册内容的任何改动必须同步更新中英两版**——两版语义等价、只差语言。两个易错点：① `SKILL.zh-CN.md` 的子代理提示词里手册路径**故意指向标准文件名**（`references/analyze_html_guide.md` 等）——`pnpm run copy:skill`（`scripts/copy-skill.mjs`）导出安装态时把 `.zh-CN` 文件名归一为标准名，改成 `.zh-CN` 路径反而会在导出物里断链；② `README.md` 目前是中文单版（英文翻译已于 2026-09-13 整体撤销、内容待优化），不在双语同步要求内，两份导出共用它。导出契约见 `test/unit/copy-skill.test.mjs`。
+**双语手册（2026-09-13 起）**：`SKILL.md`（英文，占标准文件名）+ `SKILL.zh-CN.md`（中文）；`references/{analyze_html_guide,markdown_skeleton_guide}.md`（英文）+ 同名 `.zh-CN.md`（中文）。**手册内容的任何改动必须同步更新中英两版**——两版语义等价、只差语言。两个易错点：① `SKILL.zh-CN.md` 的子代理提示词里手册路径**故意指向标准文件名**（`references/analyze_html_guide.md` 等）——`pnpm run copy:skill`（`scripts/copy-skill.mjs`）导出安装态时把 `.zh-CN` 文件名归一为标准名，改成 `.zh-CN` 路径反而会在导出物里断链；② `README.md` 是中文单版（2026-09-14 起瘦身为产品概览：为什么做/能力边界/设计思想/技术栈/结构/核心流程，技术细节以本文件为准），不在双语同步要求内，两份导出共用它——简介处必须保留 `(SKILL.md)` 链接（导出契约断言）。导出契约见 `test/unit/copy-skill.test.mjs`。
 
 ## 常用命令
 
@@ -34,6 +34,21 @@ U2M_DEBUG=1 node script/snapshot.mjs --url <url>
 ```
 
 环境要求：node ≥20（nvm）、pnpm > yarn > npm。未配置 linter。测试以子进程方式启动真实 CLI、对接随机端口的夹具服务器；集成测试需要已安装 chromium。
+
+### 环境变量速查
+
+（索引表——各变量的完整语义见正文对应段落）
+
+| 变量 | 作用 |
+|---|---|
+| `U2M_WORKING_ROOT` | 覆盖 working 根目录（所有测试用它隔离） |
+| `U2M_PROXY` | 代理控制：不设继承系统代理 / `direct` 绕过 / URL 显式钉住（实现于 `lib/browser.mjs`，见「浏览器上下文」） |
+| `U2M_DEBUG` | 非空时各 CLI 向 stderr 输出 `[dbg +N.NNs]` 调试行（阶段耗时、字节数、登录信号、滚动、逐图下载、`[net]` 导航请求/响应头），不设静默 |
+| `U2M_FONTCONFIG_CONF` / `U2M_FONT_DIR` | 覆盖 init.sh（仅 Linux）fontconfig 配置与字体目录探测路径（测试模拟 Linux 环境用，见步骤 0） |
+| `U2M_TABLE_ENGINE` | 表格占位符引擎 `self|turndown`（默认 self，等价于 `--table-engine` 参数，见步骤 1） |
+| `U2M_ARTICLE_SPLIT_THRESHOLD` | 文章视图超过该字节数（默认 61440）触发物理分块（见步骤 3 轮 C） |
+| `U2M_ARTICLE_CHUNK_MAX` | 分块主内容字节上限（默认 40960，三侧只读上下文不计入） |
+| `U2M_VIEWER_NOOPEN` | `=1` 时登录 viewer 不自动 `open` 用户默认浏览器（测试用，见「登录流程」） |
 
 ## 输出契约即产品
 
@@ -197,7 +212,7 @@ U2M_DEBUG=1 node script/snapshot.mjs --url <url>
 - `docs/design/url-to-markdown-design.md`——权威设计文档（§3 契约、§4 storage/URL 规则、§6 各脚本设计、§8 分派表为规范依据）
 - `docs/superpowers/plans/2026-08-18-url-to-markdown.md`——仓库据以构建的 15 任务 TDD 实施计划
 - `docs/superpowers/plans/baseline-notes.md`——SKILL.md baseline 测试发现与差距修复
-- `README.md`——项目概览（结构、流程摘要、关键机制、环境变量、进度表）；中文单版，英文翻译已撤销、内容待优化
+- `README.md`——项目概览（为什么做 / 能力边界 / 设计思想 / 技术栈 / 环境要求 / 结构 / 核心流程）；中文单版，技术细节一律以本文件为准（2026-09-14 瘦身，原「关键机制/环境变量/测试/开发进度」节已删——内容均在本文件有等价记载）
 - `SKILL.md` / `SKILL.zh-CN.md`、`references/*.md` / `references/*.zh-CN.md`——双语操作手册与步骤 2/4 任务手册；**改动必须中英两版同步**（见「本仓库是什么」节的同步规则与易错点）
 - `scripts/copy-skill.mjs`——开发工具（不进导出物）：`pnpm run copy:skill` 导出 `.temp/url-to-markdown{,-zh}/` 两个自包含技能目录，`.zh-CN` 文件名归一、依赖版本钉死；契约测试 `test/unit/copy-skill.test.mjs`
 - `.temp/`——已 gitignore 的原型（login.mjs、is_login_page.py、wait-click.mjs）与 copy:skill 导出物；仅供参考，禁止导入
