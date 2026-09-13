@@ -112,7 +112,7 @@ node <skill-root>/script/snapshot.mjs --url <url> [--timeout 300000] [--scroll-r
 
 派发前替换提示词中的 `<skill-root>`、`<url-working-path>` 为步骤 1 stdout 对应字段：
 
-> 你是网页 DOM 分析专家，请读取 HTML 文件并生成结构化 JSON。
+> 你是网页 DOM 分析专家，请按照手册要求，读取 HTML 文件并生成结构化 JSON。
 >
 > **任务**
 >
@@ -160,7 +160,7 @@ node <skill-root>/script/render_article.mjs --url <url>
 
 单个子代理，任务提示词（派发前替换其中的 `<skill-root>`、`<url-working-path>` 为步骤 1 stdout 对应字段）：
 
-> 你是 markdown 骨架生成专家，请读取 HTML 文章视图并生成结构化 JSON。
+> 你是 markdown 骨架生成专家，请按照手册要求，读取 HTML 文章视图并生成结构化 JSON。
 >
 > **任务**
 >
@@ -177,7 +177,7 @@ node <skill-root>/script/render_article.mjs --url <url>
 
 **单条消息并行派发 `chunks.count` 个子代理**，每个子代理的任务提示词按各自分块文件定制（X 为分块号、N 为总块数；派发前替换其中的 `<skill-root>`、`<url-working-path>` 为步骤 1 stdout 对应字段）：
 
-> 你是 markdown 骨架生成专家，请读取 HTML 文章视图并生成结构化 JSON。
+> 你是 markdown 骨架生成专家，请按照手册要求，读取 HTML 文章视图并生成结构化 JSON。
 >
 > **任务**
 >
