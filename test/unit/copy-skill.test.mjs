@@ -23,11 +23,16 @@ test('copy:skill: 导出双语言目录，结构恒等且文件名归一', async
   // 1) 两目录文件清单恒等
   assert.deepEqual(listFiles(ZH_DIR), listFiles(EN_DIR));
 
-  for (const [dir, skillSrc, name] of [[EN_DIR, 'SKILL.md', 'url-to-markdown'], [ZH_DIR, 'SKILL.zh-CN.md', 'url-to-markdown-zh']]) {
-    // 2) 核心文件在位；SKILL 为对应语言源文件的逐字节拷贝
+  for (const [dir, skillSrc, readmeSrc, name] of [[EN_DIR, 'SKILL.md', 'README.md', 'url-to-markdown'], [ZH_DIR, 'SKILL.zh-CN.md', 'README.zh-CN.md', 'url-to-markdown-zh']]) {
+    // 2) 核心文件在位；SKILL/README 为对应语言源文件的逐字节拷贝
     assert.ok(fs.existsSync(`${dir}/script/snapshot.mjs`), `${dir}/script/snapshot.mjs`);
     assert.equal(fs.readFileSync(`${dir}/SKILL.md`, 'utf8'), fs.readFileSync(skillSrc, 'utf8'));
     assert.match(fs.readFileSync(`${dir}/SKILL.md`, 'utf8'), new RegExp(`^name: ${name}$`, 'm'));
+    const readme = fs.readFileSync(`${dir}/README.md`, 'utf8');
+    assert.equal(readme, fs.readFileSync(readmeSrc, 'utf8'));
+    // README 手册链接目标恒为标准名（导出契约，两版同）
+    assert.ok(readme.includes('(SKILL.md)'));
+    assert.ok(!readme.includes('(SKILL.zh-CN.md)'));
 
     // 3) references 恰两份归一名手册、内容取自对应语言源
     assert.deepEqual(fs.readdirSync(`${dir}/references`).sort(), GUIDES.map((g) => `${g}.md`));
@@ -43,9 +48,6 @@ test('copy:skill: 导出双语言目录，结构恒等且文件名归一', async
     for (const v of Object.values(pkg.dependencies)) assert.doesNotMatch(v, /\^/);
   }
 
-  // 5) zh 导出物内无 .zh-CN 文件名；README 手册链接目标归一为 SKILL.md
+  // 5) zh 导出物内无 .zh-CN 文件名（SKILL/references/README 均已归一）
   assert.ok(!listFiles(ZH_DIR).some((f) => f.includes('zh-CN')));
-  const zhReadme = fs.readFileSync(`${ZH_DIR}/README.md`, 'utf8');
-  assert.ok(zhReadme.includes('(SKILL.md)'));
-  assert.ok(!zhReadme.includes('(SKILL.zh-CN.md)'));
 });

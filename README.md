@@ -1,83 +1,83 @@
 # url to markdown
 
-打开网页（处理登录墙），把主体内容转换成干净的 Markdown。特殊元素按类型分派：能拿文本形态就拿文本形态（LaTeX 公式、Mermaid 源码、代码块），矢量次之（SVG 直接导出 / LLM 重建），像素截图兜底。
+Opens a web page (handling login walls) and converts its main content into clean Markdown. Special elements are dispatched by type: text form first whenever available (LaTeX formulas, Mermaid source, code blocks), vector next (SVG exported directly / rebuilt by the LLM), pixel screenshots as the fallback.
 
-操作手册（步骤 0-5 决策表、错误处理）见 [SKILL.md](SKILL.md)；面向 Claude Code 的开发约定、架构与技术细节见 [CLAUDE.md](CLAUDE.md)（唯一事实源）。
+See [SKILL.md](SKILL.md) for the operations manual (step 0-5 decision tables, error handling); see [CLAUDE.md](CLAUDE.md) for development conventions, architecture, and technical details aimed at Claude Code (the single source of truth).
 
-## 为什么要做这个
+## Why build this
 
-传统的脚本 `markdown-it / turndown` 都会有以下弊病：
+Traditional script-based converters (`markdown-it / turndown`) all suffer from these problems:
 
-- 无法准确识别标题级别（`h1-h5`），或者按钮小标题
-- 无法识别到隐藏的章节和段落
-- 无法正确识别复杂 UI 模块：流程图、交互控件
+- Cannot accurately identify heading levels (`h1-h5`) or button-style subheadings
+- Cannot detect hidden sections and paragraphs
+- Cannot correctly handle complex UI modules: flowcharts, interactive controls
 
-## 本 SKILL 能做什么
+## What this SKILL can do
 
-- 准确识别大小标题，章节和段落
-- 能够识别隐藏/收起的内容
-- 对无法用脚本转换的表格和代码块，支持 LLM 语义识别和转换
-- 准确识别复杂 UI 模块，并将其转换成图片；支持滚动内容的截图
-- 支持扫码/账号密码/验证码等登录功能（某些网站需要登录）
-- 支持自动跳转到内嵌 iframe 的页面
+- Accurately identifies headings of all levels, sections, and paragraphs
+- Recognizes hidden/collapsed content
+- Supports LLM semantic recognition and conversion for tables and code blocks that scripts cannot convert
+- Accurately identifies complex UI modules and converts them into images; supports screenshots of scrollable content
+- Supports login via QR code / username-password / captcha (some sites require login)
+- Supports automatic redirection into pages embedded in iframes
 
-## 本 SKILL 还不能做什么
+## What this SKILL cannot do yet
 
-- 飞书/钉钉这类使用虚拟列表（Virtual-List）的文档
+- Documents built on virtual lists (Virtual-List), such as Feishu/Lark and DingTalk docs
 
-## 设计思想
+## Design philosophy
 
-- 所有 HTML 文章/文档本质上都是「标题 + N 个段落」的长列表，将物理分割和 LLM 语义处理相结合
-- 在大模型语义识别步骤之前，将 DOM 的输入压缩到极致：将网页从 1.6MB 压缩到 30KB，压缩率达到了 98% 以上；同时输出尽可能小：大模型仅输出结构化 JSON
-- 先用脚本清洗噪音（标签属性、非语义类名、长文本、大型表格、大段代码），再交给 LLM 处理语义化内容
-- 长文本、表格和代码块用短字符占位，在 LLM 处理完之后再恢复——节省输入 Token，也不会因网页内容产生幻觉
-- 对于格式化的 `table` 表格和 `pre>code` 代码块，直接用脚本转换，降低大模型识别转换的成本；转换失败会用大模型兜底
-- 对于大型 Div 复杂模块，通过「截图边界链」的设计，支持对滑动模块的截图功能
+- Every HTML article/document is essentially a long list of "heading + N paragraphs"; combine physical splitting with LLM semantic processing
+- Compress the DOM input to the extreme before the LLM semantic-recognition step: web pages shrink from 1.6MB to 30KB, a compression ratio above 98%; keep the output as small as possible too — the LLM only emits structured JSON
+- Clean the noise with scripts first (tag attributes, non-semantic class names, long text, large tables, long code blocks), then hand the semantic content to the LLM
+- Long text, tables, and code blocks are replaced with short placeholders and restored after LLM processing — saves input tokens and prevents hallucination driven by page content
+- Well-formed `table` tables and `pre>code` blocks are converted directly by scripts to lower LLM conversion cost; the LLM acts as the fallback when conversion fails
+- For large complex div modules, a "screenshot boundary chain" design supports capturing scrollable modules
 
-## 技术栈
+## Tech stack
 
-- **Playwright**（chromium）——无头抓取、CDP Screencast 登录中继、元素 2x 截图
-- **juice**——CSS 级联引擎，把 `<style>` 规则内联进元素 style 属性
-- **ws**——Screencast viewer 的 WebSocket 中继
-- 语义分派（步骤 2 关键 ID 识别 / 步骤 4 markdown 骨架）由 LLM agent 按 SKILL.md 手册完成，不依赖 readability / turndown 类转换库
+- **Playwright** (chromium) — headless capture, CDP Screencast login relay, 2x element screenshots
+- **juice** — CSS cascade engine, inlines `<style>` rules into element style attributes
+- **ws** — WebSocket relay for the Screencast viewer
+- Semantic dispatch (step 2 key-ID recognition / step 4 markdown skeleton) is performed by the LLM agent following the SKILL.md manual, with no reliance on readability / turndown-style conversion libraries
 
-## 环境要求
+## Environment requirements
 
-- Node ≥ 20（`init.sh` 可经 nvm 自动安装正确版本）
+- Node ≥ 20 (`init.sh` can install the right version via nvm)
 - Linux / macOS
-- 包管理器优先级 pnpm > yarn > npm（降级使用，不自行安装）
-- Playwright chromium（`init.sh` 检测并安装）
+- Package manager priority pnpm > yarn > npm (falls back down the list, does not install one itself)
+- Playwright chromium (`init.sh` detects and installs it)
 
-## 项目结构
+## Project structure
 
 ```text
-SKILL.md                 # Skill 主体文件（步骤 0-5 操作手册）
-CLAUDE.md                # 面向 Claude Code 的开发约定（技术细节唯一事实源）
-README.md                # 本文件
-script/                  # CLI 脚本
-  lib/                   # 共享模块（contract / env / browser…）与页面脚本 page-*.js
-test/                    # 单元 / 集成测试 + fixtures + smoke 冒烟清单
-docs/                    # 设计文档与实施计划
+SKILL.md                 # Skill main file (step 0-5 operations manual)
+CLAUDE.md                # Development conventions for Claude Code (single source of truth for technical details)
+README.md / README.zh-CN.md # This overview (English / Chinese)
+script/                  # CLI scripts
+  lib/                   # Shared modules (contract / env / browser…) and page scripts page-*.js
+test/                    # Unit / integration tests + fixtures + smoke checklist
+docs/                    # Design documents and implementation plans
 package.json
 pnpm-lock.yaml
 
-working/                 # 运行时工作目录（gitignore，仅保留骨架）
-  cookies/               # 所有访问过 URL 的登录态公共存储
-  <url-path>/            # 该 URL 步骤 1-5 的全部产物（最终产物 5_markdown.md）
-  redirected_<url-path>/ # iframe 重定向页的专属目录（内含 redirect_to.yaml 标记）
+working/                 # Runtime working directory (gitignored, only the skeleton is kept)
+  cookies/               # Shared login-state storage for all visited URLs
+  <url-path>/            # All step 1-5 artifacts for that URL (final artifact 5_markdown.md)
+  redirected_<url-path>/ # Dedicated directory for iframe-redirected pages (contains the redirect_to.yaml marker)
 ```
 
-## 核心流程（步骤 0-5）
+## Core pipeline (steps 0-5)
 
-步骤 0、1、3、5 只运行脚本并按 stdout 的 `status` 分支；步骤 2、4 由 agent（LLM）做语义处理。
+Steps 0, 1, 3, and 5 only run scripts and branch on the `status` field in stdout; steps 2 and 4 are semantic processing done by the agent (LLM).
 
-| 步骤 | 执行者 | 命令 | 产物 |
+| Step | Executor | Command | Artifacts |
 |---|---|---|---|
-| 0 环境初始化 | 脚本 | `bash script/init.sh` | 环境就绪（node/pnpm/chromium/字体；纯环境自检，无参数） |
-| 1 快照下载 + 结构清洗 | 脚本 | `node script/snapshot.mjs --url <url>` | `1_snapshot.html` + 清洗产物 `1_clean_snapshot.html`、`1_clean_style_snapshot.html`、`1_long_text.json`、`1_tables.json`、`1_code.json`；输出核心参数 `skill-root`/`url-name`/`url-working-path`（重定向页为 `redirected_` 特殊名）+ `redirect` 通报 |
-| 2 关键 ID 识别 | **agent** | 读 `1_clean_snapshot.html` | `2_key_ids.json` |
-| 3 文章视图渲染 | 脚本 | `node script/render_article.mjs --url <url>` | `3_article.html`（>60KB 时另产出分块 `3_article_chunk_X_of_N.html`，emit `chunks` 驱动步骤 4 派发模式） |
-| 4 markdown 骨架 | **agent** | 读 `3_article.html`（分割时按 `chunks.files` 并行派发子代理、各写 `4_skeleton_chunk_X_of_N.json`） | `4_skeleton.json` / `4_skeleton_chunk_X_of_N.json` |
-| 5 还原 + 下载 + 截图 + 渲染 | 脚本 | `node script/render_markdown.mjs --url <url>` | `5_markdown.md`（最终产物）、`assets/images/`、`assets/trans/`（入口自动检测并合并分片骨架） |
+| 0 Environment init | script | `bash script/init.sh` | Environment ready (node/pnpm/chromium/fonts; pure environment self-check, no arguments) |
+| 1 Snapshot download + structural cleaning | script | `node script/snapshot.mjs --url <url>` | `1_snapshot.html` + cleaning artifacts `1_clean_snapshot.html`, `1_clean_style_snapshot.html`, `1_long_text.json`, `1_tables.json`, `1_code.json`; emits core params `skill-root`/`url-name`/`url-working-path` (redirected pages get the special `redirected_` name) + `redirect` notification |
+| 2 Key-ID recognition | **agent** | reads `1_clean_snapshot.html` | `2_key_ids.json` |
+| 3 Article-view rendering | script | `node script/render_article.mjs --url <url>` | `3_article.html` (chunks `3_article_chunk_X_of_N.html` when >60KB; the emitted `chunks` drives the step-4 dispatch mode) |
+| 4 Markdown skeleton | **agent** | reads `3_article.html` (when split, subagents are dispatched in parallel per `chunks.files`, each writing `4_skeleton_chunk_X_of_N.json`) | `4_skeleton.json` / `4_skeleton_chunk_X_of_N.json` |
+| 5 Restore + download + screenshot + render | script | `node script/render_markdown.mjs --url <url>` | `5_markdown.md` (final artifact), `assets/images/`, `assets/trans/` (the entry auto-detects and merges chunked skeletons) |
 
-各步骤的 `status` 分支决策表、骨架词汇表与约束见 SKILL.md；各脚本的技术细节见 CLAUDE.md 与对应脚本头部注释。
+For each step's `status` decision table, the skeleton vocabulary, and constraints, see SKILL.md; for technical details of each script, see CLAUDE.md and the header comments of the scripts.

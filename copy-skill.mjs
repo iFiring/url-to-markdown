@@ -4,8 +4,9 @@
  * 导出两个自包含技能目录：
  *   .temp/url-to-markdown/      英文版
  *   .temp/url-to-markdown-zh/   中文版（内部文件名归一：SKILL.zh-CN.md → SKILL.md、
- *                               references/*.zh-CN.md → *.md）
- * README 暂未双语化：两份导出共用根目录中文 README.md（其手册链接目标本就是 SKILL.md，无须归一）。
+ *                               references/*.zh-CN.md → *.md、README.zh-CN.md → README.md）
+ * README 已双语化（2026-09-14 起）：英文导出取 README.md、中文导出取 README.zh-CN.md，
+ * 均归一为导出物内 README.md（手册链接目标本就是 SKILL.md，无须改写正文）。
  * 两份导出的 package.json 均钉死依赖版本（取自仓库 node_modules）、删除 scripts 段。
  */
 import fs from 'node:fs';
@@ -19,7 +20,7 @@ const GUIDES = ['analyze_html_guide', 'markdown_skeleton_guide'];
 
 const TARGETS = [
   { dir: '.temp/url-to-markdown',    pkgName: 'url-to-markdown',    skill: 'SKILL.md',       readme: 'README.md', zh: false },
-  { dir: '.temp/url-to-markdown-zh', pkgName: 'url-to-markdown-zh', skill: 'SKILL.zh-CN.md', readme: 'README.md', zh: true  },
+  { dir: '.temp/url-to-markdown-zh', pkgName: 'url-to-markdown-zh', skill: 'SKILL.zh-CN.md', readme: 'README.zh-CN.md', zh: true  },
 ];
 
 for (const { dir, pkgName, skill, readme, zh } of TARGETS) {
