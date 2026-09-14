@@ -2,7 +2,7 @@
 // 步骤 1 重定向门：占优内容 iframe 检测 + 跳转编排。
 // 测量（正文长度归一化口径）唯一副本在本模块；判定规则唯一事实源在 page-detect-iframe.js。
 import { readSharedScript } from './placeholder.mjs';
-import { snapshotLogin } from './snapshot-login.mjs';
+import { gateCheck } from './snapshot-gate.mjs';
 import { snapshotScroll } from './snapshot-scroll.mjs';
 import { gotoSettled } from './browser.mjs';
 
@@ -44,8 +44,10 @@ export async function snapshotRedirectDetect(page, opts = {}) {
 
 /**
  * 重定向门编排：检测（仅一次，只判入口原页面）→ 命中则跳转目标页
- * （snapshotLogin 内含 gotoSettled + 登录检测复跑，跨域登录墙时 viewer
- * 开在内容页）→ 退化守卫 → 重新滚动。目标页不再重判（用户裁决）。
+ * （gateCheck 内含 gotoSettled + 登录/验证码检测复跑——目标页自动获得人机门禁
+ * 覆盖，跨域登录墙/挑战时 viewer 开在内容页；稀薄分诊关闭 sparseTriage:false——
+ * 目标页空渲染由下方退化守卫回退原页，语义比 error/介入 viewer 更正确）→
+ * 退化守卫 → 重新滚动。目标页不再重判重定向（用户裁决）。
  * @returns {Promise<{redirected: boolean, to: string | null}>} to = 目标 URL
  */
 export async function runRedirectGate(page, url, opts = {}) {
@@ -53,7 +55,11 @@ export async function runRedirectGate(page, url, opts = {}) {
   const detect = await snapshotRedirectDetect(page, { log });
   if (!detect.redirect) return { redirected: false, to: null };
 
-  const login = await snapshotLogin(page, detect.redirect.url, { timeout, storageStatePath: ssPath, log });
+  const login = await gateCheck(page, detect.redirect.url, { timeout, storageStatePath: ssPath, log, sparseTriage: false });
+  const memory = {
+    loginSkippedByMemory: login?.loginSkippedByMemory,
+    gateSkippedByMemory: login?.gateSkippedByMemory,
+  };
 
   // 退化守卫：目标页独立打开渲染不出内容（如 window.top 检测站）→ 回原页走现状路径
   const targetText = await measureTextLen(page);
@@ -61,9 +67,9 @@ export async function runRedirectGate(page, url, opts = {}) {
     log(`重定向目标正文退化（${targetText} < ${Math.round(DEGENERATE_RATIO * detect.redirect.frameText)}），回退 ${url}`);
     await gotoSettled(page, url, log);
     await snapshotScroll(page, { scrollRounds, log });
-    return { redirected: false, to: null, loginSkippedByMemory: login?.loginSkippedByMemory };
+    return { redirected: false, to: null, ...memory };
   }
 
   await snapshotScroll(page, { scrollRounds, log });
-  return { redirected: true, to: detect.redirect.url, loginSkippedByMemory: login?.loginSkippedByMemory };
+  return { redirected: true, to: detect.redirect.url, ...memory };
 }

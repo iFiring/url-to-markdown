@@ -2,8 +2,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { chromium } from 'playwright';
-import { openPage, realUserAgent } from '../../script/lib/browser.mjs';
+import {
+  openPage, realUserAgent, gotoSettled,
+  refreshStorageState, readStorageState, writeStorageState,
+} from '../../script/lib/browser.mjs';
 import { startFixtureServer } from '../helpers/fixture-server.mjs';
 import { writePixelPng } from '../helpers/assets.mjs';
 
@@ -222,5 +228,76 @@ test('openPage: U2M_PROXY=direct → 直连加载正常（--no-proxy-server 回�
     if (prev === undefined) delete process.env.U2M_PROXY; else process.env.U2M_PROXY = prev;
     await s?.close().catch(() => {});
     await fx.close();
+  }
+});
+
+// 2026-09-14 gateCheck 前置：gotoSettled 返回主文档 HTTP 状态码（稀薄内容分诊消费）
+
+test('gotoSettled: 返回状态码——200 / 404 / 重定向链取最终响应', async () => {
+  const server = http.createServer((req, res) => {
+    if (req.url === '/ok') {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      return res.end('<h1>ok</h1>');
+    }
+    if (req.url === '/missing') {
+      res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
+      return res.end('not found');
+    }
+    if (req.url === '/r1') { res.writeHead(302, { Location: '/r2' }); return res.end(); }
+    if (req.url === '/r2') {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      return res.end('<h1>final</h1>');
+    }
+    res.writeHead(500); res.end();
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage();
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const opts = { settleMs: 1500 };
+    assert.equal(await gotoSettled(page, `${base}/ok`, () => {}, opts), 200);
+    assert.equal(await gotoSettled(page, `${base}/missing`, () => {}, opts), 404);
+    assert.equal(await gotoSettled(page, `${base}/r1`, () => {}, opts), 200, '重定向链 = 最终响应');
+  } finally {
+    await browser.close();
+    server.closeAllConnections();
+    await new Promise((r) => server.close(r));
+  }
+});
+
+test('refreshStorageState: read-merge-write——新值覆盖同名 cookie、他域条目保留', async () => {
+  const fx = await startFixtureServer();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-refresh-'));
+  const file = path.join(dir, 'cookies', 'storage_state.json');
+  const browser = await chromium.launch();
+  try {
+    // base：127.0.0.1 的 a=1 + example.com 的 keep=me
+    await writeStorageState(file, {
+      cookies: [
+        { name: 'a', value: '1', domain: '127.0.0.1', path: '/', expires: -1, httpOnly: false, secure: false, sameSite: 'Lax' },
+        { name: 'keep', value: 'me', domain: 'example.com', path: '/', expires: -1, httpOnly: false, secure: false, sameSite: 'Lax' },
+      ],
+      origins: [],
+    });
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await gotoSettled(page, `${fx.url}/static-article.html`, () => {}, { settleMs: 1500 });
+    await context.addCookies([
+      { name: 'a', value: '2', domain: '127.0.0.1', path: '/' },
+      { name: 'b', value: '3', domain: '127.0.0.1', path: '/' },
+    ]);
+    await refreshStorageState(page, file);
+    const merged = await readStorageState(file);
+    const byName = Object.fromEntries(merged.cookies.map((c) => [`${c.domain}:${c.name}`, c.value]));
+    assert.equal(byName['127.0.0.1:a'], '2', '同名 cookie 应被新值覆盖');
+    assert.equal(byName['127.0.0.1:b'], '3', '新 cookie 应并入');
+    assert.equal(byName['example.com:keep'], 'me', '他域条目应保留');
+    // 无路径时为 no-op（不抛、不建文件）
+    await refreshStorageState(page, null);
+  } finally {
+    await browser.close();
+    await fx.close();
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });

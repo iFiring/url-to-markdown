@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Just a moment... | 示例站</title>
+<style>
+  body { margin: 0; background: #1b1b1b; color: #ddd; font-family: sans-serif; }
+  #challenge-form { position: fixed; inset: 0; display: flex; flex-direction: column;
+                    align-items: center; justify-content: center; gap: 16px; background: #1b1b1b;
+                    padding: 40px; text-align: center; }
+  .cf-turnstile { width: 300px; height: 66px; background: #2a2a2a; border: 1px solid #444;
+                  display: flex; align-items: center; justify-content: center; color: #eee; }
+  .legal { max-width: 640px; font-size: 12px; color: #999; line-height: 1.8; }
+</style>
+</head>
+<body>
+<div id="challenge-form">
+  <h2>正在验证您与互联网的连接</h2>
+  <div class="cf-turnstile">Verify you are human</div>
+  <div class="legal">
+    在进行安全验证之前，请阅读并同意本站的服务条款与隐私政策。本站使用行业标准的
+    人机识别技术来防止自动化程序滥用服务，包括但不限于：分布式爬虫对内容版权的侵害、
+    撞库与暴力破解对账户安全的威胁、恶意注册对社区秩序的破坏、以及流量注入对服务
+    可用性的影响。验证过程通常只需要几秒钟，期间我们会在您的浏览器中放置一枚有效期
+    有限的通行证 Cookie，以便您在后续浏览中免于重复验证。该 Cookie 与您的设备指纹
+    和网络地址绑定，不会用于广告追踪或用户画像。若您认为本次验证属于误判，可以通过
+    页面底部的反馈通道联系站点管理员，并附上您当前的访问时间、所在区域与浏览器版本
+    信息，以便我们排查风控策略的阈值设置。感谢您的理解与配合，祝您浏览愉快，验证
+    完成后页面将自动跳转到您原本请求的内容地址，无需手动刷新或重新输入网址。
+    本站的风控系统会综合评估访问来源、请求频率、浏览器环境完整性与交互行为轨迹等
+    多维信号，对每一次访问给出风险评分；只有评分超过阈值的会话才会被要求完成人机
+    验证，绝大多数正常用户不会感知到这一过程。如果您在企业网络、共享出口或开启了
+    严格隐私保护的环境中访问，可能会更频繁地遇到验证请求，这是因为共享出口地址的
+    聚合流量特征容易被误判为自动化行为。我们建议此类用户将本站加入白名单，或在
+    浏览器设置中允许本站保存通行证 Cookie，以获得更流畅的浏览体验。安全团队会
+    定期回顾误判样本并调整阈值，力求在安全性与可用性之间保持平衡。
+  </div>
+</div>
+<script>
+  // ?auto=<ms>：ms 后挑战自消解、替换为充实正文（CI 确定性测试用）
+  const auto = Number(new URLSearchParams(location.search).get('auto') || 0);
+  if (auto > 0) setTimeout(() => {
+    document.getElementById('challenge-form').remove();
+    document.title = '示例文章';
+    // 消解后文本量必须 > 退化守卫阈值（0.5 × 挑战页 frameText ≈ 325 字符），
+    // 否则重定向目标页会被误判「渲染退化」回退原页
+    document.body.innerHTML = '<article><h1>正文标题</h1><p>'
+      + '这是挑战消解后的正文段落，用于断言门禁回环后管线正常完成、退化守卫不误伤。'.repeat(25)
+      + '</p></article>';
+  }, auto);
+</script>
+</body>
+</html>

@@ -69,7 +69,7 @@ bash <skill-root>/script/init.sh
 node <skill-root>/script/snapshot.mjs --url <url> [--timeout 300000] [--scroll-rounds 60] [--table-engine self|turndown]
 ```
 
-单条命令完成网页抓取与结构清洗：登录检测（需要时自动弹出浏览器 viewer 供人工登录）→ 滚动加载 → 重定向处理（占优内容 iframe 自动跳转真实 URL）→ 虚拟列表检测 → 快照抓取 + 结构清洗（表格/代码块预计算 markdown）。
+单条命令完成网页抓取与结构清洗：**人机门禁**（登录检测 / 验证码与滑块检测 / 稀薄内容兜底——需要时自动弹出浏览器 viewer 供人工登录、人工验证或确认页面状态，解决后自动回环复检；viewer 超时从你打开它才开始计算）→ 滚动加载 → 重定向处理（占优内容 iframe 自动跳转真实 URL，目标页同样过登录与验证门禁）→ 虚拟列表检测 → 快照抓取 + 结构清洗（表格/代码块预计算 markdown）。
 
 可选参数：
 - `--table-engine self|turndown`（或 `U2M_TABLE_ENGINE`，默认 `self`）：表格占位符转换引擎
@@ -90,6 +90,10 @@ node <skill-root>/script/snapshot.mjs --url <url> [--timeout 300000] [--scroll-r
 | `ok` | 把 stdout 反馈给用户，进入步骤 2；`<url-name>`/`<url-working-path>` 以本行 stdout 为准（重定向页是特殊名），`redirect` 字段仅通报（后续步骤仍用原始 `<url>`） |
 | `error`（reason=`virtual_list`） | 告知用户"该页面为虚拟列表，仅渲染部分内容，无法全文转化为 Markdown"，**终止** |
 | `error`（reason=`login_timeout`/`login_aborted`） | 询问用户是否重试登录；重试则再次运行本命令 |
+| `error`（reason=`captcha_timeout`/`captcha_aborted`） | 人机验证 viewer 超时或被关闭：询问用户是否已准备好完成验证，确认后再次运行本命令（验证通过的站点会留下通行 cookie，重跑常可直接通过） |
+| `error`（reason=`gate_aborted`/`gate_timeout`） | 页面正文极少（疑似未识别的验证页/访问拦截，也可能本就是空页面）且人工确认窗被弃用：询问用户该 URL 是否确有内容；重试可在窗口点「仍然继续」（将记住该站不再询问） |
+| `error`（reason=`http_404`） | 目标页不存在（404 且无正文）：告知用户检查 URL，**勿重试** |
+| `error`（reason=`gate_loop_limit`） | 站点连环弹出门禁（3 次人工介入后仍未稳定）：告知用户该 URL 无法自动抓取，建议放弃或改用其他抓取方式 |
 | `error`（其他） | 把 `stdout.reason` 反馈给用户并终止；若 `1_snapshot.html` 已落盘，可加 `--from-snapshot` 重试、免重新抓取 |
 
 **stdout.status=ok 结构示例**
@@ -220,7 +224,9 @@ node <skill-root>/script/render_markdown.mjs --url <url>
 | `init.sh` 报 `未找到 pnpm/yarn/npm` | 请用户安装任一包管理器后重试步骤 0 |
 | `init.sh`(Linux) 报 fontconfig/字体安装失败（需 root/sudo） | 步骤 0 自动修复未成功（无 root 或无包管理器）：请用户以 root 手动安装 fontconfig 与字体（西文如 liberation、中文如 noto-cjk）后重试步骤 0；不装的话 chromium 渲染任何带文字的页面都会 FATAL 崩溃 |
 | `snapshot` 判定已登录但页面仍是登录墙 | 请用户手动删除 `working/cookies/storage_state.json` 后重跑步骤 1 |
-| `snapshot` 对无需登录的页面弹出登录 viewer | 用户在 viewer 点「⏭️ 跳过登录」并确认即可继续（该站点后续不再弹，emit 以 `loginSkippedByMemory` 通报）；想重置裁决则删除 `working/cookies/login_decisions_skips.json` 对应域名条目后重跑步骤 1 |
+| `snapshot` 对无需登录的页面弹出登录 viewer | 用户在 viewer 点「⏭️ 跳过登录」并确认即可继续（该站点后续不再弹，emit 以 `loginSkippedByMemory` 通报）；想重置裁决则删除 `working/cookies/login_decisions_skips.json` 对应域名条目后重跑步骤 1（该文件同时存放「稀薄内容仍然继续」的 `content_sparse` 裁决） |
+| `snapshot` 弹出人机验证 viewer（滑块/点选） | viewer 支持鼠标拖拽与键盘中继——直接在画面里拖动滑块或点击验证，完成后点「✅ 验证完成」；该窗口没有跳过按钮（跳过只会抓到挑战页），弃窗将报 `captcha_aborted` |
+| 人工过了验证但 `snapshot` 仍反复弹验证 viewer | 站点风控可能拒绝无头浏览器痕迹（已知边界，人工轨迹正确也可能被拒）：重跑重试一次，仍失败建议放弃该站 |
 | `snapshot` 报 `virtual_list` 但用户确信是普通长页 | 该站可能主动裁剪离屏 DOM（与虚拟列表同构，产出亦只是部分窗口），属已知边界；建议改用其他抓取方式 |
 | 页面加载报 `net::ERR_TUNNEL_CONNECTION_FAILED` / `ERR_PROXY_CONNECTION_FAILED` | 本机系统代理不可用或拒绝目标站：设 `U2M_PROXY=direct` 绕过系统代理，或 `U2M_PROXY=http://<host>:<port>` 显式指定可用代理后重跑 |
 | `snapshot --from-snapshot` 报找不到快照 | 去掉 `--from-snapshot` 重新运行本命令（重新抓取快照） |

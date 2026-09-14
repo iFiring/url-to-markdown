@@ -12,18 +12,28 @@
  * 七阶段（依次执行；1-5 共享抓取 context，6 用裸 context——环境隔离是
  * 设计约束：file:// 重解析只应用内联后的 <style>，computed style 须来自
  * 纯净级联，且不得继承登录态与 page-init）:
- *   1. 登录阶段（lib/snapshot-login.mjs）—— 六信号两级制检测是否需要登录：
- *      密码框 / 登录入口点击探测确认（全屏弹窗或跳转）为强信号单票成立，
- *      弱信号（URL 特征 / 标题与正文关键词 / 重定向 / SPA 等待 / 登录按钮
- *      可见但点击无确认）≥2 命中判定需登录；命中全在跳过记忆
- *      （login_decisions_skips.json）内则整体豁免；需登录时弹出 CDP Screencast
- *      viewer（地址记到 stderr）供人工登录，登录态写入全局唯一的
+ *   1. 门禁阶段（lib/snapshot-gate.mjs，2026-09-14 起原登录阶段扩展为三分支
+ *      不动点循环）—— ①登录：六信号两级制（密码框/探测确认为强信号单票成立，
+ *      弱信号 ≥2 合议；命中全在跳过记忆 login_decisions_skips.json 内则整体
+ *      豁免）；②验证码/滑块：已知挑战标记占优（Cloudflare/reCAPTCHA/hCaptcha/
+ *      极验/阿里/腾讯/易盾/京东，page-detect-captcha.js 双通道判定）或登录探测
+ *      懒触发 → 验证码 viewer（无跳过，解决后 clearance cookie 落盘）；
+ *      ③稀薄兜底：404∧稀薄是硬事实（循环开头直接 error，先于登录信号与记忆
+ *      豁免）；正文 <200 字符 ∧ 无 main/article/大 iframe ∧ 登录零信号 →
+ *      HTTP 状态码分诊（403/503/429→强嫌疑介入 viewer；200→诚实文案介入
+ *      viewer，跳过=content_sparse 弱信号入档）。任一人工介入后回环复检（解决
+ *      一个门禁可能露出下一个）；已解决的分支再次命中=连环门 → gate_loop_limit
+ *      （用户点过「跳过登录」的例外：尊重裁决放行）。viewer 一律 CDP Screencast
+ *      （地址记 stderr），超时倒计时自用户首连 viewer 始、无人连接由 1h 绝对
+ *      上限兜底；登录态/验证 cookie 写入全局唯一的
  *      working/cookies/storage_state.json（后续脚本只读）
  *   2. 滚动阶段（lib/snapshot-scroll.mjs）—— 渐进滚动到底再回顶，触发
  *      懒加载，等待 DOM 稳定
  *   3. 重定向门（lib/snapshot-redirect.mjs）—— 占优内容 iframe 检测（单次
- *      判定，只判入口原页面）：命中则跳转目标页原生续跑（登录检测复跑 +
- *      退化守卫 + 重新滚动），快照落在 redirected_ 特殊目录；未命中零行为差异
+ *      判定，只判入口原页面）：命中则跳转目标页原生续跑（gateCheck 复跑——
+ *      目标页自动获得登录+验证码覆盖，稀薄分诊关闭 sparseTriage:false、空渲染
+ *      由退化守卫回退原页 + 重新滚动），快照落在 redirected_ 特殊目录；
+ *      未命中零行为差异
  *   4. 检测阶段（lib/snapshot-detect.mjs）—— 虚拟列表检测门（跑在最终目标
  *      页上）：顶部取正文签名，滚到底后检查签名是否仍在 innerText，消失即
  *      虚拟列表（页面仅渲染可见窗口，无法全文转化），直接终止、不写快照
@@ -64,6 +74,12 @@
  *              "overlayFolded":N,"commentsRemoved":N}} → 退出码 0
  *   {"status":"error","reason":"virtual_list"}  虚拟列表，未写快照 → 1
  *   {"status":"error","reason":"login_timeout"|"login_aborted"|...} → 1
+ *   门禁新增 reason（2026-09-14）："captcha_timeout"|"captcha_aborted"（验证码
+ *   viewer 超时/弃窗）、"http_404"（404∧稀薄——目标不存在）、"gate_aborted"|
+ *   "gate_timeout"（稀薄介入 viewer 弃窗/超时，fail-closed）、"gate_loop_limit"
+ *   （3 轮人工介入仍未稳定）→ 1
+ *   完整载荷（含 gateSkippedByMemory 稀薄记忆豁免通报）落
+ *   logs/1_snapshot_result.json；stdout keepKeys 六键不含它（只携带流程驱动字段）
  *
  * 重定向门：登录+滚动后检测「占优内容 iframe」（同源/跨域，见
  * lib/snapshot-redirect.mjs），命中则跳转目标页原生续跑；快照成功后写
@@ -80,7 +96,7 @@ import { emitError, emitLogged, usage, log, debug } from './lib/contract.mjs';
 import { storageStatePath, ensureUrlDirs, projectRoot, urlToDirName, redirectedDirName, writeRedirectMarker, clearRedirectMarker, urlDir, redirectMarkerPath } from './lib/env.mjs';
 import { proxyLaunchOptions, newU2MContext } from './lib/browser.mjs';
 import { readSharedScript } from './lib/placeholder.mjs';
-import { snapshotLogin } from './lib/snapshot-login.mjs';
+import { gateCheck } from './lib/snapshot-gate.mjs';
 import { snapshotScroll } from './lib/snapshot-scroll.mjs';
 import { snapshotDetect } from './lib/snapshot-detect.mjs';
 import { snapshotCapture } from './lib/snapshot-capture.mjs';
@@ -159,7 +175,7 @@ async function main() {
   const browser = await chromium.launch({ headless: true, ...proxyLaunchOptions() });
   let context;
   try {
-    let snapshotPath, elements, dirName, workingDir, redirect = null, loginSkippedByMemory = null;
+    let snapshotPath, elements, dirName, workingDir, redirect = null, loginSkippedByMemory = null, gateSkippedByMemory = null;
 
     if (!fromSnapshot) {
       const ssPath = storageStatePath();
@@ -169,10 +185,16 @@ async function main() {
       });
       const page = await context.newPage();
 
-      const login = await timed('登录阶段', () => snapshotLogin(page, url, { timeout, storageStatePath: ssPath, log }));
+      const login = await timed('门禁阶段', () => gateCheck(page, url, { timeout, storageStatePath: ssPath, log }));
       await timed('滚动阶段', () => snapshotScroll(page, { scrollRounds, log: debug }));
+      // 重定向门日志走 debug，但 viewer 地址行必须提升到无条件 stderr——目标页弹
+      // viewer 时它是用户/测试的唯一入口（随 debug 静默则不可发现、挂到 1h 兜底）
+      const redirectLog = (...parts) => {
+        const m = parts.join(' ');
+        if (m.includes('viewer:')) log(m); else debug(m);
+      };
       const gate = await timed('重定向门', () =>
-        runRedirectGate(page, url, { timeout, storageStatePath: ssPath, scrollRounds, log: debug }));
+        runRedirectGate(page, url, { timeout, storageStatePath: ssPath, scrollRounds, log: redirectLog }));
       await timed('检测阶段', () => snapshotDetect(page, { log: debug }));
 
       // 目录创建在重定向决策后：redirected 页用特殊名（marker 尚未写入，显式指定）
@@ -195,6 +217,9 @@ async function main() {
       // 记忆豁免如实通报（入口页或重定向目标页任一命中即报）——「已登录」结论
       // 其实来自跳过记忆压制时，agent/用户必须看得到
       loginSkippedByMemory = login?.loginSkippedByMemory || gate.loginSkippedByMemory || null;
+      // 稀薄兜底的 content_sparse 记忆豁免——只进 result 文件（stdout 只携带流程
+      // 驱动字段；本豁免不改变任何流程分支，属排查性诊断）
+      gateSkippedByMemory = login?.gateSkippedByMemory || gate.gateSkippedByMemory || null;
     } else {
       ({ dirName, urlDir: workingDir, snapshotPath, elements, redirect } = replay);
     }
@@ -217,6 +242,7 @@ async function main() {
       'url-working-path': workingDir,
       redirect,
       loginSkippedByMemory,
+      gateSkippedByMemory,
       ...cleanResult,
     }, ['status', 'skill-root', 'url-name', 'url-working-path', 'redirect', 'loginSkippedByMemory']);
   } catch (e) {

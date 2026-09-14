@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>深入浅出 reCAPTCHA：原理与实现</title></head>
+<body>
+<article>
+  <h1>深入浅出 reCAPTCHA</h1>
+  <p>reCAPTCHA 是一种人机验证服务，本文讲解它的工作原理、版本演化与接入方式。
+  这是一篇**讲验证码的文章**——页面里内嵌了小面积 demo 组件，但正文充实、
+  挑战不占页面主体，门禁的占优守卫必须放行（不误伤文档/教程类站点）。
+  以下段落用于把正文文本量抬到稀薄阈值之上，并模拟真实文章的篇幅与结构。
+  第一段之后还有第二段，继续讨论行为式验证与无感验证的取舍，以及风控评分
+  模型如何综合环境指纹、交互轨迹与历史信誉做出判定，尽量不打扰正常用户。</p>
+  <h2>在线演示</h2>
+  <div class="g-recaptcha" data-sitekey="demo"
+       style="width:304px;height:78px;background:#eee;border:1px solid #ccc;color:#666">
+    demo widget（小面积，不构成占优）
+  </div>
+  <h2>小结</h2>
+  <p>接入验证码前要权衡用户体验与风控收益，优先选择无感验证，把滑块与图形
+  验证留给高风险会话。本文的 demo 组件仅用于展示外观，不会真的发起校验请求，
+  也不应该让转换管线把整页判定为挑战页——这正是占优守卫存在的意义。</p>
+</article>
+</body>
+</html>

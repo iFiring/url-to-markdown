@@ -69,7 +69,7 @@ Pure environment self-check (node/pnpm/chromium/fonts). **stdout.status=ok struc
 node <skill-root>/script/snapshot.mjs --url <url> [--timeout 300000] [--scroll-rounds 60] [--table-engine self|turndown]
 ```
 
-One command performs the page fetch and structural cleaning: login detection (opens a browser viewer for manual login when needed) → scroll loading → redirect handling (dominant-content iframes automatically jump to the real URL) → virtual-list detection → snapshot capture + structural cleaning (tables/code blocks precomputed into markdown).
+One command performs the page fetch and structural cleaning: **the human gate** (login detection / CAPTCHA & slider detection / thin-content fallback — opens a browser viewer for manual login, manual verification, or page-state confirmation when needed, then loops back to re-check automatically once resolved; the viewer's timeout only starts counting once you open it) → scroll loading → redirect handling (dominant-content iframes automatically jump to the real URL; the target page goes through the login & captcha gate as well) → virtual-list detection → snapshot capture + structural cleaning (tables/code blocks precomputed into markdown).
 
 Optional parameters:
 - `--table-engine self|turndown` (or `U2M_TABLE_ENGINE`, default `self`): the table-placeholder conversion engine
@@ -90,6 +90,10 @@ Artifacts (do not read their contents on your own once generated):
 | `ok` | Report stdout to the user and proceed to step 2; take `<url-name>`/`<url-working-path>` from this stdout line (redirected pages carry the special name); the `redirect` field is informational only (later steps still use the original `<url>`) |
 | `error` (reason=`virtual_list`) | Tell the user "this page is a virtual list that renders only part of the content, so it cannot be converted to Markdown in full", **abort** |
 | `error` (reason=`login_timeout`/`login_aborted`) | Ask the user whether to retry the login; if yes, run this command again |
+| `error` (reason=`captcha_timeout`/`captcha_aborted`) | The human-verification viewer timed out or was closed: ask the user whether they are ready to complete the verification, then run this command again (solved sites leave a clearance cookie behind, so a rerun often passes straight through) |
+| `error` (reason=`gate_aborted`/`gate_timeout`) | The page body is nearly empty (suspected unrecognized verification page / access block — or it may genuinely be an empty page) and the manual-confirmation viewer was abandoned: ask the user whether the URL really has content; on a retry the user can click "仍然继续" (Continue anyway) in the viewer (the site will be remembered and not asked again) |
+| `error` (reason=`http_404`) | The target page does not exist (404 with no body): tell the user to check the URL, **do not retry** |
+| `error` (reason=`gate_loop_limit`) | The site keeps raising new gates (still unstable after 3 manual interventions): tell the user this URL cannot be fetched automatically; suggest giving up or another capture method |
 | `error` (other) | Report `stdout.reason` to the user and abort; if `1_snapshot.html` is already on disk, retry with `--from-snapshot` to skip re-fetching |
 
 **stdout.status=ok structure example**
@@ -220,7 +224,9 @@ Artifact: `<url-working-path>/5_markdown.md` (the final product; see `markdownPa
 | `init.sh` reports `未找到 pnpm/yarn/npm` (no pnpm/yarn/npm found) | Ask the user to install any one package manager, then retry step 0 |
 | `init.sh` (Linux) reports fontconfig/font installation failure (needs root/sudo) | Step 0's auto-repair failed (no root, or no package manager): ask the user to manually install fontconfig and fonts as root (Western fonts e.g. liberation, CJK fonts e.g. noto-cjk), then retry step 0; without them, chromium FATAL-crashes when rendering any page containing text |
 | `snapshot` decides the user is logged in but the page still shows a login wall | Ask the user to manually delete `working/cookies/storage_state.json`, then rerun step 1 |
-| `snapshot` opens the login viewer for a page that needs no login | The user clicks "⏭️ 跳过登录" (Skip login) in the viewer and confirms to continue (this site will not prompt again; the emit reports it via `loginSkippedByMemory`); to reset the decision, delete the site's entry in `working/cookies/login_decisions_skips.json` and rerun step 1 |
+| `snapshot` opens the login viewer for a page that needs no login | The user clicks "⏭️ 跳过登录" (Skip login) in the viewer and confirms to continue (this site will not prompt again; the emit reports it via `loginSkippedByMemory`); to reset the decision, delete the site's entry in `working/cookies/login_decisions_skips.json` and rerun step 1 (the same file also stores "Continue anyway" decisions for thin content as `content_sparse`) |
+| `snapshot` opens the human-verification viewer (slider / click challenge) | The viewer relays mouse dragging and keyboard — drag the slider or solve the challenge right in the canvas, then click "✅ 验证完成" (Verification done); this viewer has no skip button (skipping would only capture the challenge page), and closing it reports `captcha_aborted` |
+| `snapshot` keeps reopening the verification viewer even after the user solved it | The site's anti-bot may reject headless-browser traces (a known boundary — even a correct human trajectory can be rejected): rerun once; if it keeps failing, suggest giving up on the site |
 | `snapshot` reports `virtual_list` but the user is sure it is an ordinary long page | The site may actively prune off-screen DOM (isomorphic to a virtual list — the output is likewise just a partial window); this is a known boundary — suggest another capture method |
 | Page load reports `net::ERR_TUNNEL_CONNECTION_FAILED` / `ERR_PROXY_CONNECTION_FAILED` | The local system proxy is unavailable or rejects the target site: set `U2M_PROXY=direct` to bypass the system proxy, or `U2M_PROXY=http://<host>:<port>` to pin a working proxy, then rerun |
 | `snapshot --from-snapshot` reports the snapshot missing | Drop `--from-snapshot` and run this command again (re-fetch the snapshot) |

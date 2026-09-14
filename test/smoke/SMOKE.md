@@ -199,3 +199,15 @@ spec: `docs/superpowers/specs/2026-09-09-body-spine-chrome-removal-design.md`；
 **实现期发现并修复（TDD 红阶段）**：①深度上限测试夹具裸文本独子链被既有 K11 整链折叠——BIG 裹 `<p>` 排除干扰；②**run 覆写 bug**——LT run 检测先于 K5x 消费，可见 overlay/dialog 壳内文本 ≥16 汉字被记录 run（expando 挂壳），clean 趟 foldLongText 把 chrome token 覆写为 `{{LONG_TEXT}}`；修复 = K5x 折叠时删除壳上 `__u2mRunHtml/__u2mRunSize`（hidden 种因 run 根自查 display:none 天然免疫）。两修复详见对应 commit（`7225b4c`/`bffab5e`）。
 
 全量验证：`pnpm test:all` 441/441 绿（单测 374 + 集成 67）；golden 逐字节钉住（article-1 重建仅 head 注释行漂移、clean-simplify 零漂移、longtext.json 零漂移）。
+
+## 12. 人机门禁：验证码/滑块 + 稀薄内容兜底（2026-09-14 新增）
+
+真实站点手动冒烟（自动化覆盖见 test/integration/gate-captcha.test.mjs）：
+
+1. **Cloudflare 盾站**（如任意挂着「Just a moment…」的站点）：`U2M_DEBUG=1 node script/snapshot.mjs --url <url>` → 应弹 🛡️ 人机验证 viewer（无跳过按钮）；人工点选通过后点「✅ 验证完成」→ recheck 放行 → 管线完成；检查 `working/cookies/storage_state.json` 落了 `cf_clearance`；**重跑同 URL 应免验证直接通过**
+2. **极验/阿里滑块站**（登录提交触发滑块的站点）：viewer 里拖动滑块——验证 screencast 输入中继的拖拽手感与轨迹通过率（风控拒绝人工轨迹属已声明边界，记录厂商与结果）
+3. **登录表单内嵌图形验证码**：应弹**登录 viewer**（🖥️）而非验证 viewer——password 强信号优先，一窗内完成输密码+过验证码
+4. **稀薄页兜底**：找一个正文极少的可疑 URL（或用 `--url http://127.0.0.1:PORT/__status/403` 本地模拟）→ 应弹 🔍 页面内容确认 viewer；「仍然继续」后重跑同站不再弹（`login_decisions_skips.json` 落 `content_sparse`）
+5. **404 URL**：应直接 `{"status":"error","reason":"http_404"}`，不弹任何 viewer、不写快照
+
+记录：站点 / 挑战厂商 / viewer 形态是否正确 / 拖拽与点选操控是否顺畅 / 通过后重跑是否免验证 / 风控是否拒绝无头痕迹。

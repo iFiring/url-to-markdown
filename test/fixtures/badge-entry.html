@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>首页 - 示例站</title></head>
+<body>
+<!-- 入口页：带「登录」入口（span + 指针光标），点击跳转到带 badge 的登录页。
+     配合 login-badge.html 考察 probe 跳转后落地页的挑战检查（审查修复 #2）。 -->
+<article>
+  <h1>示例站首页</h1>
+  <p>这是示例站首页的简短说明文字，内容不构成登录信号；页面右上角有登录入口。</p>
+  <span id="entry" style="cursor:pointer;user-select:none">登录</span>
+</article>
+<script>
+  document.getElementById('entry').addEventListener('click', () => {
+    location.href = "/login-badge.html";
+  });
+</script>
+</body>
+</html>

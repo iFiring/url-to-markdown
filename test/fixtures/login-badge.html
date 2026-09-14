@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>登录 - 示例站</title>
+</head>
+<body>
+<!-- 带被动 badge 的登录页（2026-09-14 审查修复 #2）：
+     password 强信号 + 登录表单 + reCAPTCHA passive badge iframe（约 320×60）。
+     预期：probe 点击登录入口跳转落地后，'captcha' 模式（占优门控版）应返回
+     false——badge 不是挑战占优 → loginConfirmed(navigate) 成立、路由登录 viewer。
+     修复前：落地页裸标记扫描命中 badge → probe.captcha=true → 死锁进验证码 viewer。 -->
+<div id="login">
+  <h2>账号登录</h2>
+  <form action="/login" method="post">
+    <input type="text" name="user" placeholder="用户名">
+    <input type="password" name="pass" placeholder="密码">
+    <button type="submit">登录</button>
+  </form>
+</div>
+<iframe src="/recaptcha-frame.html" title="reCAPTCHA"
+        style="position:fixed;right:0;bottom:0;width:320px;height:60px;border:0"></iframe>
+</body>
+</html>

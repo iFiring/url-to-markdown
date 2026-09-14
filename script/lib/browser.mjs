@@ -46,6 +46,18 @@ export async function writeStorageState(filePath, state) {
   await fs.writeFile(filePath, JSON.stringify(state, null, 2));
 }
 
+/**
+ * 把 page 当前 context 的 storageState 合并刷新进磁盘文件（read-merge-write）。
+ * 原 snapshot-login.mjs 内部闭包 refreshStorage 提出——登录/验证码人工介入成功后
+ * 都要落盘（session cookie、cf_clearance 等），行为不变。
+ */
+export async function refreshStorageState(page, filePath) {
+  if (!filePath) return;
+  const base = await readStorageState(filePath);
+  const fresh = await page.context().storageState();
+  await writeStorageState(filePath, mergeStorageState(base, fresh));
+}
+
 // ===== 浏览器会话（Task 5） =====
 
 /**
@@ -264,11 +276,13 @@ export async function newU2MContext(browser, {
  * 教训：networkidle 作为 goto 门条件会被长连接/轮询站点（埋点、WebSocket、
  * heartbeat）确定性卡死——30s 超时×重试+回落曾致 65s 才就绪。静默等待只在
  * 网络确实变静时提前返回，等不到由封顶兜底；真断网时 dcl goto 自会抛错。
+ * 返回主文档响应的 HTTP 状态码（重定向链 = 最终响应；无响应时 null）——
+ * gateCheck 稀薄内容分诊消费（403/404/429/503）；其余调用方忽略返回值即可。
  */
 export async function gotoSettled(page, url, log = () => {}, opts = {}) {
   const { settleMs = 8000, gotoTimeout = 30000 } = opts;
   const t = performance.now();
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: gotoTimeout });
+  const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: gotoTimeout });
   debug(`goto ${url}（${((performance.now() - t) / 1000).toFixed(2)}s）`);
   const t2 = performance.now();
   try {
@@ -277,6 +291,7 @@ export async function gotoSettled(page, url, log = () => {}, opts = {}) {
   } catch {
     log(`networkidle ${settleMs}ms 内未达成（长连接/轮询站点常态），继续`);
   }
+  return resp?.status() ?? null;
 }
 
 /**

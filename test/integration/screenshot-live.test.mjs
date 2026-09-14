@@ -14,21 +14,27 @@ const transScript = path.resolve('script/render_markdown.mjs');
 // 内联 script 刻意保留：验证「剥 script 再标记」的确定性在两次渲染间成立。
 function startLiveServer() {
   let variant = 'v1';
+  // body 内容包 <main>：本夹具模拟文章页，主体结构是稀薄门禁的结构豁免信号
+  // （否则 75 归一字符 → 弹人工介入 viewer，测试无 WS 驱动必挂）。
   const html = () => variant === 'v1'
     ? `<!DOCTYPE html><html lang="zh-CN"><head><title>重渲染夹具</title>
 <script>document.title = 'hydration';</script></head><body>
+<main>
 <h1>标题一级</h1>
 <p>${'正文填充文本。'.repeat(8)}</p>
 <div class="module" style="background-color: rgb(30, 30, 30); color: rgb(255, 255, 255); padding: 16px">模块内容原始版</div>
 <p>结尾段落。</p>
+</main>
 </body></html>`
     : `<!DOCTYPE html><html lang="zh-CN"><head><title>重渲染夹具</title>
 <script>document.title = 'hydration';</script></head><body>
+<main>
 <h1>标题一级</h1>
 <p>${'正文填充文本。'.repeat(8)}</p>
 <p>翻版后新插入的段落，使后续 data-idx 整体平移。</p>
 <div class="module" style="background-color: rgb(30, 30, 30); color: rgb(255, 255, 255); padding: 16px">模块内容翻新版</div>
 <p>结尾段落。</p>
+</main>
 </body></html>`;
   const server = http.createServer((req, res) => {
     if (req.url === '/flip') {
@@ -66,7 +72,7 @@ after(() => {
 test('步骤 5 live 重渲染：同内容两次渲染 id 对位 → source:"live"；翻版失配 → 自动兜底 "snapshot"', async () => {
   // ── 步骤 1：对 v1 页面抓快照 ──
   const r1 = await runScript(process.execPath, [snapshotScript, '--url', server.url], {
-    env: { U2M_WORKING_ROOT: tmpRoot },
+    env: { U2M_WORKING_ROOT: tmpRoot, U2M_VIEWER_NOOPEN: '1' },
     timeoutMs: 90000,
   });
   assert.equal(r1.code, 0, `stderr: ${r1.stderr}`);

@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>迟渲染页</title></head>
+<body>
+<div id="app">加载中…</div>
+<script>
+  // ?grow=<ms>：ms 后注入充实正文（文本量过阈值 + article 结构豁免）——
+  // 测「介入后内容自己长出来」的回环/关窗 recheck 放行路径
+  const grow = Number(new URLSearchParams(location.search).get('grow') || 0);
+  if (grow > 0) setTimeout(() => {
+    document.title = '迟渲染完成';
+    document.body.innerHTML = '<article><h1>迟到的正文</h1><p>'
+      + '水合完成后注入的正文内容，用于把文本量抬过稀薄阈值。'.repeat(20)
+      + '</p></article>';
+  }, grow);
+</script>
+</body>
+</html>

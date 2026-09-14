@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>会员专区</title></head>
+<body>
+<article>
+  <h1>会员专区</h1>
+  <p>这里是足够长的会员专区正文，用于避开稀薄兜底分支、单独考察登录探测与懒触发滑块的交互。
+  页面加载时不存在任何挑战标记——挑战由点击「登录」按钮懒触发（行为式验证码的常见形态，
+  极验/阿里滑块多为此类：入口点击后才弹出验证浮层）。正文文本量必须超过稀薄阈值，
+  否则测试会被稀薄分支截胡而无法考察 probe 分类路径。</p>
+  <button id="loginBtn">登录</button>
+</article>
+<script>
+  // 点击登录 → 注入 geetest 风格滑块弹窗（懒触发挑战）
+  // ?auto=<ms>：弹窗出现 ms 后置成功态（geetest_panel_success + geetest_success），
+  //   再 500ms 后移除面板——CI 确定性测试用（模拟人工拖动滑块通过）
+  document.getElementById('loginBtn').addEventListener('click', () => {
+    if (document.querySelector('.geetest_panel')) return;
+    const panel = document.createElement('div');
+    panel.className = 'geetest_panel';
+    panel.setAttribute('style', 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center');
+    panel.innerHTML = '<div class="geetest_widget" style="width:340px;background:#fff;padding:20px;border-radius:8px">'
+      + '<div class="geetest_radar_tip" style="color:#333">拖动下方滑块完成拼图验证</div>'
+      + '<div class="geetest_slider_button" style="width:40px;height:40px;margin-top:12px;background:#4a90d9;border-radius:4px"></div></div>';
+    document.body.appendChild(panel);
+    const auto = Number(new URLSearchParams(location.search).get('auto') || 0);
+    if (auto > 0) setTimeout(() => {
+      panel.classList.add('geetest_panel_success');
+      panel.querySelector('.geetest_widget').innerHTML =
+        '<div class="geetest_success" style="color:#2a2">验证通过</div>';
+      setTimeout(() => panel.remove(), 500);
+    }, auto);
+  });
+</script>
+</body>
+</html>

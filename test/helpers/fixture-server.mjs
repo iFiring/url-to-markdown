@@ -12,6 +12,14 @@ export async function startFixtureServer(dirname = 'test/fixtures') {
   const server = http.createServer(async (req, res) => {
     try {
       const urlPath = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+      // /__status/<code>：状态码分诊测试专用路由（稀薄兜底的 403/429/503 分支）——
+      // 指定状态码 + 稀薄 body（无 main/article/iframe、无登录信号，恰好落入介入分支）
+      const statusMatch = /^\/__status\/(\d{3})$/.exec(urlPath);
+      if (statusMatch) {
+        res.writeHead(Number(statusMatch[1]), { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end('<!doctype html><html><head><title>blocked</title></head><body><p>Access restricted.</p></body></html>');
+        return;
+      }
       const file = path.join(root, urlPath === '/' ? '/static-article.html' : urlPath);
       if (!file.startsWith(root)) { res.writeHead(403); res.end(); return; }
       const data = await readFile(file);

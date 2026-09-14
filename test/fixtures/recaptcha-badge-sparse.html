@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>短内容页</title></head>
+<body>
+<!-- badge 误伤反例夹具（2026-09-14 审查修复 #3/#9/#10）：
+     稀薄正文（<200 归一字符、无 main/article）+ 页面防垃圾表单常见的 reCAPTCHA
+     passive badge iframe（约 320×60，src 含 recaptcha 特征）。
+     预期：badge 是「表单内嵌 widget」不是「整页挑战」——文本通道面积下限
+     （200×200）+ 面积通道都不命中 → dominant=false → 走稀薄分支③而非验证码分支②。
+     ?hide=offscreen：iframe 钉在 left:-9999px（隐藏）→ 命中与 hasFrame 都应忽略；
+     ?hide=opacity：iframe opacity:0 → 同上（checkVisibility 默认不查 opacity，
+     手查兜底）。 -->
+<div id="app">页面加载完成。</div>
+<iframe id="badge" src="/recaptcha-frame.html" title="reCAPTCHA"
+        style="position:fixed;right:0;bottom:0;width:320px;height:60px;border:0"></iframe>
+<script>
+  const hide = new URLSearchParams(location.search).get('hide');
+  if (hide === 'offscreen') {
+    document.getElementById('badge').style.left = '-9999px';
+    document.getElementById('badge').style.right = 'auto';
+  } else if (hide === 'opacity') {
+    document.getElementById('badge').style.opacity = '0';
+  }
+</script>
+</body>
+</html>

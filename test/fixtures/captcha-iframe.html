@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>iframe 挑战夹具</title></head>
+<body>
+<div id="shell">
+  <!-- iframe 的 URL 含 recaptcha 特征 → Node 侧 classifyFrameUrl 命中（跨域通道）；
+       300×200 小面积，面积通道不触发；正文充实与否由 ?sparse 控制文本通道 -->
+  <iframe src="/recaptcha-frame.html" width="300" height="200" style="border:1px solid #999"></iframe>
+</div>
+<script>
+  // ?sparse=1：保持正文稀薄（文本通道占优 → dominant=true）
+  // 默认：注入长文（占优守卫反例 → dominant=false，只记录 hits）
+  const sparse = new URLSearchParams(location.search).get('sparse');
+  if (!sparse) {
+    const d = document.createElement('div');
+    d.textContent = '这是足够长的正文文本，用于把主文档文本量抬过稀薄阈值，模拟挑战 iframe 只是页面小组件的常态。'.repeat(10);
+    document.body.appendChild(d);
+  }
+</script>
+</body>
+</html>

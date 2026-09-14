@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { loadSkips, recordSkips } from '../../script/lib/snapshot-login.mjs';
+import { loadSkips, recordSkips, RECORDABLE_SIGNALS } from '../../script/lib/snapshot-login.mjs';
+import { WEAK_SIGNALS, scoreSignals } from '../../script/lib/detector.mjs';
 
 const mkFile = (content) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-skips-'));
@@ -59,4 +60,38 @@ test('recordSkips：强信号永不入档；过滤后为空则不写文件', () 
   const f2 = path.join(dir, 'none.json');
   recordSkips(f2, 'a.com', ['password', 'loginConfirmed']);
   assert.equal(fs.existsSync(f2), false, '无弱信号可记时不应创建文件');
+});
+
+// —— 2026-09-14 人机门禁：content_sparse 入档（RECORDABLE_SIGNALS = 登录弱信号 ∪ content_sparse）——
+
+test('RECORDABLE_SIGNALS：登录弱信号 ∪ content_sparse，不含强信号', () => {
+  assert.deepEqual(RECORDABLE_SIGNALS, [...WEAK_SIGNALS, 'content_sparse']);
+  assert.ok(!RECORDABLE_SIGNALS.includes('password'));
+  assert.ok(!RECORDABLE_SIGNALS.includes('loginConfirmed'));
+});
+
+test('recordSkips：content_sparse 可入档，混合去重，强信号仍被过滤', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-skips-'));
+  const f = path.join(dir, 'login_decisions_skips.json');
+  recordSkips(f, 'a.com', ['content_sparse']);
+  assert.deepEqual(JSON.parse(fs.readFileSync(f, 'utf8')), { 'a.com': ['content_sparse'] });
+  // 与登录弱信号共存 + 重复去重 + 强信号过滤
+  recordSkips(f, 'a.com', ['content_sparse', 'loginButton', 'password']);
+  assert.deepEqual(JSON.parse(fs.readFileSync(f, 'utf8'))['a.com'].sort(),
+    ['content_sparse', 'loginButton']);
+});
+
+test('登录计分与 content_sparse 记忆天然隔离（dismissed 判定不受多余条目影响）', () => {
+  // 记忆里只有 content_sparse：登录弱信号命中不在记忆内 → 照常计票，不豁免
+  const r1 = scoreSignals({ url: true, content: true }, ['content_sparse']);
+  assert.equal(r1.dismissed, false);
+  assert.equal(r1.needsLogin, true, '记忆外新证据合议成立');
+  // 记忆含登录信号 + content_sparse：登录命中全在记忆内 → 照常豁免
+  const r2 = scoreSignals({ url: true, content: true }, ['url', 'content', 'content_sparse']);
+  assert.equal(r2.dismissed, true);
+  assert.equal(r2.needsLogin, false);
+  // 无任何登录命中时 content_sparse 不产生票数
+  const r3 = scoreSignals({ url: false, content: false }, ['content_sparse']);
+  assert.equal(r3.hits, 0);
+  assert.equal(r3.dismissed, false);
 });

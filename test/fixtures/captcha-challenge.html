@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Just a moment... | 示例站</title>
+<style>
+  body { margin: 0; background: #1b1b1b; color: #ddd; font-family: sans-serif; }
+  #challenge-form { position: fixed; inset: 0; display: flex; flex-direction: column;
+                    align-items: center; justify-content: center; gap: 16px; background: #1b1b1b; }
+  .cf-turnstile { width: 300px; height: 66px; background: #2a2a2a; border: 1px solid #444;
+                  display: flex; align-items: center; justify-content: center; color: #eee; }
+</style>
+</head>
+<body>
+<div id="challenge-form">
+  <h2>正在验证您与互联网的连接</h2>
+  <div class="cf-turnstile">Verify you are human</div>
+</div>
+<script>
+  // ?auto=<ms>：ms 后挑战自消解、替换为充实正文（CI 确定性测试用——
+  // 模拟人工过验证后落地内容页，门禁回环应放行）
+  const auto = Number(new URLSearchParams(location.search).get('auto') || 0);
+  if (auto > 0) setTimeout(() => {
+    document.getElementById('challenge-form').remove();
+    document.title = '示例文章';
+    document.body.innerHTML = '<article><h1>正文标题</h1><p>'
+      + '这是挑战消解后的正文段落，用于断言门禁回环后文本量超过稀薄阈值、结构豁免生效。'.repeat(12)
+      + '</p></article>';
+  }, auto);
+</script>
+</body>
+</html>
