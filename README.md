@@ -18,7 +18,7 @@ Traditional script-based converters (`markdown-it / turndown`) all suffer from t
 - Recognizes hidden/collapsed content
 - Supports LLM semantic recognition and conversion for tables and code blocks that scripts cannot convert
 - Accurately identifies complex UI modules and converts them into images; supports screenshots of scrollable content
-- Supports login via QR code / username-password / captcha (some sites require login)
+- Opens a browser window for human-in-the-loop actions such as "scan QR code" / "enter username & password" / "clear captcha"
 - Supports automatic redirection into pages embedded in iframes
 
 ## What this SKILL cannot do yet
