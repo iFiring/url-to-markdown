@@ -6,11 +6,14 @@ See [SKILL.md](SKILL.md) for the operations manual (step 0-5 decision tables, er
 
 ## Why build this
 
-Traditional script-based converters (`markdown-it / turndown`) all suffer from these problems:
+Traditional script-based converters (`markitdown / turndown / markdownify`) all suffer from these problems:
 
 - Cannot accurately identify heading levels (`h1-h5`) or button-style subheadings
 - Cannot detect hidden sections and paragraphs
-- Cannot correctly handle complex UI modules: flowcharts, interactive controls
+- Cannot correctly identify and convert complex UI modules: flowcharts, interactive controls
+- Cannot handle single-page applications (SPAs) rendered by JavaScript
+- Cannot convert special pages embedded in iframes or other special elements
+- Cannot open pages behind captchas or login walls
 
 ## What this SKILL can do
 
@@ -18,7 +21,7 @@ Traditional script-based converters (`markdown-it / turndown`) all suffer from t
 - Recognizes hidden/collapsed content
 - Supports LLM semantic recognition and conversion for tables and code blocks that scripts cannot convert
 - Accurately identifies complex UI modules and converts them into images; supports screenshots of scrollable content
-- Opens a browser window for human-in-the-loop actions such as "scan QR code" / "enter username & password" / "clear captcha"
+- Opens a browser window for human-in-the-loop actions such as "scan QR code" / "enter username & password" / "clear captcha", and caches the login state (cookies)
 - Supports automatic redirection into pages embedded in iframes
 
 ## What this SKILL cannot do yet
