@@ -20,9 +20,7 @@ import { URL as Url } from 'node:url';
 import { needsLogin as detectLogin, WEAK_SIGNALS } from './detector.mjs';
 import { runViewerSession } from './screencast.mjs';
 import { refreshStorageState, gotoSettled } from './browser.mjs';
-
-const STRONG_NAMES = { password: '密码框', loginConfirmed: '登录入口点击确认' };
-const METHOD_NAMES = { modal: '全屏弹窗', navigate: '跳转登录页' };
+import { resolveViewerLang, viewerText } from './viewer-i18n.mjs';
 
 const isPlainObject = (v) => v && typeof v === 'object' && !Array.isArray(v);
 
@@ -69,25 +67,6 @@ export const recordSkips = (file, hostname, signals) => {
   fs.writeFileSync(file, JSON.stringify(all, null, 2) + '\n');
 };
 
-/** viewer 工具栏判定详情：强信号形态 + 票数 + 命中清单（记忆内标注）。 */
-const buildReason = (result, memorized) => {
-  const strong = result.strong
-    .map((k) => (k === 'loginConfirmed' && result.probe?.method)
-      ? `${STRONG_NAMES[k]}（${METHOD_NAMES[result.probe.method] || result.probe.method}）`
-      : STRONG_NAMES[k] || k)
-    .join('、');
-  const hits = result.hitNames.map((k) => (memorized.includes(k) ? `${k}(记忆内)` : k)).join('、');
-  return `检测到登录信号: ${strong}｜票数 ${result.hits}/6：${hits}`;
-};
-
-/** 跳过确认框文案：如实说明将记住什么（弱信号）与不记什么（强信号）。 */
-const buildSkipConfirm = (result, hostname) => {
-  const weakHits = result.hitNames.filter((k) => WEAK_SIGNALS.includes(k));
-  return weakHits.length
-    ? `确认跳过登录？将记住：${hostname} 的 ${weakHits.join('、')} 信号——后续命中全部在记忆内时不再弹本窗口；出现新信号仍会照常计票。强信号不记忆。`
-    : `确认跳过登录？本次仅由强信号触发（不写入记忆），跳过只对本次转换生效，下次可能再次弹出。`;
-};
-
 /**
  * 登录 viewer 会话（登录阶段的人工介入环节）。机制走 runViewerSession 通用骨架
  * （screencast.mjs，自旧 snapshotLogin 整体平移），本函数只承载登录
@@ -108,6 +87,8 @@ export async function openLoginViewer(page, url, ctx) {
   } = ctx;
   const refreshStorage = () => refreshStorageState(page, ssPath);
   const restore = async () => { if (restoreIfProbed) await restoreIfProbed(); };
+  // viewer 文案走双语字典（调用时求值语言；statics 走 loginViewerHtml 的登录形态默认兜底）
+  const T = viewerText(resolveViewerLang());
 
   // 未登录：启动 Screencast viewer 等待人工登录（跳过=经确认框后继续，弱信号入档）
   return runViewerSession(page, {
@@ -116,8 +97,13 @@ export async function openLoginViewer(page, url, ctx) {
     timeoutReason: 'login_timeout',
     log,
     viewerOpts: {
-      reason: buildReason(result, memorized),
-      skipConfirmText: buildSkipConfirm(result, hostname),
+      // 工具栏判定详情：强信号形态 + 票数 + 命中清单（记忆内标注）
+      reason: T.build.loginReason({ result, memorized }),
+      // 跳过确认框：如实说明将记住什么（弱信号）与不记什么（强信号）
+      skipConfirmText: T.build.loginSkipConfirm({
+        hostname,
+        weakHits: result.hitNames.filter((k) => WEAK_SIGNALS.includes(k)),
+      }),
     },
     // 进 viewer 前的状态整理：探测确认（弹窗开着/停在登录页）→ 保留原状进 viewer
     // 最利于登录；点击过但未确认（可能弹出无关 dropdown）→ 还原干净页再进 viewer

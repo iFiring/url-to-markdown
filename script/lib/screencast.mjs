@@ -1,6 +1,9 @@
 // script/lib/screencast.mjs —— CDP Screencast → 本地 HTTP+WS viewer（移植 .temp/login.mjs，去 express）
 // 泛化为三形态参数化 viewer（登录/人机验证/稀薄内容人工介入）：全部文案可参数化，
-// 默认值 = 登录 viewer 原文案逐字一致（零参数调用产物与旧版相同）。skipText:null = 不渲染跳过
+// 默认值 = 当前语言的登录形态文案（lib/viewer-i18n.mjs 双语字典；语言 =
+// U2M_LANG 环境变量 > script/lib/locale.mjs 导出标记 > 'en'，零参数调用 = 登录形态）。
+// 边界：viewer HTML 内用户可见文字（含 WS 三状态、<html lang>、确认框）走 i18n 字典，
+// stderr log 行（'viewer 已连接' 等）恒中文不动。skipText:null = 不渲染跳过
 // 按钮（验证码 viewer 形态——只能解决或关窗）；reasonHint:null = 省略 reason 行尾句。
 // WS 消息协议名不改（login_done/skip_login/recheck_failed）——viewer 会话是单用途的，
 // 语义差异由调用方回调承载；改名会破坏现有集成测试的 WS 驱动。
@@ -9,6 +12,7 @@
 import http from 'node:http';
 import { execFile } from 'node:child_process';
 import { WebSocketServer } from 'ws';
+import { resolveViewerLang, viewerText } from './viewer-i18n.mjs';
 
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g,
   (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -23,27 +27,16 @@ export function openViewerCommand(platform, url) {
 /** JS 字符串安全注入：< 转义防 </script> 提前闭合标签（JSON.stringify 不处理 HTML 上下文）。 */
 const safeJsString = (s) => JSON.stringify(String(s)).replace(/</g, '\\u003c');
 
-const DEFAULT_SKIP_CONFIRM = '确认跳过登录？将不打开登录流程、直接继续转换本次页面。';
-
-/** 文案默认值 = 登录 viewer 原文案（逐字）。null 语义仅 skipText/reasonHint 有（见上）。 */
-const VIEWER_TEXT_DEFAULTS = {
-  title: 'url-to-markdown 登录',
-  headingText: '🖥️ 远程页面登录',
-  doneText: '✅ 登录完成',
-  skipText: '⏭️ 跳过登录',
-  infoText: '在画面中完成登录后点「登录完成」。点击画面后可键盘输入；滚轮滚动。',
-  reasonHint: '若无需登录可点「跳过登录」',
-  recheckFailedText: '仍未检测到登录态，请继续',
-  checkingText: '检测登录态中…',
-  skippingText: '跳过登录，继续转换…',
-};
-
 export function loginViewerHtml({
   width = 1280, height = 800, reason = '', skipConfirmText = '',
+  lang, // 显式语言覆盖（'en'|'zh'，测试/直连用）；缺省 resolveViewerLang()
   title, headingText, doneText, skipText, infoText, reasonHint,
   recheckFailedText, checkingText, skippingText,
+  connectingText, connectedText, disconnectedText, // WS 三状态（缺省走 common 字典）
 } = {}) {
-  const D = VIEWER_TEXT_DEFAULTS;
+  const vLang = (lang === 'en' || lang === 'zh') ? lang : resolveViewerLang();
+  const T = viewerText(vLang);
+  const D = T.login.statics; // 默认值 = 当前语言的登录形态（零参数调用 = 登录 viewer）
   const vTitle = title ?? D.title;
   const vHeading = headingText ?? D.headingText;
   const vDone = doneText ?? D.doneText;
@@ -53,13 +46,17 @@ export function loginViewerHtml({
   const vRecheckFailed = recheckFailedText ?? D.recheckFailedText;
   const vChecking = checkingText ?? D.checkingText;
   const vSkipping = skippingText ?? D.skippingText;
-  const skipConfirm = safeJsString(skipConfirmText || DEFAULT_SKIP_CONFIRM);
+  const vConnecting = connectingText ?? T.common.connectingText;
+  const vConnected = connectedText ?? T.common.connectedText;
+  const vDisconnected = disconnectedText ?? T.common.disconnectedText;
+  const skipConfirm = safeJsString(skipConfirmText || T.common.defaultSkipConfirm);
   const skipBtnHtml = vSkip === null ? '' : `<button id="skip">${escapeHtml(vSkip)}</button>`;
+  // reason 行标点随语言（zh：'R。hint。'/'R。'——与旧版逐字节一致；en：'R. hint.'/'R.'）
   const reasonHtml = reason
-    ? `<p class="info reason">📍 ${escapeHtml(reason)}。${vHint === null ? '' : escapeHtml(vHint) + '。'}</p>`
+    ? `<p class="info reason">📍 ${escapeHtml(reason)}${vHint === null ? '' : escapeHtml(T.common.reasonSep) + escapeHtml(vHint)}${escapeHtml(T.common.reasonEnd)}</p>`
     : '';
   return `<!doctype html>
-<html lang="zh">
+<html lang="${vLang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -81,12 +78,12 @@ export function loginViewerHtml({
   #skip { padding: 10px 28px; font-size: 15px; border-radius: 8px; border: 1px solid #555;
           background: #1a1a2e; color: #bbb; cursor: pointer; margin-left: 10px; }
   #skip:hover { background: #22223a; }
-  .info { margin-top: 10px; color: #888; font-size: 12px; }
+  .info { margin-top: 10px; color: #888; font-size: 12px; max-width: min(920px, 95vw); text-align: center; }
   .reason { color: #fbbf24; }
 </style>
 </head>
 <body>
-<div class="header"><h1>${escapeHtml(vHeading)}</h1><span id="status">连接中…</span></div>
+<div class="header"><h1>${escapeHtml(vHeading)}</h1><span id="status">${escapeHtml(vConnecting)}</span></div>
 <canvas id="screen" width="${width}" height="${height}" tabindex="0"></canvas>
 <div class="toolbar"><button id="done">${escapeHtml(vDone)}</button>${skipBtnHtml}</div>
 ${reasonHtml}
@@ -98,8 +95,8 @@ ${reasonHtml}
   let ws;
   function connect() {
     ws = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host);
-    ws.onopen = () => { statusEl.textContent = '已连接'; statusEl.className = 'connected'; canvas.focus(); };
-    ws.onclose = () => { statusEl.textContent = '连接已断开'; statusEl.className = 'failed'; setTimeout(connect, 3000); };
+    ws.onopen = () => { statusEl.textContent = ${safeJsString(vConnected)}; statusEl.className = 'connected'; canvas.focus(); };
+    ws.onclose = () => { statusEl.textContent = ${safeJsString(vDisconnected)}; statusEl.className = 'failed'; setTimeout(connect, 3000); };
     ws.onerror = () => ws.close();
     ws.onmessage = (ev) => {
       const msg = JSON.parse(ev.data);
@@ -158,8 +155,9 @@ async function relayInput(cdp, msg) {
 /** 起 HTTP(viewer 页)+WS 服务，把 page 的 CDP Screencast 转发给 WS 客户端并转发输入。 */
 export async function startScreencastViewer({
   page, port = 0, width = 1280, height = 800, quality = 80, reason = '', skipConfirmText = '',
-  title, headingText, doneText, skipText, infoText, reasonHint,
+  lang, title, headingText, doneText, skipText, infoText, reasonHint,
   recheckFailedText, checkingText, skippingText,
+  connectingText, connectedText, disconnectedText,
   onLoginDone, onSkipLogin, onClientClose, onFirstConnect, log = () => {},
 }) {
   const server = http.createServer((req, res) => {
@@ -167,8 +165,9 @@ export async function startScreencastViewer({
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
       res.end(loginViewerHtml({
         width, height, reason, skipConfirmText,
-        title, headingText, doneText, skipText, infoText, reasonHint,
+        lang, title, headingText, doneText, skipText, infoText, reasonHint,
         recheckFailedText, checkingText, skippingText,
+        connectingText, connectedText, disconnectedText,
       }));
     } else { res.writeHead(404); res.end(); }
   });

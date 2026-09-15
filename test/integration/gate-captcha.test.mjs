@@ -31,11 +31,13 @@ const presetSkips = (root, obj) => {
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// 子进程一律显式钉 U2M_LANG:'en'（密闭性——runScript 透传 process.env，
+// 开发 shell 若设了 U2M_LANG 会翻掉全部 HTML 文案断言）；zh 用例经 extraEnv 覆盖。
 /** 跑 snapshot.mjs，出现 viewer 地址时连 WS 并执行 wsAct(ws, viewerUrl)。 */
-function runWithViewer(url, root, wsAct, timeoutMs = 180000, onStderrLine = null) {
+function runWithViewer(url, root, wsAct, timeoutMs = 180000, onStderrLine = null, extraEnv = {}) {
   const state = { acted: false, viewerUrl: null, sawViewer: false };
   const pr = runScript(process.execPath, [snapshotScript, '--url', url], {
-    env: { U2M_WORKING_ROOT: root, U2M_VIEWER_NOOPEN: '1' },
+    env: { U2M_WORKING_ROOT: root, U2M_VIEWER_NOOPEN: '1', U2M_LANG: 'en', ...extraEnv },
     timeoutMs,
     onStderr: (line) => {
       onStderrLine?.(line);
@@ -54,7 +56,7 @@ function runWithViewer(url, root, wsAct, timeoutMs = 180000, onStderrLine = null
 
 const runPlain = (url, root, timeoutMs = 180000) =>
   runScript(process.execPath, [snapshotScript, '--url', url],
-    { env: { U2M_WORKING_ROOT: root, U2M_VIEWER_NOOPEN: '1' }, timeoutMs });
+    { env: { U2M_WORKING_ROOT: root, U2M_VIEWER_NOOPEN: '1', U2M_LANG: 'en' }, timeoutMs });
 
 /** 取 viewer 页面 HTML（断言弹的是哪种形态的窗口）。 */
 const viewerHtml = async (url) => (await fetch(url)).text();
@@ -66,7 +68,8 @@ test('验证码 viewer：人工解决（auto 自消解）→ 管线完成 + stor
   const { promise, state } = runWithViewer(`${server.url}/captcha-challenge.html?auto=2500`, root,
     async (ws) => {
       const html = await viewerHtml(state.viewerUrl);
-      assert.ok(html.includes('人机验证'), '应弹验证码 viewer 形态');
+      assert.ok(html.includes('Human Verification'), '应弹验证码 viewer 形态（en 文案）');
+      assert.ok(html.includes('<html lang="en">'), 'lang 属性随钉住的 U2M_LANG=en');
       assert.ok(!html.includes('<button id="skip"'), '验证码 viewer 不得有跳过按钮');
       await sleep(3000); // auto=2500 自消解（挑战替换为充实正文）
       ws.send(JSON.stringify({ type: 'login_done' }));
@@ -138,14 +141,32 @@ test('稀薄 200 → 介入 viewer；skip → content_sparse 入档 + 管线继�
   const { promise, state } = runWithViewer(`${server.url}/sparse-empty.html`, root,
     async (ws) => {
       const html = await viewerHtml(state.viewerUrl);
-      assert.ok(html.includes('页面内容确认'), '应弹介入 viewer 形态');
-      assert.ok(html.includes('也可能') || html.includes('本就'), '文案应诚实声明可能是空页面');
-      ws.send(JSON.stringify({ type: 'skip_login' })); // 「⏭️ 仍然继续」
+      assert.ok(html.includes('Page Content Check'), '应弹介入 viewer 形态（en 文案）');
+      assert.ok(html.includes('genuinely empty'), '文案应诚实声明可能是空页面');
+      ws.send(JSON.stringify({ type: 'skip_login' })); // 「⏭️ Continue Anyway」
     });
   const r = await promise;
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   assert.equal(JSON.parse(r.stdout).status, 'ok');
   assert.ok(readSkips(root)['127.0.0.1'].includes('content_sparse'), '跳过应入档 content_sparse');
+});
+
+test('viewer 语言：U2M_LANG=zh 覆盖 → 介入 viewer 出中文文案 + lang 属性', async () => {
+  const root = mkRoot();
+  const { promise, state } = runWithViewer(`${server.url}/sparse-empty.html`, root,
+    async (ws) => {
+      const html = await viewerHtml(state.viewerUrl);
+      assert.ok(html.includes('<html lang="zh">'), 'lang 属性应随 U2M_LANG');
+      assert.ok(html.includes('页面内容确认'), 'zh 介入 viewer 标题');
+      assert.ok(html.includes('也可能'), 'zh suspicion 诚实声明');
+      assert.ok(html.includes('⏭️ 仍然继续'), 'zh 跳过按钮');
+      ws.send(JSON.stringify({ type: 'skip_login' }));
+    }, 180000, null, { U2M_LANG: 'zh' });
+  const r = await promise;
+  assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+  assert.equal(JSON.parse(r.stdout).status, 'ok');
+  assert.ok(readSkips(root)['127.0.0.1'].includes('content_sparse'), 'zh 形态下跳过照常入档');
+  assert.ok(state.sawViewer);
 });
 
 test('稀薄记忆豁免：二跑不弹 viewer + result 文件 gateSkippedByMemory 通报', async () => {
@@ -168,7 +189,7 @@ test('豁免打破：content_sparse 记忆不压制已知挑战 → 验证码 vi
   const { promise, state } = runWithViewer(`${server.url}/captcha-challenge.html?auto=2000`, root,
     async (ws) => {
       const html = await viewerHtml(state.viewerUrl);
-      assert.ok(html.includes('人机验证'), '挑战标记优先于稀薄记忆豁免');
+      assert.ok(html.includes('Human Verification'), '挑战标记优先于稀薄记忆豁免');
       await sleep(2600);
       ws.send(JSON.stringify({ type: 'login_done' }));
     });
@@ -183,7 +204,7 @@ test('稀薄 done 回环：内容迟水合长出来后点「页面正常」→ �
   const { promise } = runWithViewer(`${server.url}/sparse-grow.html?grow=1500`, root,
     async (ws) => {
       await sleep(2200); // 等内容注入（文本量过阈值 + article 结构豁免）
-      ws.send(JSON.stringify({ type: 'login_done' })); // 「✅ 页面正常，继续」
+      ws.send(JSON.stringify({ type: 'login_done' })); // 「✅ Page OK, Continue」
     });
   const r = await promise;
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
@@ -229,7 +250,7 @@ test('404 ∧ 稀薄 → error http_404（不弹 viewer、不写快照）', asyn
   const root = mkRoot();
   let sawViewer = false;
   const r = await runScript(process.execPath, [snapshotScript, '--url', `${server.url}/no-such-page-xyz`], {
-    env: { U2M_WORKING_ROOT: root, U2M_VIEWER_NOOPEN: '1' },
+    env: { U2M_WORKING_ROOT: root, U2M_VIEWER_NOOPEN: '1', U2M_LANG: 'en' },
     onStderr: (line) => { if (/viewer:/.test(line)) sawViewer = true; },
   });
   assert.equal(r.code, 1);
@@ -252,7 +273,7 @@ test('404 ∧ 稀薄 ∧ URL 登录信号 → 仍 http_404（硬事实不被弱�
 test('登录跳过后：管线继续（强信号复活不判连环门）+ stdout 不报 loginSkippedByMemory（审查修复 #14）', async () => {
   const root = mkRoot();
   const { promise } = runWithViewer(`${server.url}/login-wall.html`, root,
-    (ws) => ws.send(JSON.stringify({ type: 'skip_login' }))); // 「⏭️ 跳过登录」+ 确认
+    (ws) => ws.send(JSON.stringify({ type: 'skip_login' }))); // 「⏭️ Skip Login」+ 确认
   const r = await promise;
   assert.equal(r.code, 0, `stderr: ${r.stderr}`);
   const out = JSON.parse(r.stdout);
@@ -268,7 +289,7 @@ test('403 ∧ 稀薄 → 强嫌疑介入 viewer（reason 带状态码）；skip 
     async (ws) => {
       const html = await viewerHtml(state.viewerUrl);
       assert.ok(html.includes('HTTP 403'), 'reason 应带状态码分诊结论');
-      assert.ok(html.includes('拦截') || html.includes('阻断'), '应提示疑似访问被拦截');
+      assert.ok(html.includes('blocked'), '应提示疑似访问被拦截（en: access appears blocked）');
       ws.send(JSON.stringify({ type: 'skip_login' }));
     });
   const r = await promise;
@@ -298,8 +319,8 @@ test('懒触发滑块全链路：probe 弹挑战 → 验证码 viewer（现场�
   const { promise, state } = runWithViewer(`${server.url}/captcha-slider-lazy.html?auto=1500`, root,
     async (ws) => {
       const html = await viewerHtml(state.viewerUrl);
-      assert.ok(html.includes('人机验证'), '探测触发的滑块应路由到验证码 viewer 而非登录 viewer');
-      assert.ok(html.includes('geetest') || html.includes('挑战'), 'reason 应如实报告挑战来源');
+      assert.ok(html.includes('Human Verification'), '探测触发的滑块应路由到验证码 viewer 而非登录 viewer');
+      assert.ok(html.includes('geetest') || html.includes('challenge'), 'reason 应如实报告挑战来源');
       await sleep(2600); // auto=1500 置成功态，+500ms 移除面板
       ws.send(JSON.stringify({ type: 'login_done' }));
     }, 180000, (line) => { if (line.includes('探测懒触发')) lazyProbeLogs += 1; });
@@ -321,7 +342,7 @@ test('重定向目标页挑战覆盖：壳页 iframe 内挑战与目标页挑战
   let viewers = 0;
   const r = await runScript(process.execPath,
     [snapshotScript, '--url', `${server.url}/redirect-shell-dyn.html?to=${target}`], {
-      env: { U2M_WORKING_ROOT: root, U2M_VIEWER_NOOPEN: '1' },
+      env: { U2M_WORKING_ROOT: root, U2M_VIEWER_NOOPEN: '1', U2M_LANG: 'en' },
       timeoutMs: 180000,
       onStderr: (line) => {
         const m = line.match(/viewer: (http:\/\/127\.0\.0\.1:\d+)/);

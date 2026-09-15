@@ -30,13 +30,18 @@ import { collectGatePageSignals } from './detector-captcha.mjs';
 import { loadSkips, recordSkips, skipsFileFor, openLoginViewer } from './snapshot-login.mjs';
 import { runViewerSession } from './screencast.mjs';
 import { refreshStorageState, gotoSettled } from './browser.mjs';
+import { resolveViewerLang, viewerText } from './viewer-i18n.mjs';
 
 /** 稀薄兜底的弱信号名（入 login_decisions_skips.json，RECORDABLE_SIGNALS 已含）。 */
 export const SPARSE_SIGNAL = 'content_sparse';
 
 const err = (reason) => { const e = new Error(reason); e.reason = reason; return e; };
 
+/** 厂商清单的中文版——**仅限 stderr log 行**（恒中文）；viewer reason 走 viewer-i18n 的 captchaReason。 */
 const vendorNote = (pg) => [...new Set(pg.captcha.hits.map((h) => h.vendor))].join('、') || '未知类型';
+
+/** 命中厂商名去重清单（viewer-i18n captchaReason 的纯数据入参）。 */
+const vendorList = (pg) => [...new Set(pg.captcha.hits.map((h) => h.vendor))];
 
 /**
  * 验证码 viewer 会话：无跳过；done→recheck（挑战不再占优 ∨ 成功态）通过则
@@ -44,21 +49,15 @@ const vendorNote = (pg) => [...new Set(pg.captcha.hits.map((h) => h.vendor))].jo
  * 超时 → captcha_timeout（计时语义由 runViewerSession 统一）。
  */
 async function openCaptchaViewer(page, { pg, ssPath, timeout, backstopMs, log }) {
+  const T = viewerText(resolveViewerLang()); // viewer 文案双语字典（调用时求值语言）
   return runViewerSession(page, {
     timeout,
     backstopMs,
     timeoutReason: 'captcha_timeout',
     log,
     viewerOpts: {
-      title: 'url-to-markdown 人机验证',
-      headingText: '🛡️ 人机验证',
-      doneText: '✅ 验证完成',
-      skipText: null, // 无跳过——挑战页抓下来必然是垃圾产物，只有解决或放弃（关窗=报错）
-      infoText: '请在画面中完成人机验证（支持拖动滑块/点击验证），完成后点「验证完成」。关闭窗口将终止本次转换。',
-      reasonHint: null,
-      recheckFailedText: '仍检测到验证挑战，请继续完成',
-      checkingText: '检测挑战状态中…',
-      reason: `检测到人机验证挑战: ${vendorNote(pg)}（页面正文 ${pg.sparse.textLen} 字符）`,
+      ...T.captcha.statics, // 含 skipText:null（无跳过——挑战页抓下来必然是垃圾产物，只有解决或放弃，关窗=报错）与 reasonHint:null
+      reason: T.build.captchaReason({ vendors: vendorList(pg), textLen: pg.sparse.textLen }),
     },
     onDone: async (ws, api) => {
       if (api.isSettled()) return; // finish/fail 后 viewer close 触发的迟到消息不再处理
@@ -95,26 +94,16 @@ async function openCaptchaViewer(page, { pg, ssPath, timeout, backstopMs, log })
  * 视同 done；超时 → gate_timeout。
  */
 async function openInterventionViewer(page, { pg, httpStatus, skipsFile, hostname, ssPath, timeout, backstopMs, log }) {
-  const suspicion = (httpStatus !== null && httpStatus !== 200)
-    ? `HTTP ${httpStatus}，疑似访问被拦截`
-    : '也可能是本就内容为空的页面';
+  const T = viewerText(resolveViewerLang()); // viewer 文案双语字典（调用时求值语言；suspicion 分诊在 sparseReason 内）
   return runViewerSession(page, {
     timeout,
     backstopMs,
     timeoutReason: 'gate_timeout',
     log,
     viewerOpts: {
-      title: 'url-to-markdown 人工确认',
-      headingText: '🔍 页面内容确认',
-      doneText: '✅ 页面正常，继续',
-      skipText: '⏭️ 仍然继续',
-      infoText: '请确认页面状态：需要人机验证就在画面中完成它，然后点「页面正常，继续」；页面本就为空则点「仍然继续」。',
-      reasonHint: null,
-      recheckFailedText: '正文仍不足，请继续确认',
-      checkingText: '记录中…',
-      skippingText: '继续转换…',
-      reason: `页面正文仅 ${pg.sparse.textLen} 字符且无主体结构（${suspicion}）`,
-      skipConfirmText: `确认仍然继续？将记住：${hostname} 的 ${SPARSE_SIGNAL} 信号——后续该站正文稀薄时不再弹本窗口、直接继续转换；出现已知验证挑战或登录信号时仍会照常处理。`,
+      ...T.sparse.statics, // 含 reasonHint:null
+      reason: T.build.sparseReason({ textLen: pg.sparse.textLen, httpStatus }),
+      skipConfirmText: T.build.sparseSkipConfirm({ hostname, signal: SPARSE_SIGNAL }),
     },
     onSkip: async (api) => {
       if (api.isSettled()) return;

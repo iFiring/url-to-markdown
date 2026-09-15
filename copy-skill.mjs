@@ -8,6 +8,9 @@
  * README 已双语化：英文导出取 README.md、中文导出取 README.zh-CN.md，
  * 均归一为导出物内 README.md（手册链接目标本就是 SKILL.md，无须改写正文）。
  * 两份导出的 package.json 均钉死依赖版本（取自仓库 node_modules）、删除 scripts 段。
+ * viewer UI 语言随导出物：script/lib/locale.mjs 是两份导出物 script/ 中唯一内容被
+ * 改写的文件（en 导出物 = 'en'、zh 导出物 = 'zh'；lib/viewer-i18n.mjs 消费），
+ * 其余 script/ 文件逐字节拷贝——文件名两侧一致，清单相等契约不受影响。
  */
 import fs from 'node:fs';
 
@@ -17,6 +20,13 @@ if (!fs.existsSync('SKILL.md')) {
 }
 
 const GUIDES = ['analyze_html_guide', 'markdown_skeleton_guide'];
+
+// 导出物语言标记（两侧都显式写——幂等，且源文件万一漂移也不会带进导出物）
+const LOCALE_REL = 'script/lib/locale.mjs';
+const localeSrc = (zh) => `// script/lib/locale.mjs —— 导出物语言标记（copy-skill.mjs 写入，勿手改）：viewer UI 语言。
+// 优先级：U2M_LANG 环境变量 > 本标记 > 'en'（lib/viewer-i18n.mjs 的 resolveViewerLang 消费）。
+export const SKILL_LOCALE = '${zh ? 'zh' : 'en'}';
+`;
 
 const TARGETS = [
   { dir: '.temp/url-to-markdown',    pkgName: 'url-to-markdown',    skill: 'SKILL.md',       readme: 'README.md', zh: false },
@@ -29,6 +39,7 @@ for (const { dir, pkgName, skill, readme, zh } of TARGETS) {
 
   fs.cpSync(skill, `${dir}/SKILL.md`);
   fs.cpSync('script', `${dir}/script`, { recursive: true });
+  fs.writeFileSync(`${dir}/${LOCALE_REL}`, localeSrc(zh));
   for (const base of GUIDES) {
     fs.cpSync(`references/${base}${zh ? '.zh-CN' : ''}.md`, `${dir}/references/${base}.md`);
   }

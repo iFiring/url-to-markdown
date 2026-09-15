@@ -2,6 +2,8 @@
 
 前置：`bash script/init.sh` 输出 ok（纯环境自检；核心参数 skill-root / url-name / url-working-path 由步骤 1 输出）。
 
+viewer 语言：源仓库开发态默认**英文**界面（`U2M_LANG=zh` 切中文；zh 导出物默认中文）——下文按钮标签按「英文（中文）」标注。
+
 > 原步骤 1/2 已合并为单 CLI `snapshot.mjs`（单命令完成快照 + 清洗），后续步骤重编号 3→2、4→3、5→4、6→5、产物 `2_*`→`1_*`、`3_key_ids`→`2_key_ids`、`4_*`→`3_*`、`5_skeleton*`→`4_skeleton*`、`6_*`→`5_*`——下文历史执行记录保留当时的旧编号与产物名。
 
 ## 1. 真实静态文章页
@@ -48,7 +50,7 @@
 ## 2. 真实登录墙页
 
 1. `node script/snapshot.mjs --url <登录页URL>` → viewer 弹出（内部 snapshot-login.mjs 检测到需登录）
-2. 在 viewer 中完成真实登录 → 点「✅ 登录完成」→ 脚本继续执行滚动、检测、快照
+2. 在 viewer 中完成真实登录 → 点「✅ Login Done」（✅ 登录完成）→ 脚本继续执行滚动、检测、快照
 3. 重跑同 URL → storageState 复用，无需再次登录
 4. 后续按 SKILL.md 步骤 2-5 继续
 
@@ -147,8 +149,8 @@ openai 页检查点（英文文档，展开器/嵌套图解/UI 控件密集）�
   loginConfirmed+loginButton 命中（2/6），强信号 loginConfirmed（modal）→
   需要登录`；viewer 正常启动；超时如实 emit `{"status":"error",
   "reason":"login_timeout"}`；`working/cookies/` 未生成 skips 文件（未点跳过）
-- 待人工全链路验证：viewer 内真实登录知乎 → 「✅ 登录完成」recheck 通过 →
-  快照抓到登录态页面；或「⏭️ 跳过登录」确认框 → `login_decisions_skips.json`
+- 待人工全链路验证：viewer 内真实登录知乎 → 「✅ Login Done」（✅ 登录完成）recheck 通过 →
+  快照抓到登录态页面；或「⏭️ Skip Login」（⏭️ 跳过登录）确认框 → `login_decisions_skips.json`
   写入 `{"www.zhihu.com":["loginButton"]}` → 快照抓干净页（无 SignFlow 弹窗）→
   二次运行豁免不弹 viewer 且 emit `loginSkippedByMemory:["loginButton"]`
 
@@ -202,10 +204,10 @@ URL：微信长文（复用 `working/mp.weixin.qq.com_s_lspwTyzxUnpbw1eHIoqluw/`
 
 真实站点手动冒烟（自动化覆盖见 test/integration/gate-captcha.test.mjs）：
 
-1. **Cloudflare 盾站**（如任意挂着「Just a moment…」的站点）：`U2M_DEBUG=1 node script/snapshot.mjs --url <url>` → 应弹 🛡️ 人机验证 viewer（无跳过按钮）；人工点选通过后点「✅ 验证完成」→ recheck 放行 → 管线完成；检查 `working/cookies/storage_state.json` 落了 `cf_clearance`；**重跑同 URL 应免验证直接通过**
+1. **Cloudflare 盾站**（如任意挂着「Just a moment…」的站点）：`U2M_DEBUG=1 node script/snapshot.mjs --url <url>` → 应弹 🛡️ Human Verification（人机验证）viewer（无跳过按钮）；人工点选通过后点「✅ Verification Done」（✅ 验证完成）→ recheck 放行 → 管线完成；检查 `working/cookies/storage_state.json` 落了 `cf_clearance`；**重跑同 URL 应免验证直接通过**
 2. **极验/阿里滑块站**（登录提交触发滑块的站点）：viewer 里拖动滑块——验证 screencast 输入中继的拖拽手感与轨迹通过率（风控拒绝人工轨迹属已声明边界，记录厂商与结果）
 3. **登录表单内嵌图形验证码**：应弹**登录 viewer**（🖥️）而非验证 viewer——password 强信号优先，一窗内完成输密码+过验证码
-4. **稀薄页兜底**：找一个正文极少的可疑 URL（或用 `--url http://127.0.0.1:PORT/__status/403` 本地模拟）→ 应弹 🔍 页面内容确认 viewer；「仍然继续」后重跑同站不再弹（`login_decisions_skips.json` 落 `content_sparse`）
+4. **稀薄页兜底**：找一个正文极少的可疑 URL（或用 `--url http://127.0.0.1:PORT/__status/403` 本地模拟）→ 应弹 🔍 Page Content Check（页面内容确认）viewer；「⏭️ Continue Anyway」（仍然继续）后重跑同站不再弹（`login_decisions_skips.json` 落 `content_sparse`）
 5. **404 URL**：应直接 `{"status":"error","reason":"http_404"}`，不弹任何 viewer、不写快照
 
 记录：站点 / 挑战厂商 / viewer 形态是否正确 / 拖拽与点选操控是否顺畅 / 通过后重跑是否免验证 / 风控是否拒绝无头痕迹。
