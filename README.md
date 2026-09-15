@@ -61,7 +61,6 @@ README.zh-CN.md          # This overview (Chinese)
 script/                  # CLI scripts
   lib/                   # Shared modules (contract / env / browser…) and page scripts page-*.js
 test/                    # Unit / integration tests + fixtures + smoke checklist
-docs/                    # Design documents and implementation plans
 package.json
 pnpm-lock.yaml
 

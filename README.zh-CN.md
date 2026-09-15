@@ -61,7 +61,6 @@ README.zh-CN.md          # 项目概览（中文版）
 script/                  # CLI 脚本
   lib/                   # 共享模块（contract / env / browser…）与页面脚本 page-*.js
 test/                    # 单元 / 集成测试 + fixtures + smoke 冒烟清单
-docs/                    # 设计文档与实施计划
 package.json
 pnpm-lock.yaml
 

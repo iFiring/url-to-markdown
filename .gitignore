@@ -23,6 +23,10 @@ node_modules/
 
 # AI
 .claude/
+.superpowers/
+
+# Local-only design docs (untracked from repo, kept on disk)
+docs/
 
 # Runtime working directory (preserve skeleton)
 working/*

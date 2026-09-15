@@ -88,7 +88,7 @@ U2M_DEBUG=1 node script/snapshot.mjs --url <url>
     - **D1**——沿 body 脊柱逐层比较兄弟文本量：非占优（rank1 含并列恒豁免）子元素 ratio ≤5% ∧（fixed/absolute/sticky ∨ 弹窗词汇 modal|dialog|popup|popover|drawer|lightbox|toast|snackbar，**不含 overlay**）∧ 内容守卫（p≤2 ∧ 无 main/article ∧ 无 pre/table）→ **两版整树删除**；下探遇占优子元素 p≥5 或 main/article 即停（内容内部永不扫描）、深度上限 20；文本计量与候选排除 script/style/template/noscript
     - **chrome 折叠集**——候选区 = body 直接子孙 ∪ 独子链（分叉出链）；三种：dialog（role=dialog/aria-modal，**任意深度**）> hidden（computed display:none/visibility:hidden 含祖先累积）> overlay（可见 ∧ fixed/absolute/sticky）；统一内容守卫；裸 [hidden] 及后代归 K5 独占；节点挂 `__u2mChromeFold`、后代挂 `__u2mInChromeFold`——**styled 收集与 clean K6/K7 同源 skip（k 对齐）**；折叠壳上的 LT run expando 随折删除（防 foldLongText 覆写 chrome token）
     - astro 解包——`astro-` 前缀框架脚手架标签子元素上提、包装弃置——两趟一致，步骤 2 引用集来自清洗版从不引用包装 id，两版 id 集对齐
-    - **长文本占位（两趟各自执行：styled 分支开头带编号、clean 在 K11 之后无编号 `{{LONG_TEXT|n_unit}}`）**——超阈值 16 汉字/12 词的内容按两级折叠（spec 2026-09-06：`docs/superpowers/specs/2026-09-06-long-text-inline-run-design.md`）：
+    - **长文本占位（两趟各自执行：styled 分支开头带编号、clean 在 K11 之后无编号 `{{LONG_TEXT|n_unit}}`）**——超阈值 16 汉字/12 词的内容按两级折叠：
       - **极大纯行内 run**（流容器内 text 与行内元素混排的整段内容；检测/规范化序列化在两趟共享段末尾执行、结果挂元素 expando，孪生守卫由构造保证）折为单个 `{{LONG_TEXT_k|n_unit}}`、原文以剥净属性的 canonical HTML 片段入 `1_long_text.json` 的 `runs` 段（span 按 computed style 归一 strong/em/del、math 压成仅含 annotation 的极简形态、href 绝对化、`#`/`javascript:`/空 href 解包）
       - **散文本节点**（非纯容器/表格/pre 内部）照旧逐节点折叠入 `texts` 段；k 全文档序连续单计数器
       - 豁免：table/pre/svg/style 子树与 h1-h3 整子树豁免 run 折叠；**H1/H2/H3 整子树豁免——标题是层级锚点，占位会让步骤 2 看不到真实标题文本，与 `<title>` 不占位同款 rationale（H4/H5/H6 仍按阈值占位，字面取 H1/H2/H3）**
@@ -131,7 +131,6 @@ U2M_DEBUG=1 node script/snapshot.mjs --url <url>
     - Node 层 `lib/code2md.mjs` 做七类 fail-closed 校验（non_textual/content_loss 空白不敏感往返/unresolved_long_text/empty/single_line_suspect/rendered_mismatch 扣空行豁免/mixed_signal_mismatch ±1 容差——LONG_TEXT 纪元豁免：text 含 `{{LONG_TEXT_` 时跳过渲染交叉校验（收集时 renderedLines 量的是占位符形态、与展开后行数不可比））+ 层 2 行首算术序号剥离（≥3 非空行全带行首整数、公差 1 连续、剥后非退化才剥——防误剥 yaml 数字键）+ `\r` 归一/首尾空行修剪
     - 成功存 `1_code.json` `{dataIdx,lang,content,lines,gutterStripped[,numberStripped]}`、两版都折叠为 `{{CODE_k|n_lines}}` + data-language 提升到 pre；失败 styled 保 live 打 `data-u2m-code="fail"` + 落 `logs/codes/{k}_{dataIdx}.log`，失败不报 error（合法分支、落步骤 4）；result 文件增 `codes:{total,ok,failed}` + `codeJson`
   - **清洗版携带无编号 LONG_TEXT 占位（`{{LONG_TEXT|n_unit}}`）**——唯一消费者是步骤 2，还原链不变、一切还原仍走带样式版（步骤 4 引用来自 styled 路径的文章视图、步骤 5 从恢复清单回填；clean LT 后缀 ⊆ styled——K11 先于 LT 执行、模块内长文本随折吞没（2026-09-03，步骤 2 少见、还原链走带样式版不受影响））
-  - spec 参考：docs/superpowers/specs/2026-08-27-clean-snapshot-simplify-design.md 及其 2026-08-31 修订记录、2026-09-02 表格占位符设计、2026-09-02 代码块占位符设计
   - 产物：`1_clean_snapshot.html`/`1_clean_style_snapshot.html`/`1_long_text.json`/`1_tables.json`/`1_code.json`/`logs/tables/`/`logs/codes/`
 
 - **步骤 2 [agent] —— LLM 读清洗快照识别关键 ID**
@@ -212,12 +211,7 @@ U2M_DEBUG=1 node script/snapshot.mjs --url <url>
 
 ## 文档地图
 
-- `docs/design/url-to-markdown-design.md`——权威设计文档（§3 契约、§4 storage/URL 规则、§6 各脚本设计、§8 分派表为规范依据）
-- `docs/superpowers/plans/2026-08-18-url-to-markdown.md`——仓库据以构建的 15 任务 TDD 实施计划
-- `docs/superpowers/plans/baseline-notes.md`——SKILL.md baseline 测试发现与差距修复
 - `README.md` / `README.zh-CN.md`——项目概览（为什么做 / 能力边界 / 设计思想 / 技术栈 / 环境要求 / 结构 / 核心流程）双语两版，**改动必须中英同步**；技术细节一律以本文件为准（2026-09-14 瘦身，原「关键机制/环境变量/测试/开发进度」节已删——内容均在本文件有等价记载）
 - `SKILL.md` / `SKILL.zh-CN.md`、`references/*.md` / `references/*.zh-CN.md`——双语操作手册与步骤 2/4 任务手册；**改动必须中英两版同步**（见「本仓库是什么」节的同步规则与易错点）
 - `copy-skill.mjs`——开发工具（不进导出物）：`pnpm run copy:skill` 导出 `.temp/url-to-markdown{,-zh}/` 两个自包含技能目录，`.zh-CN` 文件名归一、依赖版本钉死；契约测试 `test/unit/copy-skill.test.mjs`
 - `.temp/`——已 gitignore 的原型（login.mjs、is_login_page.py、wait-click.mjs）与 copy:skill 导出物；仅供参考，禁止导入
-- `docs/superpowers/specs/2026-08-19-llm-driven-classification-design.md`——LLM 驱动分类与快照管线设计（含 Python 移除）
-- `docs/superpowers/plans/2026-08-19-llm-driven-classification.md`——其实施计划
