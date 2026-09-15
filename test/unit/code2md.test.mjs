@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { convertCodes, stripLeadingNumbers } from '../../script/lib/code2md.mjs';
 
-// 收集载荷工厂——字段含义见 spec §5.1；jsdom 无关（纯 Node 数据变换）
+// 收集载荷工厂——jsdom 无关（纯 Node 数据变换）
 function payload(over = {}) {
   return {
     k: 1, dataIdx: '10', lang: '', text: '', lines: 1,
@@ -117,7 +117,7 @@ test('ok：单信号跳过 mixed_signal（\\n=0 或容器=0）', async () => {
   assert.equal(b.codes['1'].status, 'ok');
 });
 
-test('ok：LONG_TEXT 纪元豁免——占位符展开多行时不虚假 rendered_mismatch（spec §6.1 补注）', async () => {
+test('ok：LONG_TEXT 纪元豁免——占位符展开多行时不虚假 rendered_mismatch', async () => {
   // 收集时 renderedLines 量的是占位符形态（单行 1），展开后 3 行——纪元不可比，
   // 含 {{LONG_TEXT_ 的 text 跳过渲染交叉校验（single_line_suspect 同跳）
   const text = '{{LONG_TEXT_1|57_chars}}';

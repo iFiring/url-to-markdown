@@ -1,5 +1,5 @@
 /**
- * 步骤 5 截图前逐 id 四段手术（spec §3.2-§3.5）。在浏览器 evaluate 中执行。
+ * 步骤 5 截图前逐 id 四段手术。在浏览器 evaluate 中执行。
  * trans2img 模块可能处于折叠态（手风琴收起等）：步骤 1 只在清洗版折叠隐藏
  * 子树，带样式版保真——折叠内容合法流到步骤 4 并可被标 trans2img；而页 A
  * （快照，站点 CSS 已内联）与页 B（live，站点自身收起态）都把它渲染为
@@ -10,7 +10,7 @@
  * 正在隐藏的属性**（行内 !important）——不能以元素自身盒作前置守卫：被
  * 塌缩祖先裁剪/visibility 隐藏的模块盒正常但像素全空，守卫会放行出空白图。
  * 四段（执行顺序）：
- *   1) 纵向强制展开（现状，spec §3.2）：自元素向 body（不含 body/html），
+ *   1) 纵向强制展开（现状）：自元素向 body（不含 body/html），
  *      只动正在隐藏的属性：
  *      - computed display:none → block（折叠包装几乎都是普通块；模块内部
  *        flex/grid 在更深层、不在覆写之列。若站点开合态本就是 flex/grid，
@@ -22,14 +22,14 @@
  *      - 塌缩裁剪者：overflowY:hidden 且 clientHeight===0 且 scrollHeight>0
  *        → max-height:none + height:auto + overflow:visible（子代像素被裁空
  *        的元凶，computed height 可能报 auto、靠 clientHeight 才抓得住）
- *   2) 横向裁剪 reveal（spec §3.3）：自元素**向 html 逐级**（含 body/html
+ *   2) 横向裁剪 reveal：自元素**向 html 逐级**（含 body/html
  *      ——真实盒裁剪最常在这两层，html 设 overflow-x:auto 时 body 的
  *      overflow-x:hidden 不上浮为视口裁剪而按普通盒裁剪），对确实在横向
  *      裁剪的祖先（overflow-x ∈ {hidden,clip,auto,scroll} 且
  *      clientWidth < scrollWidth）覆写 overflow:visible——简写一次覆写双轴，
  *      绕开规范把 visible+hidden 强制计算回 auto；本就不裁的零改动。
  *      captureBeyondViewport 救不了被盒裁掉的内容（Chromium 根本不绘制）。
- *   3) 留白扩盒（spec §3.4）：截图四边留 20px 呼吸位。单纯加 padding 会把
+ *   3) 留白扩盒：截图四边留 20px 呼吸位。单纯加 padding 会把
  *      内容挤窄 40px（auto 宽块的内容宽 = 可用宽 − padding，文字重排换行、
  *      表格被压），用负 margin 抵消：每侧 padding = 原值 + 20、margin =
  *      原值 − 20——盒四向外扩 20px（背景延伸成环）、内容像素级不动、页面
@@ -38,7 +38,7 @@
  *      ——复查内容宽高，缩水则补 width/height px + max-* none 自愈。
  *      data-u2m-pad 标记防重入。在遮挡者扫描之前执行：盒大了 20px，新
  *      碰到环区的邻居才会在本页后续扫描中被藏掉，环才是干净的。
- *   4) 遮挡者隐藏（spec §3.5）：body 下非亲族元素（双向 contains 排除——
+ *   4) 遮挡者隐藏：body 下非亲族元素（双向 contains 排除——
  *      模块内的 fixed 徽标/吸顶表头是亲族，保留）：fixed/sticky 一律
  *      visibility:hidden（视口家具永远不是模块内容，顺带消灭
  *      captureBeyondViewport 的 fixed 重复绘制伪影）；其余一切定位形态
@@ -108,7 +108,7 @@ function __u2mRevealHidden(id) {
   // display:contents：透明包装永不生成盒（rect 恒 0×0），非隐藏所致
   var boxless = getComputedStyle(el).display === 'contents';
 
-  // 留白扩盒（spec §3.4）：机制见头注 3)
+  // 留白扩盒：机制见头注 3)
   function padForShot(target) {
     var PAD = 20;
     if (target.hasAttribute('data-u2m-pad')) return;

@@ -1,5 +1,5 @@
 // test/integration/gate-captcha.test.mjs
-// 人机门禁 gateCheck 全分支集成（2026-09-14）：验证码 viewer（解决/弃窗/超时）、
+// 人机门禁 gateCheck 全分支集成：验证码 viewer（解决/弃窗/超时）、
 // 稀薄介入 viewer（skip 入档/记忆豁免/豁免不压挑战/done 回环/弃窗/403 分诊）、
 // http_404、gate_loop_limit、懒触发滑块全链路（probe→验证码 viewer，现场不还原）、
 // 重定向目标页挑战覆盖、占优守卫反例。

@@ -1,10 +1,10 @@
 // script/lib/inline2md.mjs
-// 长文本行内 run 的确定性 Markdown 转换器（spec 2026-09-06 §5）。
+// 长文本行内 run 的确定性 Markdown 转换器。
 // 输入是步骤 1 共享段规范化序列化的 canonical HTML 片段（1_long_text.json
 // 的 runs 段）：剥净属性、span 已归一为 strong/em/del、math 已压成仅含
 // annotation 的极简形态。jsdom 解析后递归下降映射为 GFM 行内语法。
 //
-// 转义策略（§5.3，2026-09-07 自审修订）：
+// 转义策略（自审修订）：
 //  - 常规文本节点：活动字符 `` \ ` * _ [ ] < $ ~ `` 反斜杠转义；`!` 仅后随
 //    `[` 时转义（防误触步骤 5 图片下载扫描）；
 //  - 行首中断符：处于输出行首（值开头 / 文本换行后 / br 硬换行后 / 前导
@@ -13,7 +13,7 @@
 //    中断构造）；
 //  - code span 内部与 math 源照抄不转义：code span 内反斜杠是字面字符
 //    （转义即可见损坏），math 源 `\alpha` 不可翻倍。
-//  - 行内流空白折叠（2026-09-11，spec §12）：文本节点空白 run（含换行）
+//  - 行内流空白折叠：文本节点空白 run（含换行）
 //    折叠为单空格——浏览器 white-space:normal 语义（与 code span/math 源
 //    换行折叠同 rationale）。runs 是纯行内内容（pre 子树被 run 检测排除），
 //    文本节点换行从不产生可见换行；pretty-printed 源码在行内元素间夹的
@@ -21,7 +21,7 @@
 //    来自 <br>（BR 分支不经 escapeText）；不 trim run 首尾——占位符与骨架
 //    短文本拼接时空白承载词间距，残余双空格渲染时自折叠。
 //
-// 强调归一（2026-09-11，spec §5.4 修订）：微信类编辑器产出「双层加粗」
+// 强调归一（修订）：微信类编辑器产出「双层加粗」
 // （`<strong>` 套 font-weight:bold span，canonical 归一后成 strong 直接嵌
 // strong），外层强调内容首/尾触内层 md 记号会批量触发旧版 raw HTML 退化
 // ——实测微信长文 117 处字面标签，且 `**a****b**` 的四星连串触发
@@ -64,7 +64,7 @@ function longestTickRun(s) {
 // 任何非空白输出置 false。元素包装（如 ** 前缀）后内层文本可能残留旧
 // lineStart → 过度转义，渲染透明、无害；宁可过度不漏（漏 = 块结构被破坏）。
 function escapeText(text, state) {
-  // 行内流空白折叠（spec §12）：空白 run（含换行）→ 单空格，`\r` 一并归一
+  // 行内流空白折叠：空白 run（含换行）→ 单空格，`\r` 一并归一
   text = text.replace(/[ \t\r\n]+/g, ' ');
   let out = '';
   for (let i = 0; i < text.length; i++) {
@@ -94,7 +94,7 @@ function convertNodes(nodes, state) {
   return out;
 }
 
-// 强调包裹（spec §5.4，2026-09-11 修订）：定界符择优取代一律退化。
+// 强调包裹（修订）：定界符择优取代一律退化。
 // 内容首/尾触主记号字符（跨族嵌套产物，如 strong 包 em 的 `*x*`）时换
 // 同语义备选定界符（** ↔ __、* ↔ _；不同记号字符无 rule of 3 冲突，
 // marked 实渲等价）；空白边界经归一已不可达，与备选也冲突时才退化
@@ -265,7 +265,7 @@ function convertNode(node, state) {
 }
 
 // canonical 片段 → markdown。解析失败抛错，调用方（render_markdown）
-// 兜底为 textContent 纯文本（spec §5.4）。
+// 兜底为 textContent 纯文本。
 export function inlineRunToMarkdown(html) {
   const doc = new JSDOM(`<!DOCTYPE html><body>${html}</body>`).window.document;
   normalizeEmphasis(doc.body);
@@ -273,7 +273,7 @@ export function inlineRunToMarkdown(html) {
   return convertNodes(doc.body.childNodes, state);
 }
 
-// 转换异常兜底（spec §5.4）：退回 jsdom textContent 纯文本。
+// 转换异常兜底：退回 jsdom textContent 纯文本。
 export function runTextContent(html) {
   const doc = new JSDOM(`<!DOCTYPE html><body>${html}</body>`).window.document;
   return doc.body.textContent || '';

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
  * render_markdown.mjs —— 步骤 5（终态步骤）：占位符还原 + 图片下载 + trans2img
- * 截图 + 骨架渲染 markdown（原步骤 6，2026-09-11 步骤 1/2 合并后重编号为
+ * 截图 + 骨架渲染 markdown（原步骤 6，步骤 1/2 合并后重编号为
  * 步骤 5）。读 4_skeleton.json + 1_snapshot.html +
  * 1_long_text.json + 2_key_ids.json（分割时读分片 4_skeleton_chunk_X_of_N.json
- * 并按 X 序合并，spec 2026-09-09 §5；4_skeleton.json 存在时优先），产出：
+ * 并按 X 序合并；4_skeleton.json 存在时优先），产出：
  *
  *   5_markdown.md            最终产物（lib/skeleton2md.mjs 渲染，块间空行、
  *                             文件以换行收尾）
@@ -203,7 +203,7 @@ async function main() {
     return emitError(`找不到 ${snapshotPath}，请先运行步骤 1`);
   }
   // ── 骨架读取：未分割直读 4_skeleton.json；分割则 glob 分片、校验、按 X 序
-  //    合并（spec 2026-09-09 §5）。4_skeleton.json 存在时优先——升级前跑了一
+  //    合并。4_skeleton.json 存在时优先——升级前跑了一
   //    半的目录防御；步骤 3 的 stale 清理已保证两者不并存 ──
   const CHUNK_SKELETON_RE = /^4_skeleton_chunk_(\d+)_of_(\d+)\.json$/;
   let skeleton = null;
@@ -264,9 +264,9 @@ async function main() {
   const { titleId, descriptionIds, blockIds, dumpIds } = parsed;
   debug(`key_ids: title=${titleId ?? '无'} desc=${descriptionIds.length} blocks=${blockIds.length} dump=${dumpIds.length}`);
 
-  // ── runs 段 → markdown（spec 2026-09-06 §5.1）：逐 k 经 inline2md 确定性
+  // ── runs 段 → markdown：逐 k 经 inline2md 确定性
   //    转换，与 texts 合并为扁平解析表——resolveSkeletonString 零改动。转换
-  //    异常退回 jsdom textContent 纯文本 + stderr warning（§5.4），对应 k
+  //    异常退回 jsdom textContent 纯文本 + stderr warning，对应 k
   //    照常出值（退出码不受影响）──
   const lt = JSON.parse(await fsPromises.readFile(longTextPath, 'utf8'));
   const longText = { ...(lt.texts || {}) };
@@ -377,7 +377,7 @@ async function main() {
     transEntries.push(v);
   }
   const transIds = [...new Set(transEntries.flat())];
-  // 分类层 keep 集（spec §3.1）：titleId ∪ descriptionIds ∪ paragraphIds 块
+  // 分类层 keep 集：titleId ∪ descriptionIds ∪ paragraphIds 块
   // （已展开）∪ trans2img id（截图目标必须保）；噪音集 = dumpIds
   const keepIds = [...new Set([
     ...(titleId !== null ? [titleId] : []),
@@ -509,7 +509,7 @@ async function main() {
     fs.mkdirSync(transDir, { recursive: true });
 
     const srcLabel = (pg) => (pg === pageB ? 'live' : 'snapshot');
-    // ── 分类层：非文章内容元素页面级排除（双层第一层，spec §3.1）──
+    // ── 分类层：非文章内容元素页面级排除（双层第一层）──
     // 签名计算之后、截图循环之前执行（visibility 不动 tag/children/
     // textContent，签名不受影响；零重排，boundingBox 择优不受影响）
     for (const page of [pageA, pageB]) {

@@ -5,7 +5,7 @@
  *   .temp/url-to-markdown/      英文版
  *   .temp/url-to-markdown-zh/   中文版（内部文件名归一：SKILL.zh-CN.md → SKILL.md、
  *                               references/*.zh-CN.md → *.md、README.zh-CN.md → README.md）
- * README 已双语化（2026-09-14 起）：英文导出取 README.md、中文导出取 README.zh-CN.md，
+ * README 已双语化：英文导出取 README.md、中文导出取 README.zh-CN.md，
  * 均归一为导出物内 README.md（手册链接目标本就是 SKILL.md，无须改写正文）。
  * 两份导出的 package.json 均钉死依赖版本（取自仓库 node_modules）、删除 scripts 段。
  */

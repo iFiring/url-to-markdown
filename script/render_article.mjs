@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
- * render_article.mjs —— 步骤 3：文章视图渲染（原步骤 4/5/6 合并为单 CLI，
- * 2026-09-11；同日步骤 1/2 合并后重编号为步骤 3）。
+ * render_article.mjs —— 步骤 3：文章视图渲染（原步骤 4/5/6 合并为单 CLI；
+ * 步骤 1/2 合并后重编号为步骤 3）。
  * 读 1_clean_style_snapshot.html 与 2_key_ids.json（四键契约
  * titleId/descriptionIds/paragraphIds/dumpIds，校验与 paragraphIds 嵌套展开
  * 共享 lib/key-ids.mjs），单个 chromium 实例三轮处理一气呵成，产出文章视图
  * 3_article.html（写入该 URL 的工作目录）。超过
  * U2M_ARTICLE_SPLIT_THRESHOLD（默认 60KB）时另产出分块
- * 3_article_chunk_X_of_N.html（lib/chunk-article.mjs 纯函数分块，spec
- * 2026-09-09——第 2 块起带只读上下文；✅/❌ 转换边界标记每块恒在：首块 ✅
+ * 3_article_chunk_X_of_N.html（lib/chunk-article.mjs 纯函数分块，
+ * 第 2 块起带只读上下文；✅/❌ 转换边界标记每块恒在：首块 ✅
  * 紧跟 body 开标签、末块 ❌ 紧贴 </body>）。
  *
  * 用法:
@@ -279,7 +279,7 @@ async function main() {
     );
 
     // 分块收集：与 slimHtml 同一 DOM 同一序列化器——每块 markup 与
-    // 3_article.html 逐字节一致（spec 2026-09-09 §3.2）
+    // 3_article.html 逐字节一致
     const children = await page.evaluate(
       '(() => [...document.body.children].map((el) => el.outerHTML))()'
     );
@@ -293,7 +293,7 @@ async function main() {
     await fsPromises.writeFile(articlePath, slimHtml, 'utf8');
     log(`文章视图提取完成: ${articlePath} (${migrated.count} 个元素, 瘦身 ${JSON.stringify(slimStats)})`);
 
-    // ── stale 清理（spec §3.6）：重跑本步骤后任何已存在的步骤 4 骨架必然
+    // ── stale 清理：重跑本步骤后任何已存在的步骤 4 骨架必然
     //    失效；另一模式的旧分块 html 一并清理 ──
     for (const f of fs.readdirSync(dir)) {
       if (f === '4_skeleton.json' || /^4_skeleton_chunk_\d+_of_\d+\.json$/.test(f)) {

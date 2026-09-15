@@ -1,5 +1,5 @@
 // script/lib/screencast.mjs —— CDP Screencast → 本地 HTTP+WS viewer（移植 .temp/login.mjs，去 express）
-// 2026-09-14 泛化为三形态参数化 viewer（登录/人机验证/稀薄内容人工介入）：全部文案可参数化，
+// 泛化为三形态参数化 viewer（登录/人机验证/稀薄内容人工介入）：全部文案可参数化，
 // 默认值 = 登录 viewer 原文案逐字一致（零参数调用产物与旧版相同）。skipText:null = 不渲染跳过
 // 按钮（验证码 viewer 形态——只能解决或关窗）；reasonHint:null = 省略 reason 行尾句。
 // WS 消息协议名不改（login_done/skip_login/recheck_failed）——viewer 会话是单用途的，
@@ -242,7 +242,7 @@ export async function startScreencastViewer({
 }
 
 /**
- * 通用 viewer 会话骨架（2026-09-14 人机门禁，自 snapshot-login.mjs 整体平移）：
+ * 通用 viewer 会话骨架（人机门禁，自 snapshot-login.mjs 整体平移）：
  * 视口临时切 1280×800（管线 3000 高懒加载视口塞 800 画布会纵向压扁+模糊，会话
  * 结束恢复）→ prepare（进 viewer 前的页面状态整理）→ startScreencastViewer →
  * 自动 open 默认浏览器（U2M_VIEWER_NOOPEN=1 关，测试用）→ finish/fail/settled
@@ -256,7 +256,7 @@ export async function startScreencastViewer({
  * - 回调抛出的异常由本骨架捕获记 log（不炸进程——单行 JSON 契约优先），
  *   但善后语义（入档/刷新/还原）调用方仍需自行 try/catch 保证尽力执行
  *
- * 超时语义（2026-09-14 用户裁定，三形态统一）：倒计时从用户**首次打开 viewer
+ * 超时语义（用户裁定，三形态统一）：倒计时从用户**首次打开 viewer
  * 页面（首次 WS 连接）**才开始——人没看到窗口不算人超时；无人连接由启动起的
  * backstopMs 绝对上限（默认 1h）兜底，到期照常 fail(timeoutReason) 退出——守
  * 「失败也是单行 JSON」契约，进程不无限期挂死。

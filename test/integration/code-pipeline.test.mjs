@@ -18,7 +18,7 @@ async function runClean(tmpRoot, url) {
 
 const URL = 'https://example.com/code-blocks';
 
-test('代码管线：1_code.json 各形态判定与内容（spec §6.3 验收基准）', async () => {
+test('代码管线：1_code.json 各形态判定与内容（验收基准）', async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'u2m-integ-code-'));
   try {
     const { r, dir } = await runClean(tmpRoot, URL);

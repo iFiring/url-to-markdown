@@ -4,7 +4,7 @@
 // cfg（全部由 Node 侧测量后传入）:
 //   mainText   主文档正文长度（归一化口径见 snapshot-redirect.mjs）
 //   frameTexts { [frame 绝对 src（剥 hash）]: 正文长度 }
-//   minFrameText / textRatio / minBox —— 阈值（可覆盖，默认 spec §4 常量）
+//   minFrameText / textRatio / minBox —— 阈值（可覆盖，默认见函数内常量）
 // 返回 { redirect: { url, frameText } | null }——多候选取正文最长者。
 function __u2mDetectContentFrame(cfg) {
   cfg = cfg || {};

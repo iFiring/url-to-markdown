@@ -76,7 +76,7 @@ test('层 1 槽排除：user-select:none 纯数字子树零贡献、gutterStripp
 });
 
 test('层 1 槽壳传播：壳 us:auto、全部子元素皆槽 → 整棵视为槽、bc 不计壳', () => {
-  // 回归（2026-09-03，developers.openai.com prompt-caching k=5/6）：真实形态
+  // 回归（developers.openai.com prompt-caching k=5/6）：真实形态
   // .syntax-highlighter-line-numbers 壳 display:block 但 user-select:auto，
   // us:none 只设在数字 span 上——旧谓词不认壳：walkLines 幻影首空行 +
   // blockContainers 计壳（唯一块容器）与 \n 双信号矛盾 mixed_signal_mismatch
@@ -103,7 +103,7 @@ test('层 1 槽壳传播防空穴：空行容器（零子命中）不算槽—�
 });
 
 test('行内流空白保真：行首缩进 token span 不被吞（OpenAI shiki 实测形态）', () => {
-  // 回归（2026-09-03，pre 2874 探针）：缩进是独立空白 token span
+  // 回归（pre 2874 探针）：缩进是独立空白 token span
   // （<span class="shiki-token">"  "</span>），断行在上一行行 span 尾部 \n
   // 文本节点。旧守卫「纯空白 + 当前行空」在断行后必命中 → 缩进永久丢失。
   const out = run(
@@ -114,7 +114,7 @@ test('行内流空白保真：行首缩进 token span 不被吞（OpenAI shiki �
 });
 
 test('行内流空白保真：空行（仅含 \\n 的行 span）不塌缩', () => {
-  // 回归（2026-09-03，pre 3127：textContentNoGutter 为 ";\n\nconst" 而提取
+  // 回归（pre 3127：textContentNoGutter 为 ";\n\nconst" 而提取
   // 只剩一个 \n）：空行本体是仅含 "\n" 的行内 span，旧守卫连换行一起吞
   const out = run(
     `<pre data-idx="58"><code data-idx="59"><span style="display:inline">a

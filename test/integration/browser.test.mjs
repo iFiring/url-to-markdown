@@ -231,7 +231,7 @@ test('openPage: U2M_PROXY=direct → 直连加载正常（--no-proxy-server 回�
   }
 });
 
-// 2026-09-14 gateCheck 前置：gotoSettled 返回主文档 HTTP 状态码（稀薄内容分诊消费）
+// gateCheck 前置：gotoSettled 返回主文档 HTTP 状态码（稀薄内容分诊消费）
 
 test('gotoSettled: 返回状态码——200 / 404 / 重定向链取最终响应', async () => {
   const server = http.createServer((req, res) => {

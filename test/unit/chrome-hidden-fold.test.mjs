@@ -38,7 +38,7 @@ const wrap = (bodyInner, headInner = '') => `<!DOCTYPE html>
 <body>${bodyInner}</body></html>`;
 const BIG = '正文内容'.repeat(40);
 
-test('H1-C: body 直下 css-hidden（有兄弟）折叠为 HIDDEN_TAG，styled 保活', async () => {
+test('body 直下 css-hidden（有兄弟）折叠为 HIDDEN_TAG，styled 保活', async () => {
   const r = await runClean(wrap(`
 <div data-idx="1"><h1 data-idx="2">题</h1><p data-idx="3">${BIG}</p></div>
 <div data-idx="4" class="hid"><div data-idx="5">弹窗内部</div></div>`));
@@ -50,7 +50,7 @@ test('H1-C: body 直下 css-hidden（有兄弟）折叠为 HIDDEN_TAG，styled �
   } finally { r.cleanup(); }
 });
 
-test('H1-C: 独子链下探折叠（body>div>section[hidden]>div+header 检测到 section 为止）', async () => {
+test('独子链下探折叠（body>div>section[hidden]>div+header 检测到 section 为止）', async () => {
   const r = await runClean(wrap(`
 <div data-idx="1"><p data-idx="2">${BIG}</p></div>
 <div data-idx="3"><section data-idx="4" class="hid"><div data-idx="5">菜单</div><header data-idx="6">页头</header></section></div>`));
@@ -61,17 +61,17 @@ test('H1-C: 独子链下探折叠（body>div>section[hidden]>div+header 检测�
   } finally { r.cleanup(); }
 });
 
-test('H1-C 红线: 分叉后深处 hidden 不折（非激活 tab/FAQ 收起内容保活）', async () => {
+test('红线: 分叉后深处 hidden 不折（非激活 tab/FAQ 收起内容保活）', async () => {
   const r = await runClean(wrap(`
 <div data-idx="1"><div data-idx="2"><p data-idx="3">${BIG}</p></div><div data-idx="4" class="hid"><p data-idx="5">非激活 tab 面板</p></div></div>`));
   try {
-    assert.ok(r.cleaned.includes('非激活 tab 面板'), 'off-chain hidden 全额存活（裁定 R2/R3）');
+    assert.ok(r.cleaned.includes('非激活 tab 面板'), 'off-chain hidden 全额存活');
     assert.ok(r.cleaned.includes('data-idx="5"'), '内部 id 可见（步骤 3 可挑选）');
     assert.ok(!r.cleaned.includes('{{HIDDEN_TAG'), '无任何 css-hidden 折叠');
   } finally { r.cleanup(); }
 });
 
-test('H1-C: 守卫拦截（p>2）；visibility:hidden 计入；嵌套只折最外层；裸 [hidden] 仍归 K5', async () => {
+test('守卫拦截（p>2）；visibility:hidden 计入；嵌套只折最外层；裸 [hidden] 仍归 K5', async () => {
   const r = await runClean(wrap(`
 <div data-idx="1"><p data-idx="2">${BIG}</p></div>
 <div data-idx="3" class="hid"><p>a</p><p>b</p><p>c</p></div>

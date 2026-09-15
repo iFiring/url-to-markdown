@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { runScript } from '../helpers/run-script.mjs';
 import { urlToDirName } from '../../script/lib/env.mjs';
 
-// render_article.mjs（原步骤 4/5/6 合并，2026-09-11）单测。
+// render_article.mjs（原步骤 4/5/6 合并）单测。
 // 夹具一律注入为 1_clean_style_snapshot.html + 2_key_ids.json：body 顶层
 // 元素全部标进 paragraphIds ⇒ 轮 A 裁剪近似恒等（removedCount=0），用例
 // 聚焦各自阶段的断言对象——轮 A 断言 3_extract.html；轮 B 断言
@@ -332,7 +332,7 @@ test('render_article.mjs: 轮 B juice 内联并删净 <style> 与 class', async 
   assert.ok(!juiced.includes('<style'), '不应含 <style> 标签');
   assert.ok(!juiced.includes('class='), '不应含 class 属性');
 
-  // 结构化样式保留：边框背景 / box-shadow / flex·grid 方向（2026-09-09
+  // 结构化样式保留：边框背景 / box-shadow / flex·grid 方向（
   // 收紧：display 值门控 + 方向 longhand；gap/对齐出白名单）
   assert.ok(juiced.includes('2px solid red'), '应保留边框规则');
   // 被清理过的元素经 CSSOM 重序列化，颜色归一为 rgb() 形式（语义等价）
@@ -687,7 +687,7 @@ test('render_article.mjs: 零值声明过滤——等于全元素初始值的声
   const tagOf = (id) => juiced.match(new RegExp(`<[^>]*data-idx="${id}"[^>]*>`))?.[0] || '';
 
   // 只剩零值声明的元素：style 属性整体消失（id 12 overflow:auto 因
-  // 2026-09-09 overflow 出白名单同批清空）
+  // overflow 出白名单同批清空）
   for (const id of [1, 2, 5, 8, 9, 10, 11, 12, 15]) {
     assert.ok(!tagOf(id).includes('style='), `id ${id} 零值声明应清空 style 属性: ${tagOf(id)}`);
   }
@@ -698,7 +698,7 @@ test('render_article.mjs: 零值声明过滤——等于全元素初始值的声
   assert.ok(tagOf(6).includes('rgb(249, 249, 249)') && !tagOf(6).includes('border-radius'),
     `零圆角删、实背景留: ${tagOf(6)}`);
   assert.ok(tagOf(7).includes('border-radius: 8px'), `非零圆角应保留: ${tagOf(7)}`);
-  // flex 简写在 2026-09-09 布局白名单收紧中出白名单（只留方向信号）
+  // flex 简写在布局白名单收紧中出白名单（只留方向信号）
   assert.ok(!tagOf(13).includes('style='), `flex 简写出白名单应清空 style: ${tagOf(13)}`);
   assert.ok(tagOf(14).includes('outline') && tagOf(14).includes('1px'),
     `实 outline 应保留: ${tagOf(14)}`);
@@ -855,7 +855,7 @@ test('render_article.mjs: paragraphIds 为空或含非法成员时报 error（la
 // 瘦身规则① data-*：保留白名单 {data-idx, data-language}（后者是
 // 步骤 4 判代码围栏语言的机械信号），其余 data-*（组件库脚手架/交互
 // 状态）全删——白名单而非黑名单，陌上站点的 data-* 安全默认删除
-// span 6 带 style 是刻意防拆——规则① 删 data-color 后裸 span 会成空壳被规则⑥ 拆掉（spec §5.7 设计行为），本用例只测 data-* 白名单
+// span 6 带 style 是刻意防拆——规则① 删 data-color 后裸 span 会成空壳被规则⑥ 拆掉（设计行为），本用例只测 data-* 白名单
 const DATASTAR_JUICED = `<!DOCTYPE html>
 <html lang="zh-CN"><head><title>瘦身</title></head><body><h1 data-idx="1">标题</h1><div data-idx="4"><p data-variant="lead" data-idx="5">段落<span data-color="accent" style="background-color: rgb(255, 255, 0)" data-idx="6">行内</span></p><code data-language="python" data-wrap-long-lines="false" data-idx="7">print(1)</code></div></body></html>`;
 
@@ -1022,7 +1022,7 @@ test('render_article.mjs: 瘦身规则⑥——空壳 span 塌缩为纯文本、
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-// ── 大产物分块（spec 2026-09-09）──
+// ── 大产物分块 ──
 
 // 40 个 ~1.85KB 段落块 + h1 ≈ 74KB；阈值调 60KB 触发分割
 const BIG_PARAS = Array.from({ length: 40 }, (_, i) =>
@@ -1061,7 +1061,7 @@ test('render_article.mjs: 超阈值分割——分块文件落盘 + emit chunks 
   for (const id of [1, 100, 139]) {
     assert.ok(all.includes(`data-idx="${id}"`), `id ${id} 应在某分块中`);
   }
-  // ✅/❌ 每块恒在（2026-09-09 用户裁定：边界不随上下文侧有无而缺失）；
+  // ✅/❌ 每块恒在（用户裁定：边界不随上下文侧有无而缺失）；
   // ⚠️下文在非末块照常就位（上下文不计预算）
   assert.ok(all.includes('✅ 待转换内容自此开始'), '✅ 每块恒在');
   assert.ok(all.includes('❌ 待转换内容自此结束'), '❌ 每块恒在');

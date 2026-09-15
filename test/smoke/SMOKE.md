@@ -2,7 +2,7 @@
 
 前置：`bash script/init.sh` 输出 ok（纯环境自检；核心参数 skill-root / url-name / url-working-path 由步骤 1 输出）。
 
-> 2026-09-11 起原步骤 1/2 合并为单 CLI `snapshot.mjs`（单命令完成快照 + 清洗），后续步骤重编号 3→2、4→3、5→4、6→5、产物 `2_*`→`1_*`、`3_key_ids`→`2_key_ids`、`4_*`→`3_*`、`5_skeleton*`→`4_skeleton*`、`6_*`→`5_*`——下文带日期的历史执行记录保留当时的旧编号与产物名。
+> 原步骤 1/2 已合并为单 CLI `snapshot.mjs`（单命令完成快照 + 清洗），后续步骤重编号 3→2、4→3、5→4、6→5、产物 `2_*`→`1_*`、`3_key_ids`→`2_key_ids`、`4_*`→`3_*`、`5_skeleton*`→`4_skeleton*`、`6_*`→`5_*`——下文历史执行记录保留当时的旧编号与产物名。
 
 ## 1. 真实静态文章页
 
@@ -12,7 +12,7 @@
 
 记录：URL / 截图 / 发现的问题。
 
-### 场景 1 执行记录（2026-08-18，自动化完成）
+### 场景 1 执行记录（自动化完成）
 
 - URL：https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise
 - 步骤 0-5 全部通过：`ok` → `logged_in` → 双 `ok`（各 4 图 / 19 特殊元素）→ 步骤 3 无需处理 → 步骤 4 去噪 + `{{IMG_1}}` 替换 → `selected`（node_workflow，人工选择以 curl POST /select 模拟）
@@ -20,7 +20,7 @@
 - 发现并已修复：长页面（21256px 主列）稀释文本密度 → 启发式误吞整个正文列 → 占位符被 Readability 丢弃 → 双稿只剩页眉（commit ac07e90：启发式加 500 字符上限 + 占位符 `<p>` 包裹；修复后重跑正文完整）
 - 遗留观察（不阻断）：manifest 中 15 个 svg_convert pending 对应被剔除的侧栏元素，其占位符随噪声一起消失——条目悬挂无引用，后续可加"丢弃"状态
 
-### 场景 1 补充记录（2026-08-19，mmh1.top，代理故障排查）
+### 场景 1 补充记录（mmh1.top，代理故障排查）
 
 - URL：https://mmh1.top/article/prompt-cache.html（免登录中文翻译页）
 - 首跑报 `net::ERR_TUNNEL_CONNECTION_FAILED`——根因是**本机系统代理**（macOS HTTP/HTTPS 代理 127.0.0.1:1082）：chromium 静默继承系统代理，代理当时的瞬时状态拒绝了对目标站的 CONNECT 隧道；稍后重试直连/走代理均 200，非站点问题。已加 `U2M_PROXY` 逃生通道（fix/u2m-proxy 分支）
@@ -34,12 +34,12 @@
 `U2M_WORKING_ROOT=<副本根> U2M_DEBUG=1 node script/render_markdown.mjs --url <URL>`，
 检查 stdout 单行 ok、stderr 三类 debug 行（分类层排除 / 横向裁剪 reveal / 遮挡者隐藏）、
 超宽元素（>1280 CSS px）截图的视口外带（设备 px x≥2560）内容密度由 ≈0 变为 >1%、无导航像素。
-2026-08-28 起新增留白扩盒：每张 trans 截图四边多 20px 呼吸位（内容零重排），
+新增留白扩盒：每张 trans 截图四边多 20px 呼吸位（内容零重排），
 重跑后抽验 1-2 张 webp 目检边缘不再贴边。
 
-### 执行记录（2026-08-28，openai 文档页）
+### 执行记录（openai 文档页）
 
-- URL：https://developers.openai.com/api/docs/guides/prompt-caching（spec spike 同页；副本自 `working/developers.openai.com_api_docs_guides_prompt-caching/`，其 `assets/trans/*.webp` 为修复前产物，构成 before/after 对照）
+- URL：https://developers.openai.com/api/docs/guides/prompt-caching（副本自 `working/developers.openai.com_api_docs_guides_prompt-caching/`，其 `assets/trans/*.webp` 为修复前产物，构成 before/after 对照）
 - 结果：`ok`，count=10，**source=live**（签名命中 10/10）；stdout 单行 JSON 契约保持
 - debug 行实测：`分类层排除（live）: 隐藏 1860 / keep 命中 68`（快照侧同值）；`横向裁剪 reveal` 触发于 1870（3 处）/3046（1 处）；`隐藏态强制展开` 触发于 3044/3348；无 `遮挡者隐藏` 行——分类层已把 fixed 侧栏整体隐藏、几何层按设计跳过已隐藏元素（两层协同，非缺陷；几何层路径由单测品红断言覆盖）
 - 像素对照（pixelStats，2x 设备 px）：**3047（2864px 宽 benchmark 表）超视口带密度 0.0000 → 0.2969**，目检全宽有内容、无导航像素；其余元素窄于视口（带不存在、密度 0 为平凡值），宽度与修复前一致无回归
@@ -58,7 +58,7 @@
 
 验证 manifest 分派与步骤 3 产物（SVG 语义等价性人工评审）。
 
-## 4. 文章视图瘦身（步骤 3 零值过滤 + 瘦身 pass；下表为 2026-08-28 旧编号执行记录，产物名保留当时形态）
+## 4. 文章视图瘦身（步骤 3 零值过滤 + 瘦身 pass；下表为旧编号执行记录，产物名保留当时形态）
 
 URL：https://developers.openai.com/api/docs/guides/prompt-caching（复用既有步骤 0-4 产物，1_snapshot 未重跑）
 
@@ -74,9 +74,9 @@ URL：https://developers.openai.com/api/docs/guides/prompt-caching（复用既�
 - 9_markdown 代码围栏逐字相同 11/11 块，公式 $…$ 命中 6 处
 - mathReplaced=0 说明：该页 19 个 `<math>` 的 annotation 均无 `encoding="application/x-tex"`（非 KaTeX 双胞胎形态），规则②按"无 annotation 保留原树"正确放行；公式在骨架中由 annotation 文本手工转写，9_markdown 命中不受影响
 
-- 2026-08-29 追记：`__u2mLatexText` 分级信任扩展（未声明 encoding 的裸 annotation 也信；显式声明非 TeTeX 编码仍拒）后重跑步骤 6——`mathReplaced` 0→19、MathML 残留 0、`6_article.html` 110.5KB→96.7KB（累计 -59%）。工作目录中 7/8/9 产物仍为扩展前生成（公式内容一致——LLM 转录与机械替换等价），下次完整跑批自然对齐
+- 追记：`__u2mLatexText` 分级信任扩展（未声明 encoding 的裸 annotation 也信；显式声明非 TeTeX 编码仍拒）后重跑步骤 6——`mathReplaced` 0→19、MathML 残留 0、`6_article.html` 110.5KB→96.7KB（累计 -59%）。工作目录中 7/8/9 产物仍为扩展前生成（公式内容一致——LLM 转录与机械替换等价），下次完整跑批自然对齐
 
-## 5. 步骤 5-6 端到端（修订后骨架契约回归，2026-09-02 新增；2026-09-11 起原步骤 8/9 合并为单 CLI、后重编号为 5/6；同日步骤 1/2 合并后重编号为 4/5）
+## 5. 步骤 5-6 端到端（修订后骨架契约回归；原步骤 8/9 合并为单 CLI、后重编号为 5/6；步骤 1/2 合并后重编号为 4/5）
 
 两页已有步骤 0-4 产物（`working/mmh1.top_article_prompt-cache.html/`、`working/developers.openai.com_api_docs_guides_prompt-caching/`），按修订后 `references/markdown_skeleton_guide.md` 重跑：步骤 5（子代理读 `4_article.html` 写 `5_skeleton.json`）→ `node script/render_markdown.mjs --url <URL>`，各步 stdout 单行 `ok`。
 
@@ -98,33 +98,33 @@ openai 页检查点（英文文档，展开器/嵌套图解/UI 控件密集）�
 
 记录：每页 skeleton 条目数 / trans2img 条目与 id 列表 / 发现的契约偏差。
 
-## 6. 代码块占位符（2026-09-02 新增）
+## 6. 代码块占位符
 
 - URL: <mmh1.top prompt-cache 文章地址>（`working/mmh1.top_article_prompt-cache.html/`）
 - 预期：步骤 1 emit `codes` 全 ok（≥2 块）；重跑步骤 4-5 后 `5_markdown.md` 代码块
   换行与原 LLM 语义重建结果逐字一致（内容来自 `1_code.json` 预计算而非转录）
 - URL: <developers.openai.com prompt-caching 指南地址>（`working/developers.openai.com_api_docs_guides_prompt-caching/`）
 - 预期：步骤 1 emit `codes` 14 块全 ok、其中 10 块 `gutterStripped`（user-select:none
-  序号槽层 1 排除 + 2026-09-03 槽壳传播——display:block 壳 us:auto、数字 span 才
+  序号槽层 1 排除 + 槽壳传播——display:block 壳 us:auto、数字 span 才
   us:none 的形态不剔除会 mixed_signal 误杀）；pre 2874 的 `1_code.json` 内容以 `{`
-  开头且 `  "model"` 两格缩进保留（2026-09-03 空白守卫结构化后恢复；k=6 代码内
+  开头且 `  "model"` 两格缩进保留（空白守卫结构化后恢复；k=6 代码内
   空行同步保真）；步骤 4 对占位符块发 `{"code":"{{CODE_k}}"}` 引用不自转
-- 实测（2026-09-03 槽壳传播 + 空白守卫结构化后）：`codes: {total:14, ok:14,
+- 实测（槽壳传播 + 空白守卫结构化后）：`codes: {total:14, ok:14,
   failed:0}`，k=5/6（2874/3127，此前 mixed_signal_mismatch）转 ok；k=5 两格缩进
   在位、k=6 空行恢复 13 行全保真；`logs/codes/` 空
 
-## 7. 内嵌 iframe 壳页（重定向门，2026-09-07 新增）
+## 7. 内嵌 iframe 壳页（重定向门）
 
 - URL 1: https://mmh1.top/article#/ai-article/skill
 - URL 2: https://mmh1.top/article#/ai-article/prompt-cache
 - 预期：步骤 1 emit `redirect.to` 为 …/article/{skill,prompt-cache}.html；工作目录为 `redirected_` 前缀名（内含 `redirect_to.yaml`）；步骤 2 起仍以原始 URL 调用、产物落在 redirected 目录；`5_markdown.md` 为完整文章
 - 注意：按记忆规约，收尾前用最终代码重跑全管线再记录结论
-## 8. 长文本行内 run 折叠（2026-09-07 新增）
+## 8. 长文本行内 run 折叠
 
 - URL: <含 KaTeX 行内公式 + `<br>` 混排长段的技术博客/文档页真实地址>
 - 预期：
   - 步骤 1 `1_long_text.json` runs 段——KaTeX 段落的值只含 `<math…><annotation…>`
-    极简形态，无 katex-html/mord/strut/svg 孪生痕迹（spec §10 原子化）；公式源
+    极简形态，无 katex-html/mord/strut/svg 孪生痕迹（原子化）；公式源
     单份不重复
   - `<br>` 混排段的 canonical 为 `<br>` 形态（非 `<br></br>`——jsdom 会把后者
     解析为两个 br、换行翻倍）
@@ -134,7 +134,7 @@ openai 页检查点（英文文档，展开器/嵌套图解/UI 控件密集）�
     同一 URL 重跑逐字一致，无字面 `{{LONG_TEXT` 残留
 - 实测：待跑
 
-## 9. 登录检测 v2：点击探测 + 跳过记忆（2026-09-07 新增）
+## 9. 登录检测 v2：点击探测 + 跳过记忆
 
 - URL: https://www.zhihu.com/question/2071375581464343126/answer/2072161669128655948
 - 背景：旧版误判「已登录」的双根因——①`login_decisions.json` 里历史 skip 把
@@ -143,7 +143,7 @@ openai 页检查点（英文文档，展开器/嵌套图解/UI 控件密集）�
 - 预期：检测判定需要登录（强信号 loginConfirmed·modal——点击页头「登录/注册」
   后 SignFlow 全屏弹窗命中 ≥50% 视口+表单+按钮判定）；viewer 打开且画面停在
   弹窗态；旧 `login_decisions.json` 的知乎 skip 条目不再生效
-- 实测（2026-09-07，--timeout 20000 无人值守冒烟）：stderr `登录检测:
+- 实测（--timeout 20000 无人值守冒烟）：stderr `登录检测:
   loginConfirmed+loginButton 命中（2/6），强信号 loginConfirmed（modal）→
   需要登录`；viewer 正常启动；超时如实 emit `{"status":"error",
   "reason":"login_timeout"}`；`working/cookies/` 未生成 skips 文件（未点跳过）
@@ -152,7 +152,7 @@ openai 页检查点（英文文档，展开器/嵌套图解/UI 控件密集）�
   写入 `{"www.zhihu.com":["loginButton"]}` → 快照抓干净页（无 SignFlow 弹窗）→
   二次运行豁免不弹 viewer 且 emit `loginSkippedByMemory:["loginButton"]`
 
-## 10. 大产物分块（2026-09-09 新增）
+## 10. 大产物分块
 
 URL：微信长文（复用 `working/mp.weixin.qq.com_s_lspwTyzxUnpbw1eHIoqluw/`，旧 6_article.html 372KB / 509 段落块）
 
@@ -160,11 +160,9 @@ URL：微信长文（复用 `working/mp.weixin.qq.com_s_lspwTyzxUnpbw1eHIoqluw/`
 - [ ] 步骤 4 并行派发子代理 → 全部分片落盘
 - [ ] 步骤 5 → `chunksMerged` 与块数一致；5_markdown.md 与不分块基线对比内容一致（标题层级、列表延续无跨块断裂）
 
-## 11. 边界 chrome 清除与折叠（2026-09-09 新增）
+## 11. 边界 chrome 清除与折叠
 
-spec: `docs/superpowers/specs/2026-09-09-body-spine-chrome-removal-design.md`；plan: `docs/superpowers/plans/2026-09-09-body-spine-chrome-removal.md` Task 8
-
-### 执行记录（2026-09-09，五样本隔离协议，通过）
+### 执行记录（五样本隔离协议，通过）
 
 协议：`mktemp -d` 隔离目录只读复制 `working/` 五样本的 `1_snapshot.html`，`U2M_WORKING_ROOT` 指向隔离目录重跑步骤 2——`working/` 零写入。mmh1 重定向样本以 `redirect_to.yaml` 给出的目标 URL（`https://mmh1.top/article/skill.html`）派生普通目录跑——负控制只考察内容，重定向定位机制不参与步骤 2 行为。
 
@@ -178,18 +176,18 @@ spec: `docs/superpowers/specs/2026-09-09-body-spine-chrome-removal-design.md`；
 | 知乎回答（登录墙） | 0 | 1 | 0 | 2 | 0 | 45467* → 43082 | -5.2% |
 | mmh1 skill（负控制） | **0** | **0** | **0** | **0** | 1 | 17195 → 17122 | 仅注释差 |
 
-\* 极客/知乎旧字节取自 spec §13 探针记录（working/ 无旧清洗版产物）。
+\* 极客/知乎旧字节取自探针记录（working/ 无旧清洗版产物）。
 
 与预期偏差（均已核查为良性）：
 - 微信 folds 合计 30 > 预期 8-14——逐项核对全部 chrome：wx_bottom_modal_wrp（DIALOG）、js_article_bottom_bar（OVERLAY）、js_profile_ban、隐藏 iframe、**24 个 weui-a11y_ref 读屏隐藏 span**（模拟探针漏计该类，1-9 字脚手架文本）
-- 微信 removed=20（预期 ≈24，±20% 带内）；OpenAI removed=5（预期 ≈7）、字节 -37.9% 优于 spec ≈27%——D1 kill 明细全部 chrome：文档横幅 div、fixed 顶栏 header（探针 v2 增量核算 bug 曾漏计的那个）、搜索浮层、Ask AI 挂件（vocab 命中）
+- 微信 removed=20（预期 ≈24，±20% 带内）；OpenAI removed=5（预期 ≈7）、字节 -37.9% 优于预期 ≈27%——D1 kill 明细全部 chrome：文档横幅 div、fixed 顶栏 header（探针 v2 增量核算 bug 曾漏计的那个）、搜索浮层、Ask AI 挂件（vocab 命中）
 - mmh1 负控制完美成立：三规则全零命中，新旧 diff 仅 head 主题字体注释一行（-73B）
 
 **k 对齐实证（微信）**：`{{CODE_k}}` 编号集合旧 vs 新逐字一致（k=1-39 全集）；TABLE 无（该页无表）；正文区（data-idx<4378）p 元素 400→400 零丢失，消失的 7 个 p 与 3 个 LONG_TEXT 全在 chrome 区（随折叠壳/D1 删除吞没）。
 
-**OpenAI 正文完整性**：正文 11 个标题（h1 Prompt caching + 10 个 h2 章节）全保留；消失的 10 个标题全为 chrome——搜索浮层 h2「Search the API docs」+「Suggested」×2、导航抽屉（`div#drawer` 折为 `{{HIDDEN_TAG|1145_words;49_li/49_a…}}`，即 spec 预期 H1-C 接住的 26% 文本量侧栏）分组 h3×6、Ask AI 挂件 h2「Docs agent」。
+**OpenAI 正文完整性**：正文 11 个标题（h1 Prompt caching + 10 个 h2 章节）全保留；消失的 10 个标题全为 chrome——搜索浮层 h2「Search the API docs」+「Suggested」×2、导航抽屉（`div#drawer` 折为 `{{HIDDEN_TAG|1145_words;49_li/49_a…}}`，即预期接住的 26% 文本量侧栏）分组 h3×6、Ask AI 挂件 h2「Docs agent」。
 
-**知乎登录横幅**：`Modal-wrapper Modal-enter-done`（28_div/7_button/6_svg）折为 `{{OVERLAY_TAG|110_chars}}`——spec §7 预期形态命中。
+**知乎登录横幅**：`Modal-wrapper Modal-enter-done`（28_div/7_button/6_svg）折为 `{{OVERLAY_TAG|110_chars}}`——预期形态命中。
 
 **步骤 3 选择质量对比（微信，子代理按 analyze_html_guide.md 全文判读）**：PASS——
 - titleId=18、descriptionIds=[20,51,55] 与旧版一致（20 现为 VIEW_TEXT 壳，壳可引用性验证通过）
@@ -200,7 +198,7 @@ spec: `docs/superpowers/specs/2026-09-09-body-spine-chrome-removal-design.md`；
 
 全量验证：`pnpm test:all` 441/441 绿（单测 374 + 集成 67）；golden 逐字节钉住（article-1 重建仅 head 注释行漂移、clean-simplify 零漂移、longtext.json 零漂移）。
 
-## 12. 人机门禁：验证码/滑块 + 稀薄内容兜底（2026-09-14 新增）
+## 12. 人机门禁：验证码/滑块 + 稀薄内容兜底
 
 真实站点手动冒烟（自动化覆盖见 test/integration/gate-captcha.test.mjs）：
 

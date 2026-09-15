@@ -35,8 +35,8 @@ const wrap = (bodyInner, headInner = '') => `<!DOCTYPE html>
 <body>${bodyInner}</body></html>`;
 const BIG = '正文内容'.repeat(40);
 
-test('H2: 偏离脊柱的深处 role=dialog 折叠为 DIALOG_TAG，styled 保活', async () => {
-  // div4 文本 >5% → D1 不删；dialog 在 off-chain 深处 → H2 任意深度接住
+test('偏离脊柱的深处 role=dialog 折叠为 DIALOG_TAG，styled 保活', async () => {
+  // div4 文本 >5% → D1 不删；dialog 在 off-chain 深处 → 任意深度接住
   const r = await runClean(wrap(`
 <div data-idx="1">
   <div data-idx="2"><p data-idx="3">${BIG}</p></div>
@@ -50,7 +50,7 @@ test('H2: 偏离脊柱的深处 role=dialog 折叠为 DIALOG_TAG，styled 保活
   } finally { r.cleanup(); }
 });
 
-test('H2: 优先级 dialog > hidden；aria-modal 等价命中', async () => {
+test('优先级 dialog > hidden；aria-modal 等价命中', async () => {
   const r = await runClean(wrap(`
 <div data-idx="1"><p data-idx="2">${BIG}</p></div>
 <div data-idx="3" class="hid" role="dialog">营销提示信息请确认是否继续访问</div>
@@ -62,7 +62,7 @@ test('H2: 优先级 dialog > hidden；aria-modal 等价命中', async () => {
   } finally { r.cleanup(); }
 });
 
-test('H2: 守卫拦截——dialog 含 3 个 p 或含 table 不折（table 照常收集）', async () => {
+test('守卫拦截——dialog 含 3 个 p 或含 table 不折（table 照常收集）', async () => {
   const r = await runClean(wrap(`
 <div data-idx="1"><p data-idx="2">${BIG}</p></div>
 <div data-idx="3" role="dialog"><p>a</p><p>b</p><p>c</p></div>

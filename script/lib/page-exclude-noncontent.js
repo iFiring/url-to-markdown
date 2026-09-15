@@ -1,5 +1,5 @@
 /**
- * 步骤 5 分类层：非文章内容元素页面级排除（spec §3.1，双层第一层）。
+ * 步骤 5 分类层：非文章内容元素页面级排除（双层第一层）。
  * 在浏览器 evaluate 中执行，每页一次（页 A gotoSettled 后、页 B prepare
  * 重标记 + 签名计算之后、截图循环之前）——visibility 不动
  * tag/children/textContent，签名不受影响；零重排，模块位置与 boundingBox

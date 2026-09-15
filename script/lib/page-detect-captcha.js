@@ -8,7 +8,7 @@
 //   titleKeywords  标题关键词（小写子串匹配 document.title）
 //   frameUrlPatterns [{vendor, pattern}] 跨域 iframe 的 URL 挑战特征（字符串正则，i 标志）——
 //                  跨域 frame 内部 DOM 不可达，但主文档侧对其 <iframe> 元素自身的
-//                  src/可见性/面积测量完全可行（2026-09-14 自 Node 侧 frameElement 通道
+//                  src/可见性/面积测量完全可行（自 Node 侧 frameElement 通道
 //                  迁入——判定归一，且主文档侧可见性过滤覆盖隐藏 iframe）
 //   frameHits      [{vendor, sel, area}] Node 侧同源 sub-frame 预采集的命中（并入占优判定）
 //   areaRatio      占优面积通道比例（默认 0.35）

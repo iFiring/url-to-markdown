@@ -35,9 +35,9 @@ const wrap = (bodyInner, headInner = '') => `<!DOCTYPE html>
 <body>${bodyInner}</body></html>`;
 const BIG = '正文内容'.repeat(40); // 160 字符
 
-test("H3': 非占优分支独子链上的可见 fixed 浮层折叠为 OVERLAY_TAG（知乎登录横幅形态）", async () => {
+test("非占优分支独子链上的可见 fixed 浮层折叠为 OVERLAY_TAG（知乎登录横幅形态）", async () => {
   // div3 文本 24/320=7.5% > 5% → D1 不删；div3 非脊柱 → 其层级不扫描；
-  // div4 在独子链上（div3 是 body 直下、div4 是 div3 独子）→ H3' 接住
+  // div4 在独子链上（div3 是 body 直下、div4 是 div3 独子）→ 浮层折叠接住
   const r = await runClean(wrap(`
 <div data-idx="1"><p data-idx="2">${BIG}${BIG}</p></div>
 <div data-idx="3">
@@ -57,7 +57,7 @@ test("H3': 非占优分支独子链上的可见 fixed 浮层折叠为 OVERLAY_TA
   } finally { r.cleanup(); }
 });
 
-test("H3': 优先级 hidden > overlay；sticky 计入；off-chain 深处 fixed 不折", async () => {
+test("优先级 hidden > overlay；sticky 计入；off-chain 深处 fixed 不折", async () => {
   const r = await runClean(wrap(`
 <div data-idx="1"><p data-idx="2">${'正'.repeat(100)}</p></div>
 <div data-idx="3" class="hid" style="position:fixed">这是一个足够长的隐藏固定浮层文本超过百分之五</div>
@@ -71,11 +71,11 @@ test("H3': 优先级 hidden > overlay；sticky 计入；off-chain 深处 fixed �
       'hidden fixed（22 字/100=22% 逃 D1）→ HIDDEN_TAG（状态优先于位置）');
     assert.ok(r.cleaned.includes('{{OVERLAY_TAG|20_chars') && !r.cleaned.includes('吸顶工具条文本'),
       'body 直下 sticky 可见（20 字/100=20% 逃 D1）→ OVERLAY_TAG（H3 无 ratio 条件）');
-    assert.ok(r.cleaned.includes('深处吸顶浮层'), 'off-chain 深处 fixed 不折（R2 红线）');
+    assert.ok(r.cleaned.includes('深处吸顶浮层'), 'off-chain 深处 fixed 不折（红线）');
   } finally { r.cleanup(); }
 });
 
-test("H3': 守卫拦截——fixed 含 pre 不折", async () => {
+test("守卫拦截——fixed 含 pre 不折", async () => {
   const r = await runClean(wrap(`
 <div data-idx="1"><p data-idx="2">${BIG}</p></div>
 <div data-idx="3" style="position:fixed">代码演示浮层文本较长超过阈值<pre data-idx="4">x=1</pre></div>`));

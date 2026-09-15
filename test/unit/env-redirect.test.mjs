@@ -48,7 +48,7 @@ test('marker: 写入/存在/删除生命周期；删除不存在不报错；内�
     fs.readFileSync(redirectMarkerPath(URL), 'utf8'),
     'to: https://mmh1.top/article/skill.html\n',
   );
-  // 定位只依赖存在性，不解析内容——marker 内容损坏仍生效（spec §7）
+  // 定位只依赖存在性，不解析内容——marker 内容损坏仍生效
   fs.writeFileSync(redirectMarkerPath(URL), '!!!garbage!!!\n', 'utf8');
   assert.equal(hasRedirectMarker(URL), true);
   assert.equal(urlDir(URL), path.join(tmp, redirectedDirName(URL)));

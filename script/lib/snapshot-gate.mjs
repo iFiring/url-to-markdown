@@ -1,5 +1,5 @@
 // script/lib/snapshot-gate.mjs
-// 步骤 1 人机门禁（2026-09-14）：三分支不动点循环，替代原「登录阶段」单分支。
+// 步骤 1 人机门禁：三分支不动点循环，替代原「登录阶段」单分支。
 //   分支① 登录——六信号两级制（detector.mjs 既有路径，viewer 机制 openLoginViewer）；
 //          password 强信号压过挑战占优（验证码内嵌登录表单 → 登录 viewer 一并解决）
 //   分支② 验证码/滑块——已知挑战标记占优（page-detect-captcha.js 双通道判定）或
@@ -204,7 +204,7 @@ export async function gateCheck(page, url, opts = {}) {
       loginSkippedByMemory = login.hitNames;
     }
 
-    // 404∧稀薄 = 硬事实（2026-09-14 修复：先于登录分支与记忆豁免——典型 404 页
+    // 404∧稀薄 = 硬事实（修复：先于登录分支与记忆豁免——典型 404 页
     // 常带登录链接/URL 子串命中，藏在其后会让 http_404 永不可达）；404∧正文充实
     // 照常放行（thin 条件保证）
     if (sparseTriage && httpStatus === 404 && pg.sparse.thin) throw err('http_404');

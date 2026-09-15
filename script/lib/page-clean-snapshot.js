@@ -9,11 +9,10 @@
  * 两趟共享同一套结构清洗（共享段 1-8：link/meta/base 删除、骨架删除、播放器
  * 删除、控件删除、D1 脊柱占优比较删除 7.5、空元素级联 + KEEP_EMPTY、astro-
  * 前缀解包、注释剥离（pre/code 子树除外））与折叠统计预计算（K5 hidden 规模、
- * K7 pre 行数量原文挂 expando）+ chrome 折叠集标志预计算（2026-09-09，spec
- * docs/superpowers/specs/2026-09-09-body-spine-chrome-removal-design.md：
+ * K7 pre 行数量原文挂 expando）+ chrome 折叠集标志预计算（
  * body 边界脚手架区 getComputedStyle 判 dialog/hidden/overlay，clean 趟 K5x
- * 消费；样式计算仅此一处，clean 趟折叠消费零计算）。长文本占位自
- * 2026-09-03 起移出共享段、两趟各自执行：styled 趟带编号 {{LONG_TEXT_k|n_chars}}
+ * 消费；样式计算仅此一处，clean 趟折叠消费零计算）。长文本占位
+ * 移出共享段、两趟各自执行：styled 趟带编号 {{LONG_TEXT_k|n_chars}}
  * （还原链消费），clean 趟在 K11 之后执行且无编号 {{LONG_TEXT|n_chars}}——
  * 唯一消费者步骤 2 只看结构+体量信号。
  *
@@ -31,14 +30,12 @@
  * 空壳 span 拆包 K10 → 纯视图文本折叠 K11（{{VIEW_TEXT|n_chars}}，两道
  * 门槛：文本量 ≥8 汉字/≥6 词、结构量纯 div 树内部 div>6 / 含 span 树
  * 合计>4（p 根只含 text/span、同 span 档），含 LT 模块整棵折，见 K11 段
- * 注释）；K8 行内 run 折叠已按 2026-09-06 spec 重设计（见
- *   docs/superpowers/specs/2026-09-06-long-text-inline-run-design.md）：
+ * 注释）；K8 行内 run 折叠已重设计：
  *   折叠单位 = 极大纯行内 run，检测/规范化序列化在两趟共享段末尾执行，
  *   canonical HTML 入 1_long_text.json 的 runs 段，步骤 5 inline2md
- *   确定性转 markdown——行内结构不再依赖 LLM 转录。详见各步骤注释与
- *   spec 修订记录。
+ *   确定性转 markdown——行内结构不再依赖 LLM 转录。详见各步骤注释。
  *
- * 带样式版简化（2026-08-28）：astro 解包两趟共享 + styled 属性白名单——
+ * 带样式版简化：astro 解包两趟共享 + styled 属性白名单——
  * 带样式版是步骤 3-5 的输入源，脚手架标签与属性（astro props、data-v-*、
  * aria-* 等）曾一路流进文章视图（步骤 4 LLM 输入）。
  */
@@ -63,7 +60,7 @@ function __u2mCleanSnapshot(cfg) {
     metas[i].parentNode.removeChild(metas[i]);
   }
 
-  // run 序列化的 URL 绝对化基准（spec 2026-09-06 §3.3）：快照已注入 <base>，
+  // run 序列化的 URL 绝对化基准：快照已注入 <base>，
   // 但下方共享段第 3 步会删除它——先捕获 document.baseURI，检测/序列化在共享段
   // 末尾执行时基准已不可得
   var runBaseURI = document.baseURI;
@@ -74,7 +71,7 @@ function __u2mCleanSnapshot(cfg) {
     bases[i].parentNode.removeChild(bases[i]);
   }
 
-  // 4. 按钮类控件保留（2026-08-25 起）：button 与 [role="button"]（div/span/a
+  // 4. 按钮类控件保留：button 与 [role="button"]（div/span/a
   //    伪装）不再删除——FAQ 折叠头、CTA、卡片式 role=button 常是内容载体，
   //    整删或按字数取舍都会误伤正文，一律保留交步骤 2 语义判断。按钮型
   //    input[type=button|submit|reset] 仍随共享段第 7 步的表单控件删除（无子内容，
@@ -105,13 +102,13 @@ function __u2mCleanSnapshot(cfg) {
     controls[i].parentNode.removeChild(controls[i]);
   }
 
-  // 7.5 D1 脊柱占优比较删除（两趟共享，spec 2026-09-09 §4）：沿 body 向下的
+  // 7.5 D1 脊柱占优比较删除（两趟共享）：沿 body 向下的
   //     「脊柱」逐层比较兄弟文本量——非占优子元素 ratio ≤5% ∧ (fixed/absolute/
   //     sticky ∨ 弹窗词汇) ∧ 内容守卫通过 → 判为 chrome（弹窗/浮层/工具条），
-  //     整树删除。文本量排名第 1（含并列）永不入候选（裁定 R9，堵全零文本
+  //     整树删除。文本量排名第 1（含并列）永不入候选（堵全零文本
   //     退化）；下探进入占优子元素，其匹配 main/article/[role=main] 或子树
-  //     p≥5 → 不进入（裁定 R6，内容内部永不扫描）；硬上限 20 层。文本计量与
-  //     候选均排除 script/style/template/noscript（spec §14 修订 1：UA 样式
+  //     p≥5 → 不进入（内容内部永不扫描）；硬上限 20 层。文本计量与
+  //     候选均排除 script/style/template/noscript（UA 样式
   //     使 script display:none、CSS 源非文本量；真实管线步骤 1 已剥，防御
   //     夹具直入）。置于控件删除后、空元素级联前——删除腾出的空壳由级联收尾。
   var CHROME_VOCAB_RE = /modal|dialog|popup|pop-?up|popover|drawer|lightbox|toast|snackbar/i;
@@ -154,14 +151,14 @@ function __u2mCleanSnapshot(cfg) {
       lens[i] = texts[i].length;
       if (lens[i] > max) max = lens[i];
     }
-    if (max === 0) return;                    // 全零文本：无占优信号（裁定 R9）
+    if (max === 0) return;                    // 全零文本：无占优信号
     for (var i = 0; i < kids.length; i++) {
       if (lens[i] === max) continue;          // rank1（含并列）恒排除
-      if (lens[i] / max > 0.05) continue;     // ratio 阈值（裁定 R5：相差 ≥95%）
+      if (lens[i] / max > 0.05) continue;     // ratio 阈值（相差 ≥95%）
       var pos = getComputedStyle(kids[i]).position;
       var sig = CHROME_POS[pos] ? 'pos:' + pos : (chromeVocabHit(kids[i]) ? 'vocab' : '');
       if (!sig) continue;
-      if (!chromeGuardOk(kids[i])) continue;  // 内容守卫（裁定 R10）
+      if (!chromeGuardOk(kids[i])) continue;  // 内容守卫
       if (chromeKills.length < 60) {
         chromeKills.push({
           at: label, ratio: +(lens[i] / max).toFixed(4), sig: sig,
@@ -178,8 +175,8 @@ function __u2mCleanSnapshot(cfg) {
       if (lens[i] === max && kids[i].parentNode) { dom = kids[i]; break; }
     }
     if (!dom || !dom.children.length) return;
-    if (dom.matches('main, article, [role="main"]')) return;       // 裁定 R6
-    if (dom.querySelectorAll('p').length >= 5) return;             // 裁定 R6
+    if (dom.matches('main, article, [role="main"]')) return;
+    if (dom.querySelectorAll('p').length >= 5) return;
     spineScan(dom, depth + 1, label + '>' + dom.tagName.toLowerCase()
       + (dom.getAttribute('data-idx') ? '#' + dom.getAttribute('data-idx') : ''));
   }
@@ -193,7 +190,7 @@ function __u2mCleanSnapshot(cfg) {
   //    video/audio/input 等已在前序步骤整体删除，不再列入白名单。
   //    表格结构元素（table/tr/td/col 等）即使为空也保留——删掉空单元格/
   //    空行/列定义会让行列错位，破坏表格整体显示；单元格内的噪声照删，
-  //    留下空壳单元格（按钮自 2026-08-25 起保留）。
+  //    留下空壳单元格（按钮保留）。
   var KEEP_EMPTY = {
     IMG: 1, IFRAME: 1, CANVAS: 1, OBJECT: 1, EMBED: 1,
     SOURCE: 1, PICTURE: 1,
@@ -274,7 +271,7 @@ function __u2mCleanSnapshot(cfg) {
     wrap.parentNode.removeChild(wrap);
   }
 
-  // 注释节点剥离（两趟共享，spec 2026-09-09 §9.1-2）：框架 SSR 残留（<!---->
+  // 注释节点剥离（两趟共享）：框架 SSR 残留（<!---->
   //     Vue/React 占位注释）与模板注释零信息量；顺带消除原生注释与步骤 5 分块
   //     上下文标记（HTML 注释形态）的潜在混淆。pre/code 子树除外——代码样本
   //     可能含 HTML 注释作为内容（styled 失败 live 代码块由步骤 4 LLM 阅读）。
@@ -291,7 +288,7 @@ function __u2mCleanSnapshot(cfg) {
   }
 
   // ---- 折叠统计预计算（两趟共享）+ 长文本占位函数定义 ----
-  // 长文本占位（2026-09-03 修订）移出共享段、两趟各自调用 foldLongText：
+  // 长文本占位（修订）移出共享段、两趟各自调用 foldLongText：
   // styled 趟在分支开头执行（带编号，原文按编号收集 → 1_long_text.json）；
   // clean 趟在 K11 之后执行（无编号——步骤 2 只看结构+体量；K11 先整棵折叠
   // 纯视图模块，幸存文本节点再占位）。阈值/豁免/中英文标准两趟同源。
@@ -331,20 +328,20 @@ function __u2mCleanSnapshot(cfg) {
     prePre[i].__u2mPreLines = countPreLines(prePre[i]);
   }
 
-  // chrome 折叠集预计算（两趟共享，spec 2026-09-09 §5/§9.1-3）：候选区 =
-  //     body 直接子孙（豁免兄弟检查，裁定 R4）∪ 独子链节点（自 body 下每步
-  //     皆独元素子，遇分叉出链，裁定 R3）。三种（优先级 dialog > hidden >
-  //     overlay，spec §7.1）：dialog = role=dialog/alertdialog/aria-modal 自
-  //     我声明、任意深度不限候选区（H2）；hidden = computed display:none ∨
+  // chrome 折叠集预计算（两趟共享）：候选区 =
+  //     body 直接子孙（豁免兄弟检查）∪ 独子链节点（自 body 下每步
+  //     皆独元素子，遇分叉出链）。三种（优先级 dialog > hidden >
+  //     overlay）：dialog = role=dialog/alertdialog/aria-modal 自
+  //     我声明、任意深度不限候选区；hidden = computed display:none ∨
   //     visibility:hidden 含祖先累积（display:none 后代的 computed 值不回传
-  //     none，必须文档序自顶向下累积）、限候选区（H1-C）；overlay = 候选区
-  //     内可见 ∧ fixed/absolute/sticky（H3'，知乎登录横幅形态——ratio 超标
+  //     none，必须文档序自顶向下累积）、限候选区；overlay = 候选区
+  //     内可见 ∧ fixed/absolute/sticky（知乎登录横幅形态——ratio 超标
   //     逃 D1、非脊柱层级不扫描的漏网浮层）。裸 [hidden] 及其
-  //     后代除外——K5 独占（既定政策不变）。统一内容守卫 chromeGuardOk
-  //     （裁定 R10）。最外层优先：文档序单趟，祖先已入折叠集则后代不再独立
-  //     判定。script/style/template/noscript 排除（spec §14 修订 1）。
+  //     后代除外——K5 独占（既定政策不变）。统一内容守卫 chromeGuardOk。
+  //     最外层优先：文档序单趟，祖先已入折叠集则后代不再独立
+  //     判定。script/style/template/noscript 排除。
   //     折叠集节点挂 __u2mChromeFold（种类）、后代挂 __u2mInChromeFold——
-  //     styled 侧收集与 clean 侧 K6/K7 同源 skip（k 对齐，spec §9.3）；规模
+  //     styled 侧收集与 clean 侧 K6/K7 同源 skip（k 对齐）；规模
   //     复用 __u2mHiddenSize 占位前预计算。必须在此计算：clean 趟随后删
   //     <style>/style 属性，computed display 退化为 UA 默认。
   var chromeFolds = [];
@@ -376,10 +373,10 @@ function __u2mCleanSnapshot(cfg) {
       if (attrAcc.get(el)) continue;                              // K5 独占领地
       var kind = null;
       if (el.matches('[role="dialog"], [role="alertdialog"], [aria-modal="true"]')) {
-        kind = 'dialog';                                  // H2：任意深度
+        kind = 'dialog';                                  // 任意深度
       } else if (onChain(el)) {
-        kind = hidAcc.get(el) ? 'hidden'                  // H1-C：状态优先
-          : (CHROME_POS[getComputedStyle(el).position] ? 'overlay' : null);   // H3'：可见浮层
+        kind = hidAcc.get(el) ? 'hidden'                  // 状态优先
+          : (CHROME_POS[getComputedStyle(el).position] ? 'overlay' : null);   // 可见浮层
       }
       if (!kind) continue;
       if (!chromeGuardOk(el)) continue;                           // 内容守卫
@@ -408,7 +405,7 @@ function __u2mCleanSnapshot(cfg) {
   //    svg/style 子树内的文本不占位——两趟随后都会删 SVG 内容（styled 瘦身
   //    壳 / clean 清空），若占位，占位符会随之消失而编号留在清单里；
   //    <style> 文本在带样式版中原样保留，清洗版删除 <style> 标签。
-  //    H1/H2/H3 整子树内的文本不占位（2026-08-31 修订）——标题是层级锚点，
+  //    H1/H2/H3 整子树内的文本不占位（修订）——标题是层级锚点，
   //    占位成 {{LONG_TEXT_k|N}} 会让步骤 2 的 LLM 看不到真实标题文本、无从
   //    判标题层级与 key id 取舍（与 <title> 不占位同款 rationale，title 因
   //    treewalker 只走 body 而天然不占位，这里是把同款豁免扩到正文标题）。
@@ -497,7 +494,7 @@ function __u2mCleanSnapshot(cfg) {
     if (tl !== al) ariaEls[i].setAttribute('aria-label', tl);
   }
 
-  // ---- run 检测 + 规范化序列化（两趟共享段末尾；spec 2026-09-06 §3）----
+  // ---- run 检测 + 规范化序列化（两趟共享段末尾）----
   // 长文本折叠单位升级为「极大纯行内 run」：流容器内 text 与行内元素混排的
   // 整段内容折成一个 {{LONG_TEXT_k}}（两趟折叠执行见 foldLongText），原文以
   // 规范化 HTML 片段入库（runs 段），步骤 5 inline2md 确定性转 markdown。
@@ -506,12 +503,12 @@ function __u2mCleanSnapshot(cfg) {
   // K11 的纯性扰动（K 规则删子树会让 clean 侧容器「变纯」而 styled 不纯）。
   // 检测结果挂元素 expando（__u2mRunHtml/__u2mRunSize，非属性、不序列化），
   // fold walk 按成员资格消费。
-  // run 行内允许集（§3.2-2）＝下方 K9 的 INLINE_TAGS 剔 IMG、加 DEL/VAR/WBR
+  // run 行内允许集＝下方 K9 的 INLINE_TAGS 剔 IMG、加 DEL/VAR/WBR
   // ——两处手抄同族集合，改任一处须同步检视另一处
   var RUN_INLINE = { A: 1, SPAN: 1, CODE: 1, STRONG: 1, EM: 1, B: 1, I: 1, U: 1, S: 1,
     MARK: 1, SMALL: 1, SUB: 1, SUP: 1, ABBR: 1, CITE: 1, Q: 1, KBD: 1, SAMP: 1, TIME: 1,
     BR: 1, DEL: 1, VAR: 1, WBR: 1 };
-  // 位置排除（§3.2-1）：table/pre 已有各自占位符体系；svg/style 随后删除；
+  // 位置排除：table/pre 已有各自占位符体系；svg/style 随后删除；
   // h1-h3 整子树豁免沿用 skipPlaceholder 语义（标题是层级锚点）
   var RUN_SKIP_CLOSEST = 'table, pre, svg, style, h1, h2, h3';
   // computed display 记忆化：检测对每个候选的子树逐元素查 gCS，跨候选共享
@@ -523,10 +520,10 @@ function __u2mCleanSnapshot(cfg) {
     }
     return runDisplayCache.get(el);
   }
-  // 子树纯行内（§3.2-2/3）：只约束后代元素（根自身标签不限——p/li/h4-h6/
+  // 子树纯行内：只约束后代元素（根自身标签不限——p/li/h4-h6/
   // summary/div/span 等流容器均可为 run 根，由极大性覆盖）；math 整棵放行
-  // 但取不到 LaTeX 源则阻断（决策 3：无源 math 留 DOM 走现状链路）。
-  // 隐藏三层语义（§3.2-3，2026-09-07 审阅修订）：run 根自查（runShapeOk）、
+  // 但取不到 LaTeX 源则阻断（无源 math 留 DOM 走现状链路）。
+  // 隐藏三层语义（审阅修订）：run 根自查（runShapeOk）、
   // 后代元素逐查（含 math 根自身）、祖先不查——FAQ [hidden] 块内的 run 要
   // 照常折（styled 版编号进恢复清单，步骤 2 标记后可还原）。
   // 注释节点（nodeType 8）有意放行：不渲染、无语义；序列化侧静默丢弃
@@ -540,13 +537,13 @@ function __u2mCleanSnapshot(cfg) {
       var src = __u2mLatexText(node);
       return src !== null && src !== '';
     }
-    // KaTeX 视觉孪生原子化（§3.3「katex-html 不入库」的兑现机制，2026-09-07
+    // KaTeX 视觉孪生原子化（「katex-html 不入库」的兑现机制，
     // 审阅修订）：span.katex = katex-mathml（clip 隐藏的 math 源，非
     // display:none）+ katex-html（视觉孪生，可含 svg 伸展符号）。整棵视为一个
     // math 节点、只判源——否则孪生文本随 run 双份入文（步骤 5 产出
     // $E=mc^2$*E*=*m**c*2），或孪生内 svg 把整段 run 误阻断（KaTeX 页失去
-    // 折叠收益，spec §1 动机 3 落空）。内部免检纯性/隐藏（clip 非
-    // display:none；svg 是排版符号非图片内容）；无源 → 阻断（同决策 3）
+    // 折叠收益）。内部免检纯性/隐藏（clip 非
+    // display:none；svg 是排版符号非图片内容）；无源 → 阻断（同上）
     if (node.classList && node.classList.contains('katex')) {
       if (runHidden(node)) return false;
       if (typeof __u2mLatexText !== 'function') return false;
@@ -563,7 +560,7 @@ function __u2mCleanSnapshot(cfg) {
     }
     return true;
   }
-  // 形状合格（§3.2-1/2/3，不含阈值）：候选与极大性判定共用
+  // 形状合格（不含阈值）：候选与极大性判定共用
   function runShapeOk(el) {
     if (el.closest(RUN_SKIP_CLOSEST)) return false;
     if (runHidden(el)) return false;
@@ -576,7 +573,7 @@ function __u2mCleanSnapshot(cfg) {
   function escHtmlText(s) {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
-  // 规范化序列化（§3.3，检测通过当场执行）：canonical HTML 片段。span 按
+  // 规范化序列化（检测通过当场执行）：canonical HTML 片段。span 按
   // computed style 归一（浏览器里不做，Node 侧永远无法补——class 驱动的强调
   // jsdom 无级联）；math 压成仅含 annotation 的极简形态（katex-html 视觉孪生
   // 不入库）；返回 null = 阻断信号（无源 math，防御分支——检测已挡）
@@ -779,7 +776,7 @@ function __u2mCleanSnapshot(cfg) {
 
   // K1. class 语义过滤（仅清洗版）：样式强相关 token 删、语义 token 留。
   //     原则：拿不准保留——漏删只费字节，误删语义 token 才伤步骤 2 判读。
-  //     2026-08-27 在上版 class 过滤（2026-08-25 瘦身设计）基础上补漏：负号前缀位移类、
+  //     在上版 class 过滤（瘦身设计）基础上补漏：负号前缀位移类、
   //     CSS-modules、! important 变体、overflow/appearance、裸 border/shadow/prose、工具名类。
   var HASH_PREFIX_RE = /^(?:astro|css|sc|jsx|chakra|emotion|styled|mui|next|module)-[-0-9a-zA-Z]+$/;
   var CSS_MODULE_RE = /^_[A-Za-z][A-Za-z0-9]*_(?=[a-z0-9]*[0-9])[a-z0-9]+(?:_\d+)?$/;
@@ -892,7 +889,7 @@ function __u2mCleanSnapshot(cfg) {
     hiddenCount++;
   }
 
-  // K5x. chrome 折叠集消费（仅清洗版，spec 2026-09-09 §5-7）：共享段
+  // K5x. chrome 折叠集消费（仅清洗版）：共享段
   //      chromeFolds 判定，壳机制逐字复用 K5——K2 白名单属性（含 data-idx）
   //      已就位、子树清空、token 带占位前预计算规模 + topTags 构成。
   //      hidden 种复用 HIDDEN_TAG（语义同裸 [hidden]：可能是收起正文，壳可
@@ -987,11 +984,10 @@ function __u2mCleanSnapshot(cfg) {
   var INLINE_TAGS = { A: 1, SPAN: 1, CODE: 1, STRONG: 1, EM: 1, B: 1, I: 1, U: 1, S: 1,
     MARK: 1, SMALL: 1, SUB: 1, SUP: 1, ABBR: 1, CITE: 1, Q: 1, KBD: 1, SAMP: 1, TIME: 1, IMG: 1, BR: 1 };
 
-  // （K8 行内 run token 化 2026-08-31 曾废除；2026-09-06 spec 重设计后
+  // （K8 行内 run token 化曾废除；重设计后
   //   「极大纯行内 run 整段折叠」已在两趟共享段末尾检测、趟分支内执行——
   //   canonical HTML 入 runs 段、步骤 5 inline2md 确定性还原行内结构，
-  //   旧废除理由（步骤 2 看不到行内骨架、行内结构保真依赖 LLM）随之作废，
-  //   见 docs/superpowers/specs/2026-09-06-long-text-inline-run-design.md）
+  //   旧废除理由（步骤 2 看不到行内骨架、行内结构保真依赖 LLM）随之作废）
 
   // K9. 保守空白压缩（仅清洗版）：删纯空白文本节点，当且仅当
   //     前后兄弟都不是行内文本敏感节点（非空白文本或行内元素）——行内相邻
@@ -1021,8 +1017,8 @@ function __u2mCleanSnapshot(cfg) {
   //     仅 clean 趟执行：带样式版保留这些 span——其 style 携 font-weight/
   //     color 供步骤 3 finalize 保留与步骤 4 LLM 判粗体/颜色，不能拆。孪生
   //     id 集由此由「相等」放宽为 clean ⊆ styled（step 3 在子集挑、step 4
-  //     在超集查恒命中）；clean 趟长文本占位在 K10 之后才执行（2026-09-03
-  //     后置），拆包挪的是原文文本节点；styled 趟不受影响（K10 仅 clean）。
+  //     在超集查恒命中）；clean 趟长文本占位在 K10 之后才执行（后置），
+  //     拆包挪的是原文文本节点；styled 趟不受影响（K10 仅 clean）。
   //     嵌套空壳 span 迭代到不动点（≤10 轮）。
   //     span 限定——div 等块级可能承 trans2img 模块边界，不碰。
   for (var round = 0; round < 10; round++) {
@@ -1045,7 +1041,7 @@ function __u2mCleanSnapshot(cfg) {
     if (!changed) break;
   }
 
-  // K11. 纯视图文本折叠（仅清洗版，2026-09-02；2026-09-03 门槛修订 + 去 LT
+  // K11. 纯视图文本折叠（仅清洗版；门槛修订 + 去 LT
   //     限制 + p>span 形态 + 行内允许集扩展）：极大「纯视图子树」——子树只含
   //     div + 行内文本类元素 + 文本/注释节点（div 根档），或 p 根的「仅行内
   //     集」子树（图表轴刻度、图解步骤、对比卡片、KaTeX 视觉孪生等可视模块
@@ -1057,14 +1053,14 @@ function __u2mCleanSnapshot(cfg) {
   //     零影响），clean 版占位符不被任何后续步骤消费。
   //     极大性 = 父不纯 → 折叠永不吸收纯结构之外的兄弟/内容（div>p/table 等
   //     语义标签是天然边界）。
-  //     行内允许集（2026-09-03 四次修订）：a/strong/b/em/i/code/br/MathML +
+  //     行内允许集（四次修订）：a/strong/b/em/i/code/br/MathML +
   //     同族 u/s/mark/small/sub/sup/abbr/cite/q/kbd/samp/time（与 K9
   //     INLINE_TAGS 同族、剔 img——图片是"此处有图"内容信号，不入允许集仍
   //     阻断）。math 整棵放行：MathML 内部（mi/mo/mn/semantics 等）不逐一检
   //     查——公式渲染内容，LaTeX 还原链走带样式版（步骤 5 才是 math 消费
   //     者），clean 版整块可折。扩展仅限行内元素——块级/语义标签（ul/table/
   //     pre/h4-h6 等）不入允许集、天然阻断，步骤 2 的结构判读不受影响。
-  //     折叠门槛（两道，2026-09-03——只折「结构脚手架明显 + 文本量达标」的
+  //     折叠门槛（两道，只折「结构脚手架明显 + 文本量达标」的
   //     子树，短小内容如 {{VIEW_TEXT|3_words}} 不再产生）：
   //     ① 文本量：被折部分 ≥8 汉字 / ≥6 词（viewTextSize 逐节点求和语义，
   //       与占位符后缀同源；K11 先于 LT 执行，量的就是原文）；
@@ -1072,12 +1068,12 @@ function __u2mCleanSnapshot(cfg) {
   //       div/行内合计 > 4（span 包裹内容如 katex 孪生更易达标）——结构门
   //       槛同时保证折叠恒有字节收益（≥5 个内部元素的序列化远超占位符
   //       ~20B），不再需要独立的 innerHTML 阈值。
-  //     含长文本的模块整棵折叠、原文随折吞没（2026-09-03 四次修订：K11 先于
-  //     LT 执行——clean 版根本不为模块内长文本生成占位符；三次修订的「LT
-  //     随折吞没」是同效的旧实现）——孪生守卫为 clean LT 后缀 ⊆ styled：
+  //     含长文本的模块整棵折叠、原文随折吞没（四次修订：K11 先于
+  //     LT 执行——clean 版根本不为模块内长文本生成占位符；旧实现的「LT
+  //     随折吞没」是同效机制）——孪生守卫为 clean LT 后缀 ⊆ styled：
   //     步骤 2 少看见模块内 LT（可视模块整块标记、内部本就不拆），还原链走
   //     带样式版不受影响。纯 LT 文本行（0 内部元素）过不了结构门槛、天然不折。
-  //     p>span 形态（2026-09-03 新增）：p 通常不嵌 p、只含 text 或行内元素
+  //     p>span 形态（新增）：p 通常不嵌 p、只含 text 或行内元素
   //     ——p 作为折叠根独立一档，纯性 = 子树只含文本与行内集（div/p/img 等
   //     任何其他标签阻断），结构门槛沿用行内档（行内 > 4）。p 不入纯树的
   //     允许集——否则正文段落流 <div><p>…</p><p>…</p></div> 会因 p 变纯而
@@ -1163,7 +1159,7 @@ function __u2mCleanSnapshot(cfg) {
   //     table/pre 全折（clean 无条件折叠），幸存者 = 段落/标题/列表等流文本
   foldLongText(false);
 
-  // （原步骤 19 R6 juice 隐藏折叠已废除：样式检测管线整体移除，隐藏折叠由
+  // （原步骤 19 juice 隐藏折叠已废除：样式检测管线整体移除，隐藏折叠由
   //   上方 K5 以 hidden 裸属性零样式计算实现）
 
   return {

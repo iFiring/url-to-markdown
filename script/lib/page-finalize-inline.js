@@ -7,11 +7,11 @@
  * 间接引用（var()/color-mix()/calc() 一律不出现在终态值里）。
  *  1. 白名单清理（逐元素遍历 CSSOM 声明，倒序删除防索引漂移）：
  *     仅保留——边框背景（border、outline、background、box-shadow）、
- *     flex/grid 方向（2026-09-09 收紧：display 按值门控仅 flex/grid 四值
+ *     flex/grid 方向（收紧：display 按值门控仅 flex/grid 四值
  *     存活 + flex-direction/wrap、grid-auto-flow/template-columns/rows
  *     五个方向 longhand；对齐全族/gap/order/flex 长手/grid placement
- *     全部出白名单；overflow 三件（overflow/overflow-x/y）2026-09-09
- *     同批出白名单）、transform、font-size 与
+ *     全部出白名单；overflow 三件（overflow/overflow-x/y）同批
+ *     出白名单）、transform、font-size 与
  *     font-weight（步骤 4 LLM 判标题层级的信号）、
  *     position:absolute（步骤 4 LLM 判特殊定位元素的信号——浮层/装饰/
  *     trans2img 候选；按值门控项有二：position 仅 absolute 存活
@@ -53,7 +53,7 @@
  *     声明与不声明计算结果恒同，删。白名单内唯一继承属性 font-size/
  *     font-weight 例外分流：unset≡inherit（默认行为，同既有 inherit
  *     删除）、initial 阻断继承（有意义，保留）
- *  1.9 display 值门控（2026-09-09 收紧）：仅 flex/inline-flex/grid/
+ *  1.9 display 值门控（收紧）：仅 flex/inline-flex/grid/
  *     inline-grid 四值存活（布局方向载体）；INLINE_DEFAULT_TAGS
  *     （span/a/strong/em/code 等行内标签）上 display 无论何值全删
  *     （原「仅删 UA 默认 display:inline」的升级——行内语义优先，
@@ -89,13 +89,13 @@ function __u2mFinalizeInline(computedMap) {
   var KEEP_PREFIX = ['border-', 'outline-', 'background-'];
   var KEEP_EXACT = {
     'border': 1, 'outline': 1, 'background': 1, 'box-shadow': 1,
-    // 2026-09-09 布局白名单收紧：只留方向信号——对齐全族（justify-* /
+    // 布局白名单收紧：只留方向信号——对齐全族（justify-* /
     // align-* / place-*）、gap、order、flex 长手与简写、grid placement
     // （grid-column/row/area/areas/auto-rows/auto-columns/简写）出白名单；
     // display 不在此列，走 keepDisplay 值门控
     'flex-direction': 1, 'flex-wrap': 1,
     'grid-auto-flow': 1, 'grid-template-columns': 1, 'grid-template-rows': 1,
-    // overflow 三件 2026-09-09 同批出白名单（滚动裁剪不再是保留信号）
+    // overflow 三件同批出白名单（滚动裁剪不再是保留信号）
     'transform': 1,
     // 字体类仅留这两个：步骤 4 LLM 判 div→h2 层级的信号
     'font-size': 1, 'font-weight': 1
@@ -152,7 +152,7 @@ function __u2mFinalizeInline(computedMap) {
     if (INHERITED_PROPS[prop]) return val === 'unset';
     return true;
   }
-  // 1.9 行内标签集（原「UA 默认 display:inline 删」——2026-09-09 升级为
+  // 1.9 行内标签集（原「UA 默认 display:inline 删」——升级为
   // keepDisplay 的行内全删依据：集内标签上 display 无论何值都删）
   var INLINE_DEFAULT_TAGS = {
     'span': 1, 'a': 1, 'strong': 1, 'b': 1, 'em': 1, 'i': 1, 'code': 1,

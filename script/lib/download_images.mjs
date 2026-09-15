@@ -6,7 +6,7 @@
 //   - 扩展名：URL 已知图片扩展名优先，其次响应 content-type，兜底 .png
 //   - 空路径/目录结尾/点路径/解码后为空 → 词干回退 image
 //   - 同一 URL 只下载一次，多条目共享同一本地文件
-//   - 并发限 4（旧管线 design §6.3 经验），命名按文档序分配（与网络完成顺序无关）
+//   - 并发限 4（旧管线经验），命名按文档序分配（与网络完成顺序无关）
 import fs from 'node:fs';
 import path from 'node:path';
 import { debug } from './contract.mjs';

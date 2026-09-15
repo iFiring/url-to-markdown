@@ -1,5 +1,5 @@
 // test/integration/captcha-detect.test.mjs
-// 人机验证检测层（2026-09-14）：collectGatePageSignals 占优双通道/成功态/跨 frame
+// 人机验证检测层：collectGatePageSignals 占优双通道/成功态/跨 frame
 // URL 通道/稀薄测量 + 点击探测挑战分类（probe.captcha，懒触发滑块）。
 // 布局相关（面积/可见性）必须真浏览器——jsdom 无布局引擎。
 import { test } from 'node:test';
@@ -163,7 +163,7 @@ test('member-preview 回归: 普通登录弹窗（无挑战标记）→ loginCon
   } finally { await s.close(); await fx.close(); }
 });
 
-// ── 2026-09-14 审查修复回归（badge 误伤族）───────────────────────────────────
+// ── 审查修复回归（badge 误伤族）───────────────────────────────────
 
 test('recaptcha-badge-sparse: 稀薄正文 + passive badge iframe → 不占优、走稀薄而非挑战', async () => {
   const fx = await startFixtureServer();

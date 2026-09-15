@@ -1,6 +1,6 @@
 // script/lib/table2md-self.mjs
 // self 引擎（默认）：jsdom 建 DOM → 共享 expandTableSpans → 手写 GFM 管道表
-// 序列化（行内 code/a/strong/em/img）→ 纯结构校验。单 jsdom 依赖（spec §14）。
+// 序列化（行内 code/a/strong/em/img）→ 纯结构校验。单 jsdom 依赖。
 // 表头判定与参考项目一致：仅首行全 <th> 才作表头；否则判 failed（不合成）。
 import { JSDOM } from 'jsdom';
 import { expandTableSpans } from './expand-table-spans.mjs';

@@ -1,5 +1,5 @@
 // test/integration/viewer-session.test.mjs
-// runViewerSession 计时语义（2026-09-14 用户裁定，三形态统一）：
+// runViewerSession 计时语义（用户裁定，三形态统一）：
 // 倒计时从用户首次打开 viewer 页面（首次 WS 连接）才开始——人没看到窗口不算人
 // 超时；无人连接由启动起的 backstopMs 绝对上限兜底（到期照常 fail，守单行 JSON
 // 契约、进程不无限期挂死）。直连模式（不 spawn 子进程），小超时参数确定性驱动。
@@ -130,7 +130,7 @@ test('runViewerSession: finish 后视口恢复 + onDone 回调拿到会话 api',
   }
 });
 
-// ── 2026-09-14 审查修复 #13：连接同一性判定 ────────────────────────────────
+// ── 审查修复 #13：连接同一性判定 ────────────────────────────────
 
 test('runViewerSession: 双开 viewer 页关其一 → 仍有活连接不判弃窗；全关才 fail', async () => {
   const fx = await startFixtureServer();

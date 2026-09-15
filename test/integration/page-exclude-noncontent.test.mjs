@@ -1,4 +1,4 @@
-// 分类层语义单测（spec §3.1 / §5）：真实浏览器 setContent + 注入共享脚本，
+// 分类层语义单测：真实浏览器 setContent + 注入共享脚本，
 // 直接断言保护规则矩阵——keep 自身/祖先/子孙保、非内容藏、delete 在 keep
 // 子树内藏、delete 为 keep 祖先时保优先、子代显式 visible 穿透一并覆写。
 import { test } from 'node:test';

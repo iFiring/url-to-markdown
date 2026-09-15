@@ -348,7 +348,7 @@ test('K6: 嵌套表格的行列不计入外层——行归属按最近 table 判
 });
 
 test('snapshot.mjs --from-snapshot: 按钮保留——button 与 role="button" 两版都不再删除', async () => {
-  // 2026-08-25 起按钮不再整删：FAQ 折叠头 / CTA / 卡片式 role=button 常是
+  // 按钮不再整删：FAQ 折叠头 / CTA / 卡片式 role=button 常是
   // 内容载体，整删或按字数取舍都会误伤正文——一律保留，交步骤 2 语义判断。
   const r = await runClean(`<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
@@ -527,7 +527,7 @@ test('snapshot.mjs --from-snapshot: 带样式快照保留样式，SVG 瘦身为�
   assert.ok(!/width=|height=/.test(svgOpen[0]), 'svg 壳不应保留 width/height 等其他属性');
   assert.ok(!styled.includes(svgLong) && !styled.includes('<text'), '带样式版不应残留 SVG 子元素与文本');
 
-  // 占位形态分两版（2026-09-03 修订）：带样式版带编号 {{LONG_TEXT_k|n_unit}}
+  // 占位形态分两版（修订）：带样式版带编号 {{LONG_TEXT_k|n_unit}}
   // （还原链消费），清洗版无编号 {{LONG_TEXT|n_unit}}——唯一消费者是步骤 2，
   // 只看结构+体量信号；阈值/豁免两趟同源，规模后缀逐一对应
   const phs = (h) => (h.match(/\{\{LONG_TEXT_\d+\|\d+_[a-z]+\}\}/g) || []).map((s) => s.replace(/^.*\|/, '')).sort();
@@ -583,7 +583,7 @@ test('K2: 属性白名单——九属性存活（aria-label 截断保留），hr
   const { cleaned, styled, cleanup } = await runClean(snapshot, 'k2-attrs');
   try {
     const a = cleaned.match(/<a data-idx="2"[^>]*>/)[0];
-    // aria-label 2026-08-31 起入 clean 白名单（截断保留）；"链接" 1 句原样存活
+    // aria-label 入 clean 白名单（截断保留）；"链接" 1 句原样存活
     assert.ok(a.includes('aria-label="链接"'), `aria-label 应保留（"链接" 1 句原样）: ${a}`);
     assert.ok(!/href|target|data-1p/.test(a), `a 的 href/target/data 噪声应删净: ${a}`);
     const img = cleaned.match(/<img data-idx="3"[^>]*>/)[0];
@@ -595,14 +595,14 @@ test('K2: 属性白名单——九属性存活（aria-label 截断保留），hr
     }
     assert.ok(!/tabindex|draggable/.test(div), `白名单外属性应删净: ${div}`);
     assert.ok(!cleaned.includes('lang='), 'html lang 应删（白名单外）');
-    // 2026-08-28 起 styled 趟有自己的属性白名单：href 留（URL 源）、data-1p-ignore 删
+    // styled 趟有自己的属性白名单：href 留（URL 源）、data-1p-ignore 删
     assert.ok(styled.includes('href="https://example.com/x"'), '带样式版保留 href（URL 源）');
     assert.ok(!styled.includes('data-1p-ignore'), '带样式版 data-* 脚手架属性应删净');
   } finally { cleanup(); }
 });
 
 test('K2b: aria-label 首末句截断——≥3 句保留首句+末句、中间 …；≤2 句原样；中英句末标点切句、逗号不切；两趟孪生一致', async () => {
-  // 2026-08-31：aria-label 值在共享段截断（clean 与 styled 同位执行）。
+  // aria-label 值在共享段截断（clean 与 styled 同位执行）。
   // 切句终止符 = 。！？；与 .!?;（不含逗号/顿号）；≥3 句才截断，≤2 句原样。
   const longZh = '复制到剪贴板。然后粘贴到编辑器。最后保存文件。';
   const longEn = 'First sentence. Second sentence here. Third sentence. Fourth one.';
@@ -749,7 +749,7 @@ let c = 3;</div></code></pre>
 });
 
 test('K7: OpenAI 槽壳形态全链路——传播后 mixed_signal 单信号跳过判 ok、无幻影空行', async () => {
-  // 回归（2026-09-03，developers.openai.com prompt-caching k=5/6）：槽壳
+  // 回归（developers.openai.com prompt-caching k=5/6）：槽壳
   // .syntax-highlighter-line-numbers display:block 但 us:auto（us:none 只在
   // 数字 span，class 级 CSS）→ 旧实现 bc 计壳=1 与 \n 信号矛盾 →
   // mixed_signal_mismatch 误杀落步骤 4。<!-- --> 为注释节点三处信号不可见，
@@ -778,7 +778,7 @@ test('K7: OpenAI 槽壳形态全链路——传播后 mixed_signal 单信号跳�
 });
 
 test('P0: pre 内空白 token span 不被空元素级联删除——shiki 逐 token 高亮代码不粘连', async () => {
-  // 回归（2026-09-02）：shiki 把空格也包成 <span style="color"> </span>
+  // 回归：shiki 把空格也包成 <span style="color"> </span>
   // （逐 token）。空元素级联 hasContent() 用 trim 判空，会把这种仅含空白的
   // 行内 span 当空壳删掉，丢失空格致 constclient=newOpenAI()。pre 子树内
   // 空白是语义内容（<pre> 白空保留是 HTML 语义），应计为内容、不删。
@@ -863,7 +863,7 @@ test('K7: 空 pre 判 failed(empty)、clean 恒折叠 1_lines、styled 保 live 
 test('K7: 长文本占位块走 CODE 管线——纪元豁免下 ok、行数取展开后', async () => {
   // 回归前身：pre 内单个长文本节点（含汉字、超阈值）被两趟共享的长文本占位
   // 折叠成 {{LONG_TEXT_k|N_chars}}。CODE 管线下收集 text 为占位符（单行）、
-  // Node 层预展开还原原文——LONG_TEXT 纪元豁免（spec §6.1 补注）使渲染交叉
+  // Node 层预展开还原原文——LONG_TEXT 纪元豁免使渲染交叉
   // 校验跳过（占位符形态 renderedLines 与展开后行数不可比），块判 ok、
   // 行数取展开后修剪值（3 行而非 1）。
   const preLong = '第一行超过阈值的中文长文本行；\n第二行超过阈值的中文长文本行；\n第三行超过阈值的中文长文本行；';
@@ -911,7 +911,7 @@ test('K6/K7: 带 hidden 的 table/pre 由 K5 独占折叠——不被二次覆�
   } finally { cleanup(); }
 });
 
-test('R4+R5: astro 包装解包；安全位置空白删除、行内间空白保留', async () => {
+test('astro 包装解包；安全位置空白删除、行内间空白保留', async () => {
   const snapshot = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>t</title></head>
 <body>
@@ -937,7 +937,7 @@ test('R4+R5: astro 包装解包；安全位置空白删除、行内间空白保�
     // 行内相邻文本/元素之间的空白保留
     const inline = cleaned.match(/<p data-idx="9">([\s\S]*?)<\/p>/)[1];
     assert.ok(inline.includes('x <a') && inline.includes('> z'), `行内间空白应保留: ${JSON.stringify(inline)}`);
-    // 2026-08-28 起 astro 解包两趟共享：带样式版同样解包（脚手架不流进步骤 3-5）
+    // astro 解包两趟共享：带样式版同样解包（脚手架不流进步骤 3-5）
     assert.ok(!/<astro-[a-z]/.test(styled), '带样式版 astro 包装同样解包');
     assert.ok(styled.includes('data-idx="3"') && styled.includes('data-idx="5"'), '带样式版子元素上提保留');
   } finally { cleanup(); }
@@ -986,7 +986,7 @@ test('长文本占位（两趟共享）——run 折叠后：混排段整段占�
     assert.ok(/<p data-idx="4">\{\{LONG_TEXT\|13_words\}\}<\/p>/.test(cleaned), '13 词纯文本段清洗版同样占位（无编号）');
     assert.ok(cleaned.includes(en12), '12 词文本保留原文');
     // 行内混排段（合计 14 词 > 12 阈值）run 折叠后整段一个占位符——行内结构
-    // 随 canonical HTML 入 runs 段（2026-09-06 spec 重设计；旧「按文本节点
+    // 随 canonical HTML 入 runs 段（重设计；旧「按文本节点
     // 折叠、行内结构保留」的 K8 废除理由就此反转）
     const mixed = cleaned.match(/<p data-idx="6">([\s\S]*?)<\/p>/)[1];
     assert.equal(mixed, '{{LONG_TEXT|14_words}}', `混排段整段 run 折叠: ${mixed}`);
@@ -1139,7 +1139,7 @@ test('K10: 空壳 span 拆包（仅 clean）——仅 data-idx 的 span 解包�
 });
 
 test('S1: astro- 前缀解包提升至两趟——带样式版同样解包，LONG_TEXT 编号不受影响', async () => {
-  // 2026-08-28 起 K4 从清洗版独占提升为两趟共享：带样式版是步骤 3-5 的输入源，
+  // K4 从清洗版独占提升为两趟共享：带样式版是步骤 3-5 的输入源，
   // astro 脚手架（含巨量 props 属性）曾一路流进 3_article.html（LLM 输入）。
   // 枚举扩展为 astro- 前缀匹配——该前缀是框架保留命名空间，static-slot 变体一并解包。
   const longZh = '这是一段放在岛屿里的超长中文文本，用于验证占位编号不受解包扰动。';
@@ -1360,7 +1360,7 @@ test('CODE 占位符：ra 形态（grid 行容器零 \\n）行数修正——不
 });
 
 test('K11: 纯视图文本折叠——纯 div 树需内部 div>6、文本量 ≥8 汉字；不达标不折、styled 不动', async () => {
-  // 2026-09-03 门槛修订：仅折叠「结构脚手架明显 + 文本量达标」的纯视图子树——
+  // 门槛修订：仅折叠「结构脚手架明显 + 文本量达标」的纯视图子树——
   // 纯 div 树内部 div > 6；文本量 ≥8 汉字 / ≥6 词（英文）。短文本、结构单薄的
   // 子树保留原样（步骤 2 的判读信号）。
   const snapshot = `<!DOCTYPE html>
@@ -1408,7 +1408,7 @@ test('K11: 纯视图文本折叠——纯 div 树需内部 div>6、文本量 ≥
 });
 
 test('K11: 含 span 树合计 >4 即折、a/button/h2 豁免、hidden/svg 阻断、锚点旁模块单独折叠', async () => {
-  // 形态分档（2026-09-03）：含 span 的树 div/span 合计 > 4 即达结构门槛
+  // 形态分档：含 span 的树 div/span 合计 > 4 即达结构门槛
   // （span 包裹内容如 katex 孪生更易折）；纯 div 树仍需 >6。
   // 豁免夹具用 5 层带 class 的 span（无属性 span 会先被 K10 拆包）+ 6 词文本
   // ——只有豁免规则（而非门槛）能阻止折叠。刻度行验证逐节点计词（K9 删空白
@@ -1447,7 +1447,7 @@ test('K11: 含 span 树合计 >4 即折、a/button/h2 豁免、hidden/svg 阻断
 });
 
 test('K11: 含 LT 模块整棵折叠——LT 随折吞没（clean ⊆ styled）；纯 LT 文本行不折', async () => {
-  // 2026-09-03 三次修订去 LT 限制 + 四次修订顺序重排：clean 趟 K11 先于 LT
+  // 三次修订去 LT 限制 + 四次修订顺序重排：clean 趟 K11 先于 LT
   // 占位执行——含长文本的纯视图模块整棵折叠（长文本原文随折吞没、不再以 LT
   // 形态露面），幸存文本节点再按阈值占位且无编号（{{LONG_TEXT|n_unit}}——
   // 唯一消费者步骤 2 只看结构+体量）。孪生守卫取「clean LT 规模后缀 ⊆
@@ -1507,7 +1507,7 @@ test('K11: 含 LT 模块整棵折叠——LT 随折吞没（clean ⊆ styled）�
 });
 
 test('K11: p>span 形态——p 根（子树仅 text/行内集）行内>4 即折；纯文本 p 不折、div 不因含 p 变纯', async () => {
-  // 2026-09-03 新增 p>span 形态：p 通常不嵌 p、只含 text 或行内元素——p 作为
+  // 新增 p>span 形态：p 通常不嵌 p、只含 text 或行内元素——p 作为
   // 折叠根独立一档，纯性 = 子树只含文本与行内集（div/p/ul/img 等任何其他标签
   // 阻断），结构门槛沿用行内档（行内元素 > 4）。p 不入 div/行内纯树的允许集：
   // 正文段落流 <div><p>…</p><p>…</p></div> 不能因 p 变纯而整块折叠。
@@ -1541,7 +1541,7 @@ test('K11: p>span 形态——p 根（子树仅 text/行内集）行内>4 即折
 });
 
 test('K11: 行内允许集扩展——strong/em/b/i/code/br/a 混排不再阻断、img 仍阻断', async () => {
-  // 2026-09-03 四次修订：纯视图允许集从 div/span 扩到行内文本类元素全集
+  // 四次修订：纯视图允许集从 div/span 扩到行内文本类元素全集
   // （点名的 a/strong/b/em/i/code/br/MathML + 同族 u/s/mark/sub/sup 等，剔 img
   // ——图片是内容信号仍阻断）。可视模块内部常见行内强调/行内 code/换行混排，
   // 此前任一 strong/em/code 都会阻断纯性、模块折不了。
@@ -1572,7 +1572,7 @@ test('K11: 行内允许集扩展——strong/em/b/i/code/br/a 混排不再阻断
 });
 
 test('K11: MathML 整棵放行——含行内公式的 span 树可折、内部 mi/mo 不逐一检查', async () => {
-  // 2026-09-03 四次修订：math 加入行内允许集且整棵放行（KaTeX 的 MathML 孪生
+  // 四次修订：math 加入行内允许集且整棵放行（KaTeX 的 MathML 孪生
   // 含 mi/mo/mn/annotation 等私有结构，逐一检查必假阴性）。此前 math 阻断纯性、
   // 公式段落永不折；LaTeX 还原链不受影响——步骤 5 的 math 消费走带样式版路径，
   // clean 版唯一消费者步骤 2 不看公式内部。
@@ -1623,7 +1623,7 @@ test('CODE 占位符：失败块 styled 保 live + 标记、clean 恒折叠、�
 });
 
 test('run 折叠：混排长段落整段折叠——styled 单占位符 + runs 段 canonical + clean 无编号', async () => {
-  // spec 2026-09-06 §3：折叠单位升级为「极大纯行内 run」。混排段落整段一
+  // 折叠单位升级为「极大纯行内 run」。混排段落整段一
   // 个 {{LONG_TEXT_1|N_chars}}，行内结构随 canonical HTML 入 runs 段；散文本
   // 段为空；clean 版无编号整段形态。
   const snapshot = `<!DOCTYPE html>
@@ -1696,7 +1696,7 @@ test('run 序列化：span 样式归一——inline/class 两驱动 + 多信号�
 });
 
 test('run 折叠：math 有源整段折叠（极简形态）+ display 判定 + 无源阻断', async () => {
-  // 体量门槛（§3.2-5）对 display math 同样生效：.katex-display 独立容器只含
+  // 体量门槛对 display math 同样生效：.katex-display 独立容器只含
   // 公式、词数过不了 >12 阈值——块级公式要折进 run，必须处在够长的段落流内
   // （真实形态：<p>文本 <span class="katex-display">…math…</span> 文本</p>）
   const snapshot = `<!DOCTYPE html>
@@ -1759,7 +1759,7 @@ test('run 孪生守卫：hidden 祖先 / K10 拆包 / K11 吞没——clean LT �
 });
 
 test('run 折叠：KaTeX 视觉孪生原子化——canonical 只入极简 math，孪生（含 svg）不入库', async () => {
-  // spec §3.3「katex-html 视觉孪生不入库」的机制钉住（2026-09-07 审阅修订）：
+  // 「katex-html 视觉孪生不入库」的机制钉住（审阅修订）：
   // span.katex = katex-mathml（clip 隐藏的 math 源，非 display:none）+
   // katex-html（视觉孪生，可含 svg 伸展符号）。原子化处理：整棵视为一个
   // math 节点、只在内部判源——否则孪生文本随 run 双份入文（$E=mc^2$ 后又
@@ -1819,7 +1819,7 @@ test('run 序列化：void 元素 br/wbr 不带闭合标签——浏览器→jsd
   } finally { cleanup(); }
 });
 
-test('run 阻断：带 [hidden] 的 math 不随 run 入库（§3.2-3 隐藏三层语义含 math 根自身）', async () => {
+test('run 阻断：带 [hidden] 的 math 不随 run 入库（隐藏三层语义含 math 根自身）', async () => {
   // 隐藏内容不得折进恢复清单——math 根自身 [hidden]/display:none 同样阻断
   // （KaTeX 孪生场景走原子化分支、其内部 mathml 的 clip 隐藏不受影响）。
   const snapshot = `<!DOCTYPE html>

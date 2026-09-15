@@ -1,13 +1,13 @@
 // script/lib/chunk-article.mjs
 /**
- * 文章视图分块器（spec docs/superpowers/specs/2026-09-09-article-chunk-split-design.md）。
+ * 文章视图分块器。
  * 纯函数：不碰文件系统与浏览器；由 render_article.mjs 在 slim pass 后调用。
  *
  * 输入：page-slim 产物全文 slimHtml 与 body 逐子元素 outerHTML（同一 DOM、
  * 同一序列化器——每块 markup 与 3_article.html 逐字节一致）。输出完整独立
  * html 分块 3_article_chunk_X_of_N.html 的内容。
  *
- * 算法（spec §3.3-§3.5）：
+ * 算法：
  *   1. 触发：slimHtml 字节 > splitThreshold 才分割
  *   2. 贪心装箱：按文档序累加，加入下一块会超 chunkMax 即封块（own 向
  *      40KB 靠齐）；单个段落块自身 > chunkMax 时独立成块（允许溢出——
@@ -20,17 +20,17 @@
  *      （上一块尾部向前 ≤2，跳过已在开头集内的块）；每块 ⚠️下文（下一块
  *      开头向后 ≤2，末块无）。每侧独立字节帽 chunkMax/5：(已取+候选) ≤ 帽
  *      才取、否则停
- *   5. 上下文不计入块预算（2026-09-09 用户裁定）：📌/⚠️ 侧是只读参照，为压
+ *   5. 上下文不计入块预算（用户裁定）：📌/⚠️ 侧是只读参照，为压
  *      40KB 削上下文本末倒置——无超限削减 pass；每侧自身选取上限（≤3/≤2/≤2
  *      块且 ≤chunkMax/5）即是约束，文件最坏 ≈ chunkMax + 3×cap。
  *      （历史：v1 按「文件−下文 > chunkMax」削减上文→开头→下文，紧装块
  *      上下文被削光；v2 装箱预留 3072B 仍被胖开头侧吃掉——均废弃）
  *
- * 标记注释（一句话中英标签，spec §3.5 文案）划出转换边界：✅/❌ **每块恒在**
- * （2026-09-09 用户裁定：首块 ✅ 紧跟 body 开标签、末块 ❌ 紧贴 </body>，
+ * 标记注释（一句话中英标签）划出转换边界：✅/❌ **每块恒在**
+ * （用户裁定：首块 ✅ 紧跟 body 开标签、末块 ❌ 紧贴 </body>，
  * 不随上下文侧有无而缺失），子代理只转换 ✅ 与 ❌ 之间的段落块。
  * 三侧上下文段落块**包裹在注释内、
- * 每块独立一行**（2026-09-09 用户裁定：注释对 DOM 解析不可见、对子代理的
+ * 每块独立一行**（用户裁定：注释对 DOM 解析不可见、对子代理的
  * 文本阅读可见——结构上杜绝误转换；序列化保证文本节点中 > 转义为 &gt;，
  * 内容不会提前终结注释）。
  */
@@ -119,10 +119,10 @@ export function chunkArticle(slimHtml, children, { splitThreshold, chunkMax }) {
     return out;
   };
 
-  // ── 4. 组装（上下文不计入块预算——无削减 pass，spec §3.4）──
+  // ── 4. 组装（上下文不计入块预算——无削减 pass）──
   const n = packs.length;
   const chunks = [];
-  // 上下文副本变换（2026-09-09 用户裁定）：剥 data-idx（只读参照无需选择器
+  // 上下文副本变换（用户裁定）：剥 data-idx（只读参照无需选择器
   // 锚点，也强化「勿转换」信号——待转换块才带编号）+ 剥 style（内联样式对
   // 只读参照是纯字节噪音）+ 压缩标签间空白 + 压缩文本节点两缘空白（含
   // &nbsp; 实体——只读参照对齐噪音）。序列化保证文本中 < > 已转义为实体、
@@ -148,7 +148,7 @@ export function chunkArticle(slimHtml, children, { splitThreshold, chunkMax }) {
     const parts = ['<!DOCTYPE html>\n', header];
     if (openingIdxs.length > 0) parts.push(commented(OPENING_MARK, openingIdxs));
     if (prevIdxs.length > 0) parts.push(commented(PREV_MARK, prevIdxs));
-    // ✅/❌ 每块恒在（2026-09-09 用户裁定）：首块 ✅ 紧跟 body 开标签、
+    // ✅/❌ 每块恒在（用户裁定）：首块 ✅ 紧跟 body 开标签、
     // 末块 ❌ 紧贴 </body>——转换边界直观统一，不随上下文侧的有无而缺失
     parts.push(`\n${START_MARK}\n`);
     parts.push(own.map((t) => children[t]).join(''));

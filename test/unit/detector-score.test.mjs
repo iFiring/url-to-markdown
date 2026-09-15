@@ -1,5 +1,5 @@
 // test/unit/detector-score.test.mjs
-// 计分语义 v2（2026-09-07 设计）：六信号 + loginConfirmed；
+// 计分语义 v2：六信号 + loginConfirmed；
 // 跳过记忆（memorized 数组）= 命中信号全部在记忆内才整体豁免，
 // 存在记忆外新信号时记忆内信号照常态计票。
 import { test } from 'node:test';

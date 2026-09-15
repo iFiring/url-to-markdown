@@ -1,17 +1,17 @@
 // script/lib/clean-snapshot.mjs
-// 步骤 1 清洗阶段（原步骤 2 CLI 主体，2026-09-11 步骤 1/2 合并时平移）。
+// 步骤 1 清洗阶段（原步骤 2 CLI 主体，步骤 1/2 合并时平移）。
 // 单页两趟（同一 chromium 页面对同一 1_snapshot.html 先后渲染两次，
 // cfg.mode 分叉）：
 //   趟 1（styled）结构清洗 + astro 解包 + 长文本占位 + SVG 瘦身 + 属性白名单
 //     → 1_clean_style_snapshot.html（供步骤 3 裁剪）+ 1_long_text.json
 //   趟 2（clean）结构清洗 + K1-K11 机械规则瘦身 + 长文本占位（K11 之后、无编号）
 //     → 1_clean_snapshot.html（结构视图）
-// 样式计算仅限共享段标志预计算（spec 2026-09-09）：不做 juice 内联；
+// 样式计算仅限共享段标志预计算：不做 juice 内联；
 // CSS 隐藏检测限 body 边界脚手架区（body 直接子孙 ∪ 独子链）——链外深处
 // 的 CSS 隐藏子树（FAQ/非激活 tab）按可见保留，清洗版折叠为 HIDDEN_TAG
 // 壳（K5x）；裸 hidden 属性折叠（K5）全文档不变。
 //
-// 长文本占位分两趟各自执行（2026-09-03 修订，自共享段移出）：styled 趟在
+// 长文本占位分两趟各自执行（修订，自共享段移出）：styled 趟在
 // 分支开头带编号执行（{{LONG_TEXT_k|n_chars}}，恢复清单 1_long_text.json
 // 由此产出）；clean 趟在 K11 之后无编号执行（{{LONG_TEXT|n_chars}}——唯一
 // 消费者步骤 2 只看结构+体量信号）。还原链不变——步骤 4 引用、步骤 5 回填
@@ -23,8 +23,7 @@
 // file:// 重解析只应用内联后的 <style>，computed style 须来自纯净级联）
 // + 拦截 http(s) 子资源（DOM 解析不需要图片/字体）；抛异常或返回值。
 //
-// 两趟分叉的完整规则清单见 lib/page-clean-snapshot.js 头注与
-// docs/superpowers/specs/2026-08-27-clean-snapshot-simplify-design.md。
+// 两趟分叉的完整规则清单见 lib/page-clean-snapshot.js 头注。
 import fsSync from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
@@ -128,7 +127,7 @@ export async function cleanSnapshot(browser, opts = {}) {
     const styledPath = path.join(dir, '1_clean_style_snapshot.html');
     await fsPromises.writeFile(styledPath, styledHtml, 'utf8');
 
-    // 1_long_text.json 两段 schema（spec 2026-09-06 §4）：texts 散文本纯文本 +
+    // 1_long_text.json 两段 schema：texts 散文本纯文本 +
     // runs 行内 run 规范化 HTML，单一计数器全局编号。table2md/code2md 的
     // expandLongText 只消费 texts（表格/pre 子树被 run 检测位置排除、其内部
     // 永远只有散文本占位符）

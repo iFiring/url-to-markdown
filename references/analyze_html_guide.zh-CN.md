@@ -216,7 +216,7 @@
 
 - `{{TABLE_k|y×x}}`：表格整体占位，k = 文档序编号（1 起、跳过 `[hidden]` 表），y = 行数（`<tr>` 数），x = 列数（各行 colspan 之和的最大值，即网格列数）。行列规模是判读表格的信号——大表（如 `30×` 级）大概率是核心数据载体。成功表的 GFM markdown 已由步骤 1 预计算存 `1_tables.json`、步骤 5 还原；步骤 2 仅需标记其 `data-idx` 入 paragraphIds
 
-- `{{HIDDEN_TAG|n_chars;n_a/n_div/…}}` 为带 `hidden` 属性的元素，折叠了子树；token 是真实文本规模与标签构成（计数降序），标明其后是整块折叠内容。hidden 元素按内容语义判身份：文章正文（FAQ/附录/展开收起）→ 段落块（也是锚点）；页面功能（模态/抽屉/移动端导航）→ 流内标 `dumpIds`、流外不标。自 2026-09-09 起也覆盖 **body 边界脚手架区的 CSS 隐藏**（body 直接子孙与独子链上的 display:none/visibility:hidden）——判读方式不变；正文流深处的 CSS 隐藏内容（非激活 tab、FAQ 收起答案）不折叠、原文可见
+- `{{HIDDEN_TAG|n_chars;n_a/n_div/…}}` 为带 `hidden` 属性的元素，折叠了子树；token 是真实文本规模与标签构成（计数降序），标明其后是整块折叠内容。hidden 元素按内容语义判身份：文章正文（FAQ/附录/展开收起）→ 段落块（也是锚点）；页面功能（模态/抽屉/移动端导航）→ 流内标 `dumpIds`、流外不标。也覆盖 **body 边界脚手架区的 CSS 隐藏**（body 直接子孙与独子链上的 display:none/visibility:hidden）——判读方式不变；正文流深处的 CSS 隐藏内容（非激活 tab、FAQ 收起答案）不折叠、原文可见
 - `{{DIALOG_TAG|n_chars;构成}}` 为 `role="dialog"`/`aria-modal` 弹窗折叠壳（任意深度）——**chrome，不要选入任何键**；壳 data-idx 也不需要标 dumpIds（步骤 3 对键外分支整枝删除）
 - `{{OVERLAY_TAG|n_chars;构成}}` 为 body 边界独子链上的可见 fixed/absolute/sticky 浮层折叠壳（登录横幅/吸顶工具条等）——**chrome，不要选入任何键**
 

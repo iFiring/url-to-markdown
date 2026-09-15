@@ -50,7 +50,7 @@ test('T2 贪心装箱 + 尾块合并 + 上下文不计预算（合并块带全�
   assert.equal(r.chunks.length, 2);
   const [c1, c2] = r.chunks;
   // 块 1：own=6000，下文 [b7] 1000B ≤cap(1300)——上下文不计预算、永不被削；
-  // ✅/❌ 每块恒在（2026-09-09 用户裁定：边界统一围绕 own）；ids 只含 own（下文副本剥 data-idx）
+  // ✅/❌ 每块恒在（用户裁定：边界统一围绕 own）；ids 只含 own（下文副本剥 data-idx）
   assert.deepEqual(ids(c1.html), [1, 2, 3, 4, 5, 6]);
   assert.ok(c1.html.includes('❌ 待转换内容自此结束'), '上下文免费后 ❌ 应存活');
   assert.ok(c1.html.includes('⚠️ 下文上下文'));
@@ -211,7 +211,7 @@ test('T7 三侧各就各位：下文帽截停、中间块五标记齐备、末�
 });
 
 test('T8 ✅/❌ 位置：首块 ✅ 紧跟 body 开标签、末块 ❌ 紧贴 </body></html>', () => {
-  // 2026-09-09 用户裁定：待转换边界每块恒在且位置直观——首块无前侧上下文时
+  // 用户裁定：待转换边界每块恒在且位置直观——首块无前侧上下文时
   // ✅ 就是 body 第一个节点；末块无下文侧时 ❌ 就是 body 最后一个节点
   const children = Array.from({ length: 14 }, (_, i) => blk(i + 1, 1000));
   const r = chunkArticle(doc(children), children, { splitThreshold: 12000, chunkMax: 6500 });

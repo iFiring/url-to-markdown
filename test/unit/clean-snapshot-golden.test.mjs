@@ -7,8 +7,8 @@ import { runScript } from '../helpers/run-script.mjs';
 import { urlToDirName } from '../../script/lib/env.mjs';
 
 // 带样式版 golden 基线：钉住 1_clean_style_snapshot.html 与 1_long_text.json
-// 的逐字节形态（golden 已含 2026-08-28 的 meta charset 注入行、astro 解包
-// 两趟共享与 styled 属性白名单——见 2026-08-27 spec 修订记录）。styled 产物
+// 的逐字节形态（golden 已含 meta charset 注入行、astro 解包
+// 两趟共享与 styled 属性白名单）。styled 产物
 // 按设计流进步骤 3-5，本基线防的是这些简化规则的意外回退与漂移。
 // 每个夹具一个具名测试：article-1 失败不再遮蔽 clean-simplify。
 for (const name of ['article-1', 'clean-simplify']) {

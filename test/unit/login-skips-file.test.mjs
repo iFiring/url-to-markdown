@@ -62,7 +62,7 @@ test('recordSkips：强信号永不入档；过滤后为空则不写文件', () 
   assert.equal(fs.existsSync(f2), false, '无弱信号可记时不应创建文件');
 });
 
-// —— 2026-09-14 人机门禁：content_sparse 入档（RECORDABLE_SIGNALS = 登录弱信号 ∪ content_sparse）——
+// —— 人机门禁：content_sparse 入档（RECORDABLE_SIGNALS = 登录弱信号 ∪ content_sparse）——
 
 test('RECORDABLE_SIGNALS：登录弱信号 ∪ content_sparse，不含强信号', () => {
   assert.deepEqual(RECORDABLE_SIGNALS, [...WEAK_SIGNALS, 'content_sparse']);

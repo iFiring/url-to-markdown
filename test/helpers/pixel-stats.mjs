@@ -1,4 +1,4 @@
-// pixelStats：webp 截图像素统计辅助（spec §5 断言 1-6 的底座）。
+// pixelStats：webp 截图像素统计辅助（断言 1-6 的底座）。
 // 文件读为 base64 注入 chromium 页面 canvas，逐像素统计后只把数值结果带回
 // Node——避免把数 MB 像素数组跨 evaluate 边界序列化。浏览器进程跨多次调用
 // 复用（模块级惰性单例），测试收尾调 closePixelStats() 关闭。

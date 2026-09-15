@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * snapshot.mjs —— 步骤 1：快照下载 + 结构清洗。给定 URL，单个 chromium
- * 实例贯穿七个阶段（2026-09-11 起原步骤 1/2 合并）：五阶段抓取产出全保真
+ * 实例贯穿七个阶段（原步骤 1/2 合并）：五阶段抓取产出全保真
  * 快照 <url-dir>/1_snapshot.html，随后清洗阶段两趟渲染产出结构视图与带
  * 样式版。
  *
@@ -12,7 +12,7 @@
  * 七阶段（依次执行；1-5 共享抓取 context，6 用裸 context——环境隔离是
  * 设计约束：file:// 重解析只应用内联后的 <style>，computed style 须来自
  * 纯净级联，且不得继承登录态与 page-init）:
- *   1. 门禁阶段（lib/snapshot-gate.mjs，2026-09-14 起原登录阶段扩展为三分支
+ *   1. 门禁阶段（lib/snapshot-gate.mjs，原登录阶段扩展为三分支
  *      不动点循环）—— ①登录：六信号两级制（密码框/探测确认为强信号单票成立，
  *      弱信号 ≥2 合议；命中全在跳过记忆 login_decisions_skips.json 内则整体
  *      豁免）；②验证码/滑块：已知挑战标记占优（Cloudflare/reCAPTCHA/hCaptcha/
@@ -74,7 +74,7 @@
  *              "overlayFolded":N,"commentsRemoved":N}} → 退出码 0
  *   {"status":"error","reason":"virtual_list"}  虚拟列表，未写快照 → 1
  *   {"status":"error","reason":"login_timeout"|"login_aborted"|...} → 1
- *   门禁新增 reason（2026-09-14）："captcha_timeout"|"captcha_aborted"（验证码
+ *   门禁新增 reason："captcha_timeout"|"captcha_aborted"（验证码
  *   viewer 超时/弃窗）、"http_404"（404∧稀薄——目标不存在）、"gate_aborted"|
  *   "gate_timeout"（稀薄介入 viewer 弃窗/超时，fail-closed）、"gate_loop_limit"
  *   （3 轮人工介入仍未稳定）→ 1
@@ -203,7 +203,7 @@ async function main() {
       debug(`url-dir: ${dirs.urlDir}${gate.redirected ? `（重定向自 ${url} → ${gate.to}）` : ''}`);
       const result = await timed('快照阶段', () => snapshotCapture(page, { outDir: dirs.urlDir, log }));
 
-      // marker 生命周期：快照成功后写入；未命中清除 stale（spec §5.2）
+      // marker 生命周期：快照成功后写入；未命中清除 stale
       if (gate.redirected) writeRedirectMarker(url, gate.to);
       else clearRedirectMarker(url);
 

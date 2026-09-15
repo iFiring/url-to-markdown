@@ -1,10 +1,10 @@
 // script/lib/snapshot-login.mjs
 // 步骤 1 登录阶段：goto URL → 六信号两级制检测（含登录入口点击探测）→
 // Screencast viewer（如需登录）。
-// 2026-09-14 人机门禁重构：viewer promise 机制提取为 screencast.mjs 的
+// 人机门禁重构：viewer promise 机制提取为 screencast.mjs 的
 // runViewerSession（三形态共用）+ 本文件的 openLoginViewer（登录专属回调）；
 // snapshotLogin 变薄壳（行为逐字不变），生产调用点迁移 gateCheck（snapshot-gate.mjs）。
-// 跳过记忆 v2（2026-09-07 设计）：viewer「⏭️ 跳过登录」经确认框后，把本次命中的
+// 跳过记忆 v2（设计）：viewer「⏭️ 跳过登录」经确认框后，把本次命中的
 // **弱信号名**并入 working/cookies/login_decisions_skips.json 的 {hostname: [信号]}；
 // 强信号（password/loginConfirmed）永不入档——跳过=一次性。后续运行命中全在记忆内
 // 才整体豁免（emit loginSkippedByMemory 如实通报），出现记忆外新信号时照常计票/弹 viewer。
@@ -30,7 +30,7 @@ const isPlainObject = (v) => v && typeof v === 'object' && !Array.isArray(v);
 
 /**
  * 允许入档的信号名全集 = 登录弱信号（WEAK_SIGNALS：url/content/redirected/spa/
- * loginButton）∪ 门禁稀薄信号（content_sparse，2026-09-14 人机门禁）。强信号
+ * loginButton）∪ 门禁稀薄信号（content_sparse，人机门禁）。强信号
  * （password/loginConfirmed）与验证码挑战永不允许入档——跳过=一次性。
  * detector.mjs 的 WEAK_SIGNALS 不动（登录计分语义）；本集合只管「哪些信号名可写进记忆」。
  * 登录计分与 content_sparse 天然隔离：scoreSignals 的 hitNames 只含登录信号 key，
@@ -90,7 +90,7 @@ const buildSkipConfirm = (result, hostname) => {
 
 /**
  * 登录 viewer 会话（登录阶段的人工介入环节）。机制走 runViewerSession 通用骨架
- * （screencast.mjs，2026-09-14 自旧 snapshotLogin 整体平移），本函数只承载登录
+ * （screencast.mjs，自旧 snapshotLogin 整体平移），本函数只承载登录
  * 专属语义：判定详情/跳过确认文案、跳过时弱信号入档 + storageState 刷新 + 探测
  * 还原、done/close 用 detectLogin 复检。行为与旧版逐字一致。
  * @param {import('playwright').Page} page
@@ -171,7 +171,7 @@ export async function openLoginViewer(page, url, ctx) {
 
 /**
  * 登录检测 + Screencast 人工登录（薄壳：gotoSettled → 六信号检测 → 早退或
- * openLoginViewer）。2026-09-14 viewer 机制提取后行为与旧版逐字一致；生产调用点
+ * openLoginViewer）。viewer 机制提取后行为与旧版逐字一致；生产调用点
  * （snapshot.mjs / snapshot-redirect.mjs）已迁移 gateCheck（snapshot-gate.mjs），
  * 本函数保留单轮登录路由语义供直连消费方（测试）使用。
  * @param {import('playwright').Page} page - 已创建的页面（浏览器由 snapshot.mjs 管理）

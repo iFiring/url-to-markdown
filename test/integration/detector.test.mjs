@@ -1,5 +1,5 @@
 // test/integration/detector.test.mjs
-// 登录检测 v2（2026-09-07 设计）：六信号 + 点击探测。
+// 登录检测 v2：六信号 + 点击探测。
 // 强信号 = password / loginConfirmed（点击登录入口后出现全屏弹窗或跳转）；
 // loginButton（可见但点击无确认）只是普通一票；记忆豁免 = 命中全在 memorized 内。
 import { test } from 'node:test';

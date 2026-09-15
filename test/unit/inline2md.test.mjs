@@ -1,6 +1,6 @@
 // test/unit/inline2md.test.mjs
-// inline2md 单测：canonical HTML 片段 → GFM 行内 markdown（spec 2026-09-06 §5）。
-// 转义规则（§5.3 自审修订）：常规文本反斜杠转义活动字符 + 行首中断符；
+// inline2md 单测：canonical HTML 片段 → GFM 行内 markdown。
+// 转义规则（自审修订）：常规文本反斜杠转义活动字符 + 行首中断符；
 // code span 与 math 源照抄不转义（Task 3）。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,7 +19,7 @@ test('文本转义：! 仅在后随 [ 时转义（防误触图片下载扫描）
   assert.equal(inlineRunToMarkdown('太棒了!'), '太棒了!');
 });
 
-test('行首中断符转义：值开头、br 硬换行后（文本换行已折叠不再触发行首——spec §12）', () => {
+test('行首中断符转义：值开头、br 硬换行后（文本换行已折叠不再触发行首）', () => {
   assert.equal(inlineRunToMarkdown('# 标题样'), '\\# 标题样');
   assert.equal(inlineRunToMarkdown('a<br>- b'), 'a\\\n\\- b');
   // 文本节点换行折叠为单空格 → 不再是行首，与浏览器渲染一致（a - b 是普通文本）
@@ -56,7 +56,7 @@ test('强调映射：strong/em/del 语义标签 → **/* /~~', () => {
     '**加粗** 普通 *斜体* 与 ~~删除~~');
 });
 
-test('强调嵌套：递归下降天然支持；跨族嵌套边界触 * → 换 __/_ 备选定界符（2026-09-11 修订，取代 raw HTML 退化）', () => {
+test('强调嵌套：递归下降天然支持；跨族嵌套边界触 * → 换 __/_ 备选定界符（修订，取代 raw HTML 退化）', () => {
   assert.equal(inlineRunToMarkdown('<strong>a <em>b</em> c</strong>'),
     '**a *b* c**');
   // 跨族嵌套：内层先产出 **x**，外层 *…* 内容首/尾触 * → 换 _ 定界符
@@ -125,7 +125,7 @@ test('br 硬换行：反斜杠 + 换行；换行后行首中断符仍转义', ()
 
 test('code span：内容照抄不转义；含反引号 → 更长围栏 + 空格填充；内部换行折叠为空格', () => {
   assert.equal(inlineRunToMarkdown('用 <code>const x = 1;</code> 声明'), '用 `const x = 1;` 声明');
-  // 反斜杠是 code span 字面字符——转义即可见损坏（spec §5.3 转义范围排除）
+  // 反斜杠是 code span 字面字符——转义即可见损坏（转义范围排除）
   assert.equal(inlineRunToMarkdown('<code>C:\\path\\to</code>'), '`C:\\path\\to`');
   // 内容含单反引号串 → 围栏长度 = 最长串 + 1，两端空格填充（GFM 规则）
   assert.equal(inlineRunToMarkdown('<code>a ` b</code>'), '`` a ` b ``');

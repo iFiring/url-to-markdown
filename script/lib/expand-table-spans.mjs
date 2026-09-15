@@ -1,5 +1,5 @@
 // script/lib/expand-table-spans.mjs
-// 共享 rowspan/colspan 网格展开——取自 .temp/cross_table 报告 §4 算法（重写不导入）。
+// 共享 rowspan/colspan 网格展开（自原型算法重写，不导入）。
 // 接收任意标准 DOM Document（jsdom 或浏览器 page.document），对其内每个
 // <table> 做两件事：
 //   1. 网格展开（仅含 [rowspan],[colspan] 的表）：被跨越位插入复制原单元格

@@ -360,9 +360,9 @@ test('render_markdown.mjs: 条目全部 id 结构性无盒时报 error 指明条
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
-// ── 超宽裁剪 + 遮挡（spec §5 超宽裁剪夹具）──
+// ── 超宽裁剪 + 遮挡（超宽裁剪夹具）──
 // 真实盒裁剪形态：html{overflow-x:auto} 让 body 的 overflow-x:hidden 作为
-// 普通盒裁剪（视口传播形态测不到 bug，见 spec §1）；.wrap 再叠一层
+// 普通盒裁剪（视口传播形态测不到 bug）；.wrap 再叠一层
 // overflow-x:auto（宽表格站点的标准写法）。表 2800px 超视口（1280）。
 // 品红 fixed 假导航×2 横跨表格区域（非亲族 → 遮挡者隐藏）；
 // 红徽标在表内（亲族 absolute → 保留）；非 fixed 的 relative 负 margin
@@ -840,7 +840,7 @@ test('render_markdown: runs 段经 inline2md 转 markdown 合并还原 + runsRes
     assert.equal(resolved[0].p, '这是**关键**：见[文档](https://example.com/d)，命令 `u2m --run`。');
     assert.equal(resolved[1].p, '散文本原文');
     assert.equal(resolved[2].p, '公式 $x^2$ 成立。');
-    // 端到端（spec §7）：p 值透传落盘，行内语法原样到达 markdown
+    // 端到端：p 值透传落盘，行内语法原样到达 markdown
     const md = fs.readFileSync(path.join(dir, '5_markdown.md'), 'utf8');
     assert.ok(md.includes('这是**关键**：见[文档](https://example.com/d)，命令 `u2m --run`。'), md);
     assert.ok(md.includes('公式 $x^2$ 成立。'), md);
@@ -849,7 +849,7 @@ test('render_markdown: runs 段经 inline2md 转 markdown 合并还原 + runsRes
   }
 });
 
-// ── 分片骨架合并（spec 2026-09-09 §5）──
+// ── 分片骨架合并 ──
 
 function setupChunksTmp(name, chunkMap, { skeleton = null } = {}) {
   const t = setupTmp(name, { skeleton, longText: { texts: {}, runs: {} } });

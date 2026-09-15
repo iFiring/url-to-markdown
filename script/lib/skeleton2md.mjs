@@ -1,7 +1,7 @@
 /**
  * skeleton2md.mjs —— 骨架 → markdown 纯函数渲染（原步骤 9 render_skeleton.mjs
- * 的核心逻辑，2026-09-11 步骤 8/9 合并时平移抽 lib；同日步骤重编号后
- * 步骤号为 5/6，同日步骤 1/2 合并重编号后骨架产物为 4_skeleton.json）。被步骤 5
+ * 的核心逻辑，步骤 8/9 合并时平移抽 lib；步骤重编号后
+ * 步骤号为 5/6，步骤 1/2 合并重编号后骨架产物为 4_skeleton.json）。被步骤 5
  * render_markdown.mjs 在占位符还原 + 图片下载 + trans2img 择优回写之后调用。
  *
  * 转换规则（契约见 references/markdown_skeleton_guide.md：value 已带行外

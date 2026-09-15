@@ -1,9 +1,8 @@
 /**
  * 步骤 3 轮 C 页面内瘦身函数。在浏览器 evaluate 中执行，签名
  * __u2mSlimArticle(protectedIds)——在 __u2mExtractArticle 迁移与噪音
- * 剔除之后、序列化之前对文章视图执行六条结构规则（spec：
- * docs/superpowers/specs/2026-08-29-step6-article-slimming-design.md §5，
- * 固定执行顺序——前面的规则改变后面规则看到的输入）：
+ * 剔除之后、序列化之前对文章视图执行六条结构规则
+ * （固定执行顺序——前面的规则改变后面规则看到的输入）：
  *  ① data-* 清理：保留 {data-idx, data-language}（后者是步骤 4 判
  *     代码语言的机械信号），其余 data-*（组件库脚手架/交互状态）全删。
  *     白名单而非黑名单——陌上站点的 data-* 安全默认删除

@@ -2,7 +2,7 @@
 // 步骤 1 代码块转换（表格占位符设计的 code 镜像）：接收浏览器侧
 // __u2mCollectCode 的收集载荷，Node 层做七类 fail-closed 校验 + 层 2 行首
 // 序号剥离 + 序列化 → 1_code.json 条目 + 失败诊断日志。
-// fail-closed 原则（spec §6）：宁可失败走步骤 4 LLM 兜底，不可静默失真。
+// fail-closed 原则：宁可失败走步骤 4 LLM 兜底，不可静默失真。
 // 提取在浏览器侧完成（walkLines 需要 computed display），本模块不解析 HTML——
 // 与表格 self/turndown 可插拔有意不同（YAGNI）。
 import fs from 'node:fs/promises';
@@ -12,7 +12,7 @@ import { guessCodeLang } from './placeholder.mjs';
 
 const STRIP_WS_RE = /\s+/g;
 const UNRESOLVED_RE = /\{\{LONG_TEXT_\d/; // 非 global：.test 无 lastIndex 状态
-const LONG_TEXT_TOKEN_RE = /\{\{LONG_TEXT_/; // 纪元豁免判定（spec §6.1 补注）
+const LONG_TEXT_TOKEN_RE = /\{\{LONG_TEXT_/; // 纪元豁免判定
 const GUTTERISH_RE = /^[\d\s.,;:)|·•\-–—]*$/;
 
 const stripWs = (s) => String(s || '').replace(STRIP_WS_RE, '');
@@ -39,7 +39,7 @@ function validateAndSerialize(c, longTextMap) {
   // 5. empty：修剪首尾空行后为空/纯空白
   const trimmed = trimBlankEnds(stripped.lines);
   if (trimmed.join('').trim() === '') return { reason: 'empty' };
-  // 6. 渲染交叉校验。LONG_TEXT 纪元豁免（spec §6.1 补注）：收集时 renderedLines
+  // 6. 渲染交叉校验。LONG_TEXT 纪元豁免：收集时 renderedLines
   //    量的是占位符形态（单行）、校验对象是展开后行数——纪元不可比；展开引入的
   //    换行逐字来自原始文本节点、非提取器发明。与 renderedLines=null 同款跳过。
   const hasLongText = LONG_TEXT_TOKEN_RE.test(String(c.text || ''));
@@ -94,7 +94,7 @@ export async function convertCodes(codeList, { longTextMap = {}, logsDir } = {})
   return { codes, counts: { total: codeList.length, ok, failed } };
 }
 
-// 层 2：行首算术序号剥离（spec §6.2）——保守条件全满足才剥，防误剥 yaml
+// 层 2：行首算术序号剥离——保守条件全满足才剥，防误剥 yaml
 // 数字键等真实代码：≥3 个非空行全部带行首整数 token、构成公差 1 连续序列
 // （起始任意——OpenAI 摘录槽有从 26 起形态）、剥后内容非退化。
 // 剥离量 = 行首水平空白 + 数字 + 水平空白串 + 至多一个分隔符 + 尾随水平空白

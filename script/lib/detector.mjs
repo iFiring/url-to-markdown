@@ -1,10 +1,10 @@
 // script/lib/detector.mjs
-// 登录检测 v2（2026-09-07 设计）：六信号两级制 + 登录入口点击探测。
+// 登录检测 v2（设计）：六信号两级制 + 登录入口点击探测。
 // 强信号 = password / loginConfirmed（点击候选入口后出现全屏弹窗（表单+按钮）
 // 或页面跳转）；loginButton（可见入口但点击无确认）只是普通一票。
 // cookieMissing 信号已删除——现代站点给匿名会话也种 session/csrf 类 cookie
 // （知乎 SESSIONID 假阴性），未登录时又近乎恒真，两个方向都无区分度。
-// 2026-09-14 人机门禁扩展：①点击探测增加挑战分类——探测点开的是验证码/滑块弹窗
+// 人机门禁扩展：①点击探测增加挑战分类——探测点开的是验证码/滑块弹窗
 // （reCAPTCHA 弹窗恰好满足旧「全屏登录弹窗」全部判据：dialog+可见+含 input，必然
 // 误判 loginConfirmed）或跳转到挑战页时，probe.captcha=true 且不置 loginConfirmed，
 // 由 gateCheck 路由到验证码 viewer；②collectSignals 增 allowProbe（false 禁点击
@@ -71,7 +71,7 @@ export function scoreSignals(signals, memorized = []) {
  * - ('captcha')         落地页是否处于挑战占优（探测跳转后检查用）——占优双通道
  *                       与 __u2mDetectCaptcha 同口径：裸标记命中会把登录页角落的
  *                       passive badge（约 300×60）误判成挑战、把登录流死锁进
- *                       无跳过的验证码 viewer（2026-09-14 修复）。成功态命中的
+ *                       无跳过的验证码 viewer（修复）。成功态命中的
  *                       厂商整体抑制（已解决滑块不算活跃挑战）。
  * - ('overlay')         全屏弹窗分类，返回 'captcha' | 'login' | false：
  *                       几何判据 fixed/absolute 或 role=dialog、可见、面积 ≥50%
@@ -166,7 +166,7 @@ export const PROBE_HELPERS = `(function(mode, arg){
   }
   if (mode === 'captcha') {
     // 落地页挑战占优（探测跳转后检查）：占优双通道与 __u2mDetectCaptcha 同口径——
-    // 裸标记命中会把登录页角落的 passive badge 误判成挑战（2026-09-14 修复）
+    // 裸标记命中会把登录页角落的 passive badge 误判成挑战（修复）
     var mels = collectMarkEls(document.body || document.documentElement);
     if (!mels.length) return false;
     var vw2 = document.documentElement.clientWidth;

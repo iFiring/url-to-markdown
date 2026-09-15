@@ -4,7 +4,7 @@
 //  blockContainers, gutterStripped, outerHTML}。跳过 [hidden] pre（K5 独占，
 // 与 __u2mCollectTables 同款判定——hidden 在 pre 自身；祖先隐藏块照常收集，
 // renderedLines=null 走纪元豁免）。walkLines：文本节点 \n 切分 + <br> 断行 +
-// 非行内元素边界软断行（行已空不重复断）。空白守卫结构化（2026-09-03）：
+// 非行内元素边界软断行（行已空不重复断）。空白守卫结构化：
 // 仅块间隙纯空白（两侧紧邻块级/容器边缘、非行内独子）零贡献——CSS 块盒间
 // 空白不渲染；行内流空白按 pre 语义保留（缩进 token/行尾 \n/空行）。
 // 槽排除（层 1）：userSelect:none 且子树纯数字
@@ -12,7 +12,7 @@
 // 整块；只有数字条件会误杀纯数字代码行。computed display 在 display:none
 // 祖先下仍返回计算值——隐藏子树（折叠展开器内）也能提取，innerText 做不到
 // （退化为 textContent）。
-// 槽壳传播（2026-09-03，OpenAI 实测）：行号槽壳自身 us:auto、us:none 只设在
+// 槽壳传播（OpenAI 实测）：行号槽壳自身 us:auto、us:none 只设在
 // 数字 span 上（class 级 CSS）——全部子元素皆槽且自身无槽外文本的壳也整棵
 // 视为槽。否则壳计入 blockContainers（文本侧剔槽、容器侧计槽）会让
 // mixed_signal 双信号矛盾误杀；walkLines 还会对零内容壳触发幻影空行。
@@ -61,7 +61,7 @@ function __u2mCollectCode() {
     function visit(n, parentInline) {
       if (n.nodeType === 3) {
         var t = n.textContent;
-        // 块间隙纯空白（2026-09-03 结构化修订）：两侧皆块间隙侧、且不是
+        // 块间隙纯空白（结构化修订）：两侧皆块间隙侧、且不是
         // 行内元素的独子 → 零贡献零断行（CSS 块盒间空白不渲染——防幻影
         // 空行）。行内流中的空白是 pre 语义内容——行首缩进 token、行尾
         // \n、空行——必须保留；旧「纯空白 + 当前行空」内容条件在每次断行

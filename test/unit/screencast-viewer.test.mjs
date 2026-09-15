@@ -36,7 +36,7 @@ test('viewer HTML：判定详情（reason）原样展示且转义', () => {
   assert.ok(!evilReason.includes('<img src=x'), 'reason 必须 HTML 转义');
 });
 
-// —— 2026-09-14 三形态参数化（登录/人机验证/稀薄介入）——
+// —— 三形态参数化（登录/人机验证/稀薄介入）——
 
 test('viewer HTML：零参数默认值 = 登录文案逐字锚点（防默认值漂移）', () => {
   const html = loginViewerHtml({});
